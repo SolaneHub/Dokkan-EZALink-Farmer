@@ -161,7 +161,7 @@ class StateDetector:
             return (GameState.TITLE_SCREEN, meta)
 
         # 13. Home Screen
-        home_match = self.vision.find_template(screen, "nav_start_quest") or self.vision.find_template(screen, "nav_events")
+        home_match = self.vision.find_template(screen, "nav_start_quest") or self.vision.find_template(screen, "nav_start") or self.vision.find_template(screen, "nav_events")
         if home_match:
             return (GameState.HOME_SCREEN, meta)
 

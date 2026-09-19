@@ -154,6 +154,12 @@ class EZAFarmTask(BaseTask):
                 if "ok_button" in meta:
                     self.log(f"Pulsante OK rilevato ({meta['ok_button']}). Tap di conferma...")
                     self.adb.tap(*meta["ok_button"], delay_after=1.2)
+                elif "close_button" in meta:
+                    self.log(f"Pulsante Close rilevato ({meta['close_button']}). Tap di chiusura...")
+                    self.adb.tap(*meta["close_button"], delay_after=1.2)
+                elif "cancel_button" in meta:
+                    self.log(f"Pulsante Cancel rilevato ({meta['cancel_button']}). Tap...")
+                    self.adb.tap(*meta["cancel_button"], delay_after=1.2)
                 elif in_battle:
                     # Battle ended and game is cycling through Clear / Rewards / Dialog screens
                     self.log(f"Avanzamento post-battaglia (ciclo {unknown_counter}): tap centro e OK...")

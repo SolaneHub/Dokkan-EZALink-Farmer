@@ -108,13 +108,22 @@ class Vision:
         res = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
         loc = np.where(res >= threshold)
 
-        matches = []
+        candidates = []
         for pt in zip(*loc[::-1]):
-            cx = pt[0] + template.shape[1] // 2
-            cy = pt[1] + template.shape[0] // 2
-            conf = float(res[pt[1], pt[0]])
+            candidates.append((pt[0], pt[1], float(res[pt[1], pt[0]])))
+
+        if not candidates:
+            return None
+
+        # Sort candidates descending by confidence so true peaks are chosen first (proper NMS)
+        candidates.sort(key=lambda c: c[2], reverse=True)
+
+        matches = []
+        for pt_x, pt_y, conf in candidates:
+            cx = pt_x + template.shape[1] // 2
+            cy = pt_y + template.shape[0] // 2
             if not any(abs(cx - m[0]) < 30 and abs(cy - m[1]) < 30 for m in matches):
-                matches.append((cx, cy, conf))
+                matches.append((int(cx), int(cy), conf))
 
         if not matches:
             return None
