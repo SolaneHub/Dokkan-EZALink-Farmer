@@ -100,7 +100,10 @@ class StateDetector:
 
         # 7. Friend Selection Screen
         friend_header = self.vision.find_template(screen, "header_select_friend")
-        if friend_header:
+        refresh_match = self.vision.find_template(screen, "button_friend_refresh") or self.vision.find_template(screen, "button_friend_auto")
+        if friend_header or refresh_match:
+            if refresh_match:
+                meta["friend_refresh_button"] = (refresh_match[0], refresh_match[1])
             return (GameState.FRIEND_SELECT, meta)
 
         # 8. Battle Screen (Auto Battle toggle, x2 Speed, Ki orbs, Character bubbles)

@@ -60,7 +60,7 @@ class StageFarmTask(BaseTask):
             # Handle state transitions
             if state == GameState.FRIEND_SELECT:
                 unknown_counter = 0
-                self.tap_friend_first(w, h)
+                self.handle_friend_select(w, h, meta)
                 self.wait_check(2.0)
 
             elif state == GameState.TEAM_CONFIRM:

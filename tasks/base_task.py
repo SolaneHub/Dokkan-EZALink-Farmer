@@ -65,13 +65,27 @@ class BaseTask:
             self._pause_event.wait()
             time.sleep(0.1)
 
-    def tap_friend_first(self, screen_w: int, screen_h: int):
-        """Selects the first friend in the friend list."""
-        # Top friend leader card is located around 50% X, 32% Y on typical 16:9/20:9 layouts
-        tap_x = int(screen_w * 0.50)
-        tap_y = int(screen_h * 0.32)
-        self.log(f"Selezione Friend Leader (#1 a {tap_x}, {tap_y})...")
-        self.adb.tap(tap_x, tap_y, delay_after=1.5)
+    def handle_friend_select(self, screen_w: int, screen_h: int, meta: Optional[Dict[str, Any]] = None):
+        """
+        Selects a friend supporter by tapping the 'Refresh' button,
+        which automatically assigns a friend in Dokkan.
+        """
+        if meta and "friend_refresh_button" in meta:
+            x, y = meta["friend_refresh_button"]
+            self.log(f"Assegnazione automatica Friend tramite pulsante Refresh ({x}, {y})...")
+            self.adb.tap(x, y, delay_after=2.0)
+        else:
+            # Fallback coordinate for Refresh button in Friend Select header
+            cfg_coords = self.config.get("farming", {}).get("friend_refresh_coords", [0.82, 0.18])
+            rx, ry = cfg_coords[0], cfg_coords[1]
+            tap_x = int(screen_w * rx)
+            tap_y = int(screen_h * ry)
+            self.log(f"Assegnazione automatica Friend tramite Refresh a {tap_x}, {tap_y}...")
+            self.adb.tap(tap_x, tap_y, delay_after=2.0)
+
+    # Backwards-compatible alias
+    def tap_friend_first(self, screen_w: int, screen_h: int, meta: Optional[Dict[str, Any]] = None):
+        self.handle_friend_select(screen_w, screen_h, meta)
 
     def tap_start_team(self, screen_w: int, screen_h: int, meta: Dict[str, Any]):
         """Taps the START button on the team preview screen."""
