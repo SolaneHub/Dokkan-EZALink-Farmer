@@ -4,6 +4,15 @@ __pycache__/
 *.pyo
 *.pyd
 *.log
-screenshot_*.png
-screen_sample.png
 .DS_Store
+.idea/
+.vscode/
+
+# Build and Distribution Artifacts
+build/
+dist/
+*.spec
+
+# Ignore test screenshots and debug dumps in root
+*.png
+!templates/**/*.png

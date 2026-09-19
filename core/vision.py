@@ -2,32 +2,94 @@ import os
 import cv2
 import numpy as np
 from typing import Optional, Tuple, List, Dict
+from core.system_tools import get_resource_path
 
 
 class Vision:
     """Handles Computer Vision, template matching, and UI element detection for Dokkan."""
 
     def __init__(self, template_dir: str = "templates/glb", default_threshold: float = 0.78):
-        self.template_dir = template_dir
+        self.template_dir = template_dir if os.path.isabs(template_dir) else get_resource_path(template_dir)
         self.default_threshold = default_threshold
-        self._template_cache: Dict[str, np.ndarray] = {}
+        self._template_cache: Dict[str, Optional[np.ndarray]] = {}
+        self._template_map: Dict[str, str] = {}
         os.makedirs(self.template_dir, exist_ok=True)
+        self.refresh_template_index()
+
+    def refresh_template_index(self):
+        """Scans the template directory recursively and maps template names to file paths."""
+        self._template_map.clear()
+        if not os.path.exists(self.template_dir):
+            return
+
+        for root, _, files in os.walk(self.template_dir):
+            for file in files:
+                if file.lower().endswith((".png", ".jpg", ".jpeg")):
+                    full_path = os.path.abspath(os.path.join(root, file))
+                    rel_path = os.path.relpath(full_path, self.template_dir).replace("\\", "/")
+                    name_without_ext = os.path.splitext(file)[0]
+                    rel_without_ext = os.path.splitext(rel_path)[0]
+
+                    # Map multiple lookup keys for seamless compatibility:
+                    # 1. Base filename with ext: "button_ok.png"
+                    # 2. Base filename without ext: "button_ok"
+                    # 3. Relative path with ext: "buttons/button_ok.png"
+                    # 4. Relative path without ext: "buttons/button_ok"
+                    self._template_map[file] = full_path
+                    self._template_map[name_without_ext] = full_path
+                    self._template_map[rel_path] = full_path
+                    self._template_map[rel_without_ext] = full_path
+
+    def list_templates_by_category(self) -> Dict[str, List[str]]:
+        """Returns a dict of subfolder categories and their template filenames."""
+        categories: Dict[str, List[str]] = {}
+        for root, _, files in os.walk(self.template_dir):
+            cat = os.path.relpath(root, self.template_dir).replace("\\", "/")
+            if cat == ".":
+                cat = "root"
+            img_files = [f for f in sorted(files) if f.lower().endswith((".png", ".jpg", ".jpeg"))]
+            if img_files:
+                categories[cat] = img_files
+        return categories
 
     def load_template(self, template_name: str) -> Optional[np.ndarray]:
-        """Loads and caches a template image from disk."""
-        if not template_name.endswith((".png", ".jpg")):
-            template_name += ".png"
-
+        """Loads and caches a template image from disk, supporting nested category subfolders."""
+        # Check cache first
         if template_name in self._template_cache:
             return self._template_cache[template_name]
 
-        path = os.path.join(self.template_dir, template_name)
-        if not os.path.exists(path):
+        norm_key = template_name.replace("\\", "/")
+        if norm_key in self._template_cache:
+            return self._template_cache[norm_key]
+
+        # Look up in indexed mapping
+        path = self._template_map.get(norm_key)
+        if not path and not norm_key.endswith((".png", ".jpg", ".jpeg")):
+            path = self._template_map.get(norm_key + ".png")
+
+        # Fallback to direct path in template_dir
+        if not path:
+            candidate = os.path.join(self.template_dir, norm_key)
+            if not candidate.endswith((".png", ".jpg", ".jpeg")):
+                candidate += ".png"
+            if os.path.exists(candidate):
+                path = candidate
+
+        if not path or not os.path.exists(path):
+            self._template_cache[template_name] = None
+            self._template_cache[norm_key] = None
             return None
 
-        img = cv2.imread(path, cv2.IMREAD_COLOR)
-        if img is not None:
+        # Check if already cached by resolved path
+        if path in self._template_cache:
+            img = self._template_cache[path]
             self._template_cache[template_name] = img
+            return img
+
+        img = cv2.imread(path, cv2.IMREAD_COLOR)
+        self._template_cache[path] = img
+        self._template_cache[template_name] = img
+        self._template_cache[norm_key] = img
         return img
 
     def find_template(
@@ -65,8 +127,8 @@ class Vision:
 
         best_w, best_h = t_w, t_h
 
-        # 2. Multi-scale fallback only if native scale showed plausible candidate (>= 0.40)
-        if best_val >= 0.40:
+        # 2. Multi-scale fallback only if native scale showed plausible candidate (>= 0.65)
+        if best_val >= 0.65:
             for scale in scales:
                 if scale == 1.0:
                     continue
@@ -93,6 +155,46 @@ class Vision:
             return (int(center_x), int(center_y), float(best_val))
 
         return None
+
+    def find_all_templates(
+        self,
+        screen: np.ndarray,
+        template_name: str,
+        threshold: float = 0.78,
+        min_distance: int = 80
+    ) -> List[Tuple[int, int, float]]:
+        """
+        Finds all occurrences of a template on screen, filtered by non-maximum suppression.
+        Returns: list of (center_x, center_y, confidence)
+        """
+        template = self.load_template(template_name)
+        if template is None:
+            return []
+
+        s_h, s_w = screen.shape[:2]
+        t_h, t_w = template.shape[:2]
+        if t_w > s_w or t_h > s_h:
+            return []
+
+        res = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+        loc = np.where(res >= threshold)
+
+        candidates = []
+        for pt in zip(*loc[::-1]):
+            candidates.append((pt[0] + t_w // 2, pt[1] + t_h // 2, float(res[pt[1], pt[0]])))
+
+        if not candidates:
+            return []
+
+        # Sort candidates descending by confidence
+        candidates.sort(key=lambda c: c[2], reverse=True)
+
+        filtered: List[Tuple[int, int, float]] = []
+        for c in candidates:
+            if not any(abs(c[0] - f[0]) < min_distance and abs(c[1] - f[1]) < min_distance for f in filtered):
+                filtered.append(c)
+
+        return filtered
 
     def find_ok_button(self, screen: np.ndarray, threshold: float = 0.80) -> Optional[Tuple[int, int, float]]:
         """
@@ -162,7 +264,8 @@ class Vision:
         self,
         screen: np.ndarray,
         box: Tuple[int, int, int, int],
-        name: str
+        name: str,
+        category: Optional[str] = None
     ) -> str:
         """
         Saves a cropped region as a template file for future matching.
@@ -172,10 +275,20 @@ class Vision:
         crop = screen[y:y+h, x:x+w]
         if not name.endswith(".png"):
             name += ".png"
-        path = os.path.join(self.template_dir, name)
+
+        if category:
+            target_dir = os.path.join(self.template_dir, category)
+            os.makedirs(target_dir, exist_ok=True)
+            path = os.path.join(target_dir, name)
+        else:
+            path = os.path.join(self.template_dir, name)
+
         cv2.imwrite(path, crop)
-        # Clear cache for this template
+        # Refresh index and clear cache for this template
+        self.refresh_template_index()
         self._template_cache.pop(name, None)
+        self._template_cache.pop(os.path.splitext(name)[0], None)
+        self._template_cache.pop(path, None)
         return path
 
     @staticmethod

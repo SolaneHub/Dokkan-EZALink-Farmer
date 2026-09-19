@@ -1,5 +1,8 @@
 # Configuration for Dokkan Battle Automation Bot
 
+# UI Language: "en" (English, default) or "it" (Italian)
+language: "en"
+
 device:
   serial: "" # Leave blank to auto-detect the first connected device
   package_name: "com.bandainamcogames.dbzdokkanww" # Global Dokkan package
@@ -22,14 +25,13 @@ farming:
   friend_selection_mode: "refresh" # "refresh" (auto-assigns friend via refresh button)
   friend_refresh_coords: [0.82, 0.18] # (rx, ry) for refresh/auto-assign button on friend screen
   default_runs: 20
-  eza_target_level: 999 # Scalata fino al livello massimo 999
+  eza_target_level: 999 # Continuous climbing up to max level 999
 
 link_leveling:
   auto_swap_maxed_units: true # Automatically replace units that hit max link level (Lv. 10)
   protected_slots: [] # Empty list = all slots (including Leader) can be replaced!
   box_first_slot_coords: [0.18, 0.28] # (rx, ry) for first card in filtered character box
   box_confirm_coords: [0.50, 0.90] # (rx, ry) for confirm button in character box
-
 
 discord:
   token: "" # Paste your Discord bot token here

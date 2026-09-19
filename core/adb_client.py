@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import time
 from typing import List, Optional, Tuple
@@ -6,11 +7,36 @@ import cv2
 import numpy as np
 
 
+from core.system_tools import ToolLocator
+
+
 class ADBClient:
     """Manages ADB communication, input emulation, and screen capture."""
 
+    @staticmethod
+    def resolve_executable(name: str) -> str:
+        """Finds executable path using ToolLocator multi-tier engine."""
+        if not name:
+            return name
+        if os.path.isfile(name):
+            return os.path.abspath(name)
+
+        lower = os.path.basename(name).lower()
+        if "adb" in lower:
+            found = ToolLocator.find_adb(name)
+            if found:
+                return found
+        elif "scrcpy" in lower:
+            found = ToolLocator.find_scrcpy(name)
+            if found:
+                return found
+
+        # Fallback to shutil.which
+        which = shutil.which(name)
+        return which if which else name
+
     def __init__(self, serial: Optional[str] = None, adb_path: str = "adb"):
-        self.adb_path = adb_path
+        self.adb_path = self.resolve_executable(adb_path)
         self.serial = serial
         self._screen_size: Optional[Tuple[int, int]] = None
         self._scrcpy_proc: Optional[subprocess.Popen] = None
@@ -63,8 +89,8 @@ class ADBClient:
         authorized = [d for d in devices if d["status"] == "device"]
         if not authorized:
             if any(d["status"] == "unauthorized" for d in devices):
-                raise RuntimeError("Dispositivo trovato ma non autorizzato. Controlla il display del telefono e consenti il debug USB!")
-            raise RuntimeError("Nessun dispositivo Android connesso. Collega il telefono via USB con Debug USB attivo.")
+                raise RuntimeError("Device found but unauthorized. Please check your phone display and allow USB debugging!")
+            raise RuntimeError("No Android device connected. Please connect your phone via USB with USB Debugging enabled.")
         
         self.serial = authorized[0]["serial"]
         self.get_screen_size(force_refresh=True)
@@ -81,7 +107,7 @@ class ADBClient:
                 dims = line.split(":")[-1].strip().split("x")
                 self._screen_size = (int(dims[0]), int(dims[1]))
                 return self._screen_size
-        raise RuntimeError(f"Impossibile determinare la risoluzione dello schermo: {out}")
+        raise RuntimeError(f"Unable to determine screen resolution: {out}")
 
     def tap(self, x: int, y: int, delay_after: float = 0.5):
         """Sends a tap event to coordinates (x, y)."""
@@ -113,13 +139,13 @@ class ADBClient:
         cmd = self._build_cmd(["exec-out", "screencap", "-p"])
         proc = subprocess.run(cmd, capture_output=True)
         if proc.returncode != 0 or not proc.stdout:
-            raise RuntimeError(f"Cattura schermo fallita: {proc.stderr.decode('utf-8', errors='ignore')}")
+            raise RuntimeError(f"Screen capture failed: {proc.stderr.decode('utf-8', errors='ignore')}")
         
         # Decode raw PNG bytes to OpenCV image
         img_array = np.frombuffer(proc.stdout, dtype=np.uint8)
         img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
         if img is None:
-            raise RuntimeError("Decodifica immagine dello screenshot fallita.")
+            raise RuntimeError("Decoding screenshot image buffer failed.")
         return img
 
     def is_app_running(self, package_name: str) -> bool:
@@ -136,7 +162,8 @@ class ADBClient:
         if self._scrcpy_proc and self._scrcpy_proc.poll() is None:
             return True # Already running
 
-        cmd = [scrcpy_path]
+        resolved = self.resolve_executable(scrcpy_path)
+        cmd = [resolved]
         if self.serial:
             cmd.extend(["-s", self.serial])
         cmd.extend(["--window-title", f"Dokkan Battle - {self.serial or 'Default'}"])

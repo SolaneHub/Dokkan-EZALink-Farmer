@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 156" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="100%" stop-color="#080c14" />
+    </linearGradient>
+
+    <!-- Arrow Markers -->
+    <marker id="arrowPurple" viewBox="0 0 8 8" refX="5" refY="4" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+      <path d="M 1 1 L 7 4 L 1 7 z" fill="#c084fc" />
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 8 8" refX="5" refY="4" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+      <path d="M 1 1 L 7 4 L 1 7 z" fill="#34d399" />
+    </marker>
+
+    <style>
+      .txt-font { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      .mono-font { font-family: "JetBrains Mono", Consolas, "Liberation Mono", monospace; }
+
+      .flow-pulse-purple {
+        stroke: #9333ea;
+        stroke-width: 1.4;
+        stroke-dasharray: 4 3;
+        animation: flowPulse 0.9s linear infinite;
+      }
+      .flow-pulse-green {
+        stroke: #059669;
+        stroke-width: 1.4;
+        stroke-dasharray: 4 3;
+        animation: flowPulse 0.9s linear infinite;
+      }
+
+      @keyframes flowPulse {
+        to { stroke-dashoffset: -14; }
+      }
+
+      @keyframes readyGlow {
+        0%, 100% { stroke: #059669; }
+        50% { stroke: #34d399; }
+      }
+      .glow-ready {
+        animation: readyGlow 2.5s ease-in-out infinite;
+      }
+    </style>
+  </defs>
+
+  <!-- Container Box -->
+  <rect width="780" height="156" rx="10" fill="url(#bgGrad)" stroke="#1e293b" stroke-width="1" />
+
+  <!-- ==================== HEADER ==================== -->
+  <g transform="translate(22, 16)">
+    <!-- Pulse dot -->
+    <circle cx="5" cy="9" r="3" fill="#c084fc" />
+    <circle cx="5" cy="9" r="6" fill="#c084fc" opacity="0.25">
+      <animate attributeName="r" values="3;7;3" dur="2.4s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0.35;0.05;0.35" dur="2.4s" repeatCount="indefinite" />
+    </circle>
+    <text x="18" y="12.5" class="txt-font" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="1">BIDIRECTIONAL CROSS-DISCOVERY (CO-LOCATION)</text>
+    <text x="736" y="12.5" text-anchor="end" class="txt-font" font-size="9" fill="#64748b">Zero Overhead • Dual Tool Caching</text>
+  </g>
+
+  <!-- ==================== CONNECTING FLOW BEAMS ==================== -->
+  <line x1="246" y1="74" x2="276" y2="74" class="flow-pulse-purple" marker-end="url(#arrowPurple)" />
+  <line x1="502" y1="74" x2="532" y2="74" class="flow-pulse-green" marker-end="url(#arrowGreen)" />
+
+  <!-- ==================== STAGE 1: PRIMARY DISCOVERY ==================== -->
+  <g transform="translate(22, 40)">
+    <rect width="224" height="68" rx="6" fill="#0f172a" stroke="#0284c7" stroke-width="1" />
+    <rect x="8" y="8" width="18" height="13" rx="3" fill="#0284c7" fill-opacity="0.25" />
+    <text x="17" y="18" text-anchor="middle" class="mono-font" font-size="8.5" font-weight="700" fill="#38bdf8">01</text>
+    <text x="32" y="18.5" class="txt-font" font-size="10" font-weight="700" fill="#f8fafc">Primary Discovery</text>
+    <text x="8" y="34" class="txt-font" font-size="8.5" fill="#94a3b8">find_scrcpy() locates tool directory</text>
+    <rect x="8" y="41" width="208" height="20" rx="3" fill="#090d16" stroke="#1e293b" stroke-width="0.8" />
+    <text x="112" y="54.5" text-anchor="middle" class="mono-font" font-size="8.5" fill="#38bdf8">Downloads/scrcpy-win64/</text>
+  </g>
+
+  <!-- ==================== STAGE 2: ADJACENCY PROBE ==================== -->
+  <g transform="translate(278, 40)">
+    <rect width="224" height="68" rx="6" fill="#0f172a" stroke="#7e22ce" stroke-width="1.2" />
+    <rect x="8" y="8" width="18" height="13" rx="3" fill="#7e22ce" fill-opacity="0.25" />
+    <text x="17" y="18" text-anchor="middle" class="mono-font" font-size="8.5" font-weight="700" fill="#c084fc">02</text>
+    <text x="32" y="18.5" class="txt-font" font-size="10" font-weight="700" fill="#f8fafc">Adjacency Probe</text>
+    <text x="8" y="34" class="txt-font" font-size="8.5" fill="#94a3b8">_check_adjacent(folder, sibling)</text>
+    <rect x="8" y="41" width="208" height="20" rx="3" fill="#090d16" stroke="#1e293b" stroke-width="0.8" />
+    <text x="112" y="54.5" text-anchor="middle" class="mono-font" font-size="8" fill="#c084fc">scrcpy.exe  ⇄  adb.exe (found!)</text>
+  </g>
+
+  <!-- ==================== STAGE 3: DUAL CACHE ==================== -->
+  <g transform="translate(534, 40)">
+    <rect width="224" height="68" rx="6" fill="#022c22" fill-opacity="0.6" stroke="#059669" stroke-width="1.3" class="glow-ready" />
+    <circle cx="17" cy="14" r="5.5" fill="#059669" fill-opacity="0.3" />
+    <text x="17" y="17" text-anchor="middle" class="txt-font" font-size="9" font-weight="800" fill="#34d399">✓</text>
+    <text x="30" y="18.5" class="txt-font" font-size="10" font-weight="700" fill="#34d399">Dual Cache Populated</text>
+    <text x="8" y="34" class="txt-font" font-size="8.5" fill="#a7f3d0">Both tools cached simultaneously</text>
+    <rect x="8" y="41" width="208" height="20" rx="3" fill="#064e3b" stroke="#059669" stroke-width="0.8" />
+    <text x="112" y="54.5" text-anchor="middle" class="mono-font" font-size="8" font-weight="600" fill="#a7f3d0">_cached_scrcpy &amp; _cached_adb (+0ms)</text>
+  </g>
+
+  <!-- ==================== FOOTER BADGES ==================== -->
+  <!-- Capsule 1: 2-in-1 Resolution -->
+  <g transform="translate(22, 122)">
+    <rect width="360" height="22" rx="11" fill="#0f172a" stroke="#1e293b" stroke-width="0.8" />
+    <circle cx="13" cy="11" r="2.5" fill="#34d399" />
+    <text x="22" y="14.5" class="txt-font" font-size="8.5" fill="#94a3b8">⚡ 2-in-1 Resolution: finding one binary immediately provisions sibling</text>
+  </g>
+
+  <!-- Capsule 2: Bidirectional -->
+  <g transform="translate(398, 122)">
+    <rect width="360" height="22" rx="11" fill="#0f172a" stroke="#1e293b" stroke-width="0.8" />
+    <circle cx="13" cy="11" r="2.5" fill="#c084fc" />
+    <text x="22" y="14.5" class="txt-font" font-size="8.5" fill="#94a3b8">⇄ Fully Bidirectional: works scrcpy ➔ adb AND adb ➔ scrcpy</text>
+  </g>
+</svg>

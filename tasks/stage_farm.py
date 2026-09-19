@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional, Callable
 from core.adb_client import ADBClient
 from core.vision import Vision
 from core.game_state import GameState
+from core.i18n import t
 from tasks.base_task import BaseTask
 
 
@@ -32,9 +33,10 @@ class StageFarmTask(BaseTask):
         self.runs_target = runs
 
     def run(self):
+        """Main stage farming loop."""
         self.is_running = True
         self.runs_completed = 0
-        self.log(f"Inizio farming stage: obiettivo {self.runs_target} completamenti.")
+        self.log(t("tasks.stage.started", runs=self.runs_target))
 
         unknown_counter = 0
         in_run = False
@@ -47,7 +49,7 @@ class StageFarmTask(BaseTask):
             try:
                 screen = self.adb.screencap()
             except Exception as e:
-                self.log(f"Errore cattura schermo: {e}")
+                self.log(t("tasks.stage.screencap_error", error=str(e)))
                 self.wait_check(2.0)
                 continue
 
@@ -91,7 +93,7 @@ class StageFarmTask(BaseTask):
 
             elif state == GameState.KO_SCREEN:
                 unknown_counter = 0
-                self.log("Nemico sconfitto! Avanzamento K.O...")
+                self.log(t("tasks.stage.enemy_defeated"))
                 self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=1.0)
 
             elif state == GameState.RESULTS_SCREEN:
@@ -105,26 +107,24 @@ class StageFarmTask(BaseTask):
                 if in_run:
                     self.runs_completed += 1
                     in_run = False
-                    self.log(f"Stage completato! [{self.runs_completed}/{self.runs_target}]")
+                    self.log(t("tasks.stage.stage_completed", curr=self.runs_completed, tot=self.runs_target))
                     self.on_run_complete(self.runs_completed, self.runs_target)
                 self.wait_check(2.0)
 
             elif state == GameState.STAGE_SELECT:
                 unknown_counter = 0
-                # If we returned to stage select and in_run was true
                 if in_run:
                     self.runs_completed += 1
                     in_run = False
-                    self.log(f"Stage completato! [{self.runs_completed}/{self.runs_target}]")
+                    self.log(t("tasks.stage.stage_completed", curr=self.runs_completed, tot=self.runs_target))
                     self.on_run_complete(self.runs_completed, self.runs_target)
 
                 # Tap the selected stage again to restart run
-                self.log("Riavvio stage...")
+                self.log(t("tasks.stage.restarting_stage"))
                 self.adb.tap(int(w * 0.50), int(h * 0.60), delay_after=1.5)
 
             elif state == GameState.GAME_OVER:
-                self.log("Game Over rilevato! Annullamento continuazione e fine task.")
-                # Tap cancel / no
+                self.log(t("tasks.stage.game_over"))
                 self.adb.tap(int(w * 0.35), int(h * 0.60), delay_after=1.0)
                 self.stop()
                 break
@@ -133,15 +133,15 @@ class StageFarmTask(BaseTask):
                 # Unknown / post-run transition screen
                 unknown_counter += 1
                 if in_run:
-                    self.log(f"Avanzamento post-stage (ciclo {unknown_counter}): tocco skip e OK a ({int(w*0.50)}, {int(h*0.88)})...")
+                    self.log(t("tasks.stage.post_stage_advance", cycles=unknown_counter))
                     self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.4)
                     self.adb.tap(int(w * 0.50), int(h * 0.88), delay_after=1.0)
                 elif unknown_counter % 5 == 0:
-                    self.log(f"Schermata non riconosciuta ({unknown_counter} cicli). Tocco di avanzamento al centro...")
+                    self.log(t("tasks.stage.unknown_screen_advance", cycles=unknown_counter))
                     self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.5)
 
             self.wait_check(loop_delay)
 
         self.is_running = False
         if self.runs_completed >= self.runs_target:
-            self.log(f"Farming completato con successo! {self.runs_completed}/{self.runs_target} run eseguite.")
+            self.log(t("tasks.stage.farming_finished", curr=self.runs_completed, tot=self.runs_target))

@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional, Callable, List
 from core.adb_client import ADBClient
 from core.vision import Vision
 from core.game_state import GameState
+from core.i18n import t
 from tasks.base_task import BaseTask
 
 
@@ -31,7 +32,7 @@ class LinkLevelFarmTask(BaseTask):
 
         ll_cfg = self.config.get("link_leveling", {})
         self.auto_swap = ll_cfg.get("auto_swap_maxed_units", True)
-        self.protected_slots: List[int] = ll_cfg.get("protected_slots", []) # Empty = all slots swappable
+        self.protected_slots: List[int] = ll_cfg.get("protected_slots", [])  # Empty = all slots swappable
         self.box_card_coords = ll_cfg.get("box_first_slot_coords", [0.18, 0.28])
         self.box_confirm_coords = ll_cfg.get("box_confirm_coords", [0.50, 0.90])
 
@@ -43,7 +44,8 @@ class LinkLevelFarmTask(BaseTask):
         3. Taps the next eligible unit in the filtered Box (sorted by release date)
         4. Confirms and returns to stage
         """
-        self.log(f"🔄 Sostituzione carta nello Slot {slot_idx + 1} (Link completati a Lv. 10)...")
+        human_slot = slot_idx + 1
+        self.log(t("tasks.link.unit_maxed_swap", slot=human_slot))
 
         # 1. Open Team Formation / Edit Deck
         if "edit_team_button" in meta:
@@ -65,22 +67,22 @@ class LinkLevelFarmTask(BaseTask):
 
         if 0 <= slot_idx < len(team_slot_coords):
             rx, ry = team_slot_coords[slot_idx]
-            self.log(f"Apertura selezione per Slot {slot_idx + 1}...")
+            self.log(t("tasks.link.open_slot_select", slot=human_slot))
             self.adb.tap(int(screen_w * rx), int(screen_h * ry), delay_after=2.5)
 
         # 3. In the Box (Character List):
         # Tap the first available card in the pre-filtered grid (Row 1, Column 1)
         bx, by = self.box_card_coords
-        self.log(f"Selezione nuova carta dal Box (Row 1, Col 1 a {bx*100:.0f}%, {by*100:.0f}%)...")
+        self.log(t("tasks.link.select_card_box", x=f"{bx*100:.0f}", y=f"{by*100:.0f}"))
         self.adb.tap(int(screen_w * bx), int(screen_h * by), delay_after=1.2)
 
         # 4. Confirm selection in Box
         cx, cy = self.box_confirm_coords
-        self.log("Conferma selezione personaggio...")
+        self.log(t("tasks.link.confirm_char_select"))
         self.adb.tap(int(screen_w * cx), int(screen_h * cy), delay_after=2.0)
 
         # 5. Confirm Team Formation / Return to pre-stage screen
-        self.log("Conferma nuovo team e ritorno alla missione...")
+        self.log(t("tasks.link.confirm_team"))
         self.adb.tap(int(screen_w * 0.50), int(screen_h * 0.90), delay_after=2.5)
 
     def check_and_swap_team_if_needed(self, screen: Any, screen_w: int, screen_h: int, meta: Dict[str, Any]) -> bool:
@@ -97,18 +99,19 @@ class LinkLevelFarmTask(BaseTask):
                 continue
 
             if self.vision.is_slot_link_max(screen, slot_idx):
-                self.log(f"⭐ Rilevato MAX LINK su Slot {human_slot_number}!")
+                self.log(t("tasks.link.max_link_detected", slot=human_slot_number))
                 self.swap_maxed_unit(slot_idx, screen_w, screen_h, meta)
-                return True # Swapped one unit; screen refreshed
+                return True  # Swapped one unit; screen refreshed
 
         return False
 
     def run(self):
+        """Main Link Level farm loop."""
         self.is_running = True
         self.runs_completed = 0
-        self.log(f"Inizio Link Level farming su stage attuale: {self.runs_target} run programmate.")
+        self.log(t("tasks.link.started", runs=self.runs_target))
         if self.auto_swap:
-            self.log("Funzione Auto-Swap attiva: qualsiasi carta con link a Lv. 10 (MAX) verrà sostituita automaticamente.")
+            self.log(t("tasks.link.auto_swap_hint"))
 
         unknown_counter = 0
         in_run = False
@@ -120,7 +123,7 @@ class LinkLevelFarmTask(BaseTask):
             try:
                 screen = self.adb.screencap()
             except Exception as e:
-                self.log(f"Errore cattura schermo: {e}")
+                self.log(t("tasks.stage.screencap_error", error=str(e)))
                 self.wait_check(2.0)
                 continue
 
@@ -139,7 +142,6 @@ class LinkLevelFarmTask(BaseTask):
                 # Check if any slot has all links maxed before starting
                 swapped = self.check_and_swap_team_if_needed(screen, w, h, meta)
                 if swapped:
-                    # After swap, let screen re-render before proceeding to start
                     self.wait_check(2.0)
                     continue
 
@@ -173,7 +175,6 @@ class LinkLevelFarmTask(BaseTask):
 
             elif state == GameState.RESULTS_SCREEN:
                 unknown_counter = 0
-                # Link Level increases show special level up animations; tap rapidly through them
                 self.dismiss_results_and_popups(w, h, meta)
                 self.wait_check(1.2)
 
@@ -183,7 +184,7 @@ class LinkLevelFarmTask(BaseTask):
                 if in_run:
                     self.runs_completed += 1
                     in_run = False
-                    self.log(f"Link Level run completata! [{self.runs_completed}/{self.runs_target}]")
+                    self.log(t("tasks.link.run_completed", curr=self.runs_completed, tot=self.runs_target))
                     self.on_run_complete(self.runs_completed, self.runs_target)
                 self.wait_check(2.0)
 
@@ -192,14 +193,14 @@ class LinkLevelFarmTask(BaseTask):
                 if in_run:
                     self.runs_completed += 1
                     in_run = False
-                    self.log(f"Link Level run completata! [{self.runs_completed}/{self.runs_target}]")
+                    self.log(t("tasks.link.run_completed", curr=self.runs_completed, tot=self.runs_target))
                     self.on_run_complete(self.runs_completed, self.runs_target)
 
-                self.log("Rilancio stage Quest per link level...")
+                self.log(t("tasks.link.relaunch_quest"))
                 self.adb.tap(int(w * 0.50), int(h * 0.60), delay_after=1.5)
 
             elif state == GameState.GAME_OVER:
-                self.log("Game Over inaspettato! Arresto.")
+                self.log(t("tasks.link.unexpected_game_over"))
                 self.adb.tap(int(w * 0.35), int(h * 0.60), delay_after=1.0)
                 self.stop()
                 break
@@ -207,14 +208,14 @@ class LinkLevelFarmTask(BaseTask):
             else:
                 unknown_counter += 1
                 if in_run:
-                    self.log(f"Avanzamento post-stage (ciclo {unknown_counter}): tocco skip e OK a ({int(w*0.50)}, {int(h*0.88)})...")
+                    self.log(t("tasks.stage.post_stage_advance", cycles=unknown_counter))
                     self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.4)
                     self.adb.tap(int(w * 0.50), int(h * 0.88), delay_after=1.0)
                 elif unknown_counter % 5 == 0:
-                    self.log(f"Schermata ({unknown_counter} cicli). Tap di avanzamento...")
+                    self.log(t("tasks.stage.unknown_screen_advance", cycles=unknown_counter))
                     self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.5)
 
             self.wait_check(loop_delay)
 
         self.is_running = False
-        self.log(f"Link Level farming completato: {self.runs_completed} run eseguite.")
+        self.log(t("tasks.link.farming_finished", curr=self.runs_completed))

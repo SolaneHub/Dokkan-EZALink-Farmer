@@ -1,37 +1,58 @@
 import argparse
 import sys
+import time
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from core.bot_engine import BotEngine
+from core.i18n import set_language, get_available_languages
 from interfaces.cli import TerminalCLI
 from interfaces.discord_bot import run_discord_bot
 
 
 def main():
     parser = argparse.ArgumentParser(description="Dokkan Battle Automation Bot (CLI & Discord)")
-    parser.add_argument("--discord", action="store_true", help="Avvia l'interfaccia bot Discord")
-    parser.add_argument("--scrcpy", action="store_true", help="Avvia la finestra di mirroring scrcpy")
-    parser.add_argument("--devices", action="store_true", help="Elenca i dispositivi collegati ed esce")
-    parser.add_argument("--farm", type=int, nargs="?", const=10, help="Avvia direttamente il farming di N run")
-    parser.add_argument("--eza", type=int, nargs="?", const=30, help="Avvia direttamente EZA fino al livello specificato")
-    parser.add_argument("--link", type=int, nargs="?", const=20, help="Avvia direttamente il Link Level farming")
-    parser.add_argument("--config", type=str, default="config/settings.yaml", help="Percorso del file di configurazione")
+    parser.add_argument("--lang", "-l", type=str, choices=["en", "it"], default=None, help="Set interface language ('en' for English, 'it' for Italian)")
+    parser.add_argument("--discord", action="store_true", help="Launch Discord Bot interface")
+    parser.add_argument("--scrcpy", action="store_true", help="Launch scrcpy zero-latency screen mirroring")
+    parser.add_argument("--doctor", action="store_true", help="Run full environment diagnostics (scrcpy, adb, OS, devices)")
+    parser.add_argument("--devices", action="store_true", help="List connected Android devices and exit")
+    parser.add_argument("--farm", type=int, nargs="?", const=10, help="Directly start repeated stage farming for N runs (default: 10)")
+    parser.add_argument("--eza", type=int, nargs="?", const=999, help="Directly start EZA continuous climbing up to specified level (default: 999)")
+    parser.add_argument("--link", type=int, nargs="?", const=20, help="Directly start Link Level farming for N runs (default: 20)")
+    parser.add_argument("--config", type=str, default="config/settings.yaml", help="Path to YAML configuration file")
 
     args = parser.parse_args()
 
     engine = BotEngine(config_path=args.config)
 
+    # CLI flag takes precedence over configuration
+    if args.lang:
+        set_language(args.lang)
+
+    if args.doctor:
+        cli = TerminalCLI(engine)
+        cli.print_doctor()
+        return
+
     if args.devices:
         devices = engine.list_devices()
-        print("Dispositivi Android rilevati:")
+        print("Detected Android devices:")
         for d in devices:
             print(f" - {d['serial']} ({d['status']}) [{d['model']}]")
         return
 
     if args.discord:
-        print("[Avvio] Modalità Discord Bot selezionata...")
+        print("[Startup] Discord Bot mode selected...")
         try:
             engine.connect()
         except Exception as e:
-            print(f"[Avviso] Connessione dispositivo: {e}")
+            print(f"[Warning] Device connection: {e}")
         run_discord_bot(engine)
         return
 
@@ -39,9 +60,9 @@ def main():
         try:
             engine.connect()
             engine.start_scrcpy()
-            print("Premi CTRL+C per chiudere...")
+            print("Press CTRL+C to close scrcpy...")
             while True:
-                pass
+                time.sleep(1)
         except KeyboardInterrupt:
             engine.stop_scrcpy()
         return

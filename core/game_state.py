@@ -21,6 +21,9 @@ class GameState(enum.Enum):
     FRIEND_REQUEST = "FRIEND_REQUEST"
     GAME_OVER = "GAME_OVER"
     EZA_SELECT = "EZA_SELECT"
+    Z_BATTLE_LIST = "Z_BATTLE_LIST"
+    EVENT_SELECT = "EVENT_SELECT"
+    MODE_SELECT = "MODE_SELECT"
     TEAM_EDIT = "TEAM_EDIT"
     CHARACTER_BOX = "CHARACTER_BOX"
 
@@ -149,6 +152,24 @@ class StateDetector:
                 meta["eza_button"] = (int(w * 0.50), int(h * 0.69))
             return (GameState.EZA_SELECT, meta)
 
+        # 10b. Z-Battle List Screen (Extreme Z-Battle event selection list)
+        zbattle_active = self.vision.find_template(screen, "tab_zbattle_active")
+        if zbattle_active:
+            meta["zbattle_tab"] = (zbattle_active[0], zbattle_active[1])
+            return (GameState.Z_BATTLE_LIST, meta)
+
+        # 10c. Event Select Screen (other tabs active: Story, Growth, Challenge, Bonus)
+        zbattle_inactive = self.vision.find_template(screen, "tab_zbattle_inactive")
+        if zbattle_inactive:
+            meta["zbattle_tab"] = (zbattle_inactive[0], zbattle_inactive[1])
+            return (GameState.EVENT_SELECT, meta)
+
+        # 10d. Mode Select Menu (Start pressed -> Quest, Event, Dokkan Frontier)
+        button_event = self.vision.find_template(screen, "button_event")
+        if button_event:
+            meta["event_button"] = (button_event[0], button_event[1])
+            return (GameState.MODE_SELECT, meta)
+
         # 11. KO Animation Screen
         ko_match = self.vision.find_template(screen, "banner_ko")
         if ko_match:
@@ -163,6 +184,7 @@ class StateDetector:
         # 13. Home Screen
         home_match = self.vision.find_template(screen, "nav_start_quest") or self.vision.find_template(screen, "nav_start") or self.vision.find_template(screen, "nav_events")
         if home_match:
+            meta["start_button"] = (home_match[0], home_match[1])
             return (GameState.HOME_SCREEN, meta)
 
         # 14. Stage Select Screen
