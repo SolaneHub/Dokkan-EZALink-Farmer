@@ -22,7 +22,7 @@ farming:
   friend_selection_mode: "refresh" # "refresh" (auto-assigns friend via refresh button)
   friend_refresh_coords: [0.82, 0.18] # (rx, ry) for refresh/auto-assign button on friend screen
   default_runs: 20
-  eza_target_level: 30 # Default target level for EZA climbing
+  eza_target_level: 999 # Scalata fino al livello massimo 999
 
 link_leveling:
   auto_swap_maxed_units: true # Automatically replace units that hit max link level (Lv. 10)

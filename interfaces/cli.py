@@ -47,7 +47,7 @@ class TerminalCLI:
         table.add_row("inspect", "", "Cattura lo schermo e rileva lo stato attuale del gioco")
         table.add_row("shot", "[file.png]", "Salva uno screenshot del gioco")
         table.add_row("farm", "[run=10]", "Avvia il farming a ripetizione dello stage attuale")
-        table.add_row("eza", "[livello=30]", "Avvia l'avanzamento automatico di Extreme Z-Battle")
+        table.add_row("eza", "[livello=999]", "Avvia la scalata continua di Extreme Z-Battle (fino al Lv. 999)")
         table.add_row("link", "[run=20]", "Avvia il farming di Link Level (Quest 31-4 / 34-4)")
         table.add_row("status", "", "Mostra lo stato del bot e delle attività in corso")
         table.add_row("stop", "", "Ferma l'attività in esecuzione")
@@ -150,7 +150,8 @@ class TerminalCLI:
                     self.engine.start_stage_farm(runs=runs)
 
                 elif cmd == "eza":
-                    target_lvl = int(args[0]) if args and args[0].isdigit() else 30
+                    default_lvl = self.engine.config.get("farming", {}).get("eza_target_level", 999)
+                    target_lvl = int(args[0]) if args and args[0].isdigit() else default_lvl
                     self.engine.start_eza_farm(target_level=target_lvl)
 
                 elif cmd == "link":

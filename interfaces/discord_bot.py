@@ -111,17 +111,17 @@ class DiscordBotClient(commands.Bot):
             else:
                 await interaction.response.send_message("⚠️ Impossibile avviare: un'attività è già in esecuzione.")
 
-        @self.tree.command(name="eza", description="Avvia l'avanzamento automatico in Extreme Z-Battle")
-        @app_commands.describe(target_level="Livello target da raggiungere (default: 30)")
-        async def cmd_eza(interaction: discord.Interaction, target_level: Optional[int] = 30):
+        @self.tree.command(name="eza", description="Avvia la scalata automatica continua in Extreme Z-Battle")
+        @app_commands.describe(target_level="Livello target da raggiungere (default: 999)")
+        async def cmd_eza(interaction: discord.Interaction, target_level: Optional[int] = 999):
             if not self._is_user_allowed(interaction.user.id):
                 await interaction.response.send_message("❌ Non sei autorizzato.", ephemeral=True)
                 return
 
             self._main_channel = interaction.channel
-            ok = self.engine.start_eza_farm(target_level=target_level or 30)
+            ok = self.engine.start_eza_farm(target_level=target_level or 999)
             if ok:
-                await interaction.response.send_message(f"⚔️ **EZA Farming avviato:** obiettivo Livello {target_level}.")
+                await interaction.response.send_message(f"⚔️ **EZA Farming avviato:** scalata continua fino al Livello {target_level or 999}!")
             else:
                 await interaction.response.send_message("⚠️ Impossibile avviare: un'attività è già in esecuzione.")
 
