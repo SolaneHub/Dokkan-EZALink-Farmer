@@ -75,8 +75,8 @@ class EZAFarmTask(BaseTask):
                 if "eza_button" in meta:
                     x, y = meta["eza_button"]
                 else:
-                    # Challenge / Next Level button coordinate in EZA screen (~50% X, ~82% Y)
-                    x, y = int(w * 0.50), int(h * 0.82)
+                    # Challenge / Next Level button coordinate in EZA screen (~50% X, ~69% Y)
+                    x, y = int(w * 0.50), int(h * 0.69)
                 self.log(f"Avvio livello EZA successivo (tap a {x}, {y})...")
                 self.adb.tap(x, y, delay_after=2.0)
 
@@ -132,14 +132,7 @@ class EZAFarmTask(BaseTask):
             elif state == GameState.FRIEND_REQUEST:
                 unknown_counter = 0
                 self.dismiss_results_and_popups(w, h, meta)
-                if in_battle:
-                    in_battle = False
-                    self._record_victory()
-                    if self.runs_completed >= self.target_level:
-                        self.log(f"🎉 RAGGIUNTO IL LIVELLO TARGET {self.target_level}! Scalata completata!")
-                        self.stop()
-                        break
-                self.wait_check(2.0)
+                self.wait_check(1.5)
 
             # 8. Game Over Safety Check
             elif state == GameState.GAME_OVER:
@@ -163,13 +156,14 @@ class EZAFarmTask(BaseTask):
                     self.adb.tap(*meta["ok_button"], delay_after=1.2)
                 elif in_battle:
                     # Battle ended and game is cycling through Clear / Rewards / Dialog screens
-                    self.log(f"Avanzamento post-battaglia (ciclo {unknown_counter}): tocco OK a ({int(w*0.50)}, {int(h*0.85)})...")
+                    self.log(f"Avanzamento post-battaglia (ciclo {unknown_counter}): tap centro e OK...")
                     # Tap center to skip dialogue/animations
                     self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.4)
                     # Tap OK button position at center bottom
-                    self.adb.tap(int(w * 0.50), int(h * 0.85), delay_after=1.0)
-                elif unknown_counter % 4 == 0:
+                    self.adb.tap(int(w * 0.50), int(h * 0.85), delay_after=0.8)
+                elif unknown_counter % 2 == 0:
                     self.log(f"In attesa schermata EZA ({unknown_counter} cicli). Tap di avanzamento...")
+                    self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.3)
                     self.adb.tap(int(w * 0.50), int(h * 0.85), delay_after=0.5)
 
             self.wait_check(loop_delay)

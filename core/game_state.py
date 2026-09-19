@@ -128,15 +128,25 @@ class StateDetector:
             return (GameState.MAP_SCREEN, meta)
 
         # 10. EZA (Extreme Z-Battle) Level Select Screen
+        eza_battle_info = self.vision.find_template(screen, "button_eza_battle_info")
+        eza_select_lv = self.vision.find_template(screen, "button_eza_select_lv")
+        eza_fight = self.vision.find_template(screen, "button_eza_fight")
+        text_fight = self.vision.find_template(screen, "text_eza_fight")
         eza_screen = (
-            self.vision.find_template(screen, "button_eza_battle_info")
-            or self.vision.find_template(screen, "button_eza_select_lv")
-            or self.vision.find_template(screen, "text_eza_fight")
+            eza_battle_info
+            or eza_select_lv
+            or eza_fight
+            or text_fight
             or self.vision.find_template(screen, "button_eza_challenge")
             or self.vision.find_template(screen, "button_eza_next_level")
         )
         if eza_screen:
-            meta["eza_button"] = (int(w * 0.50), int(h * 0.65))
+            if eza_fight:
+                meta["eza_button"] = (int(eza_fight[0]), int(eza_fight[1]))
+            elif text_fight:
+                meta["eza_button"] = (int(text_fight[0]), int(text_fight[1] + 25))
+            else:
+                meta["eza_button"] = (int(w * 0.50), int(h * 0.69))
             return (GameState.EZA_SELECT, meta)
 
         # 11. KO Animation Screen

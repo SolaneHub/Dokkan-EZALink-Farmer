@@ -49,31 +49,48 @@ class Vision:
         t_h, t_w = template.shape[:2]
         s_h, s_w = screen.shape[:2]
 
-        best_val = -1.0
-        best_loc = None
+        # 1. Check 1.0 scale first for instant matching on native resolution
+        if t_w <= s_w and t_h <= s_h:
+            res = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+            if max_val >= thresh:
+                center_x = max_loc[0] + t_w // 2
+                center_y = max_loc[1] + t_h // 2
+                return (int(center_x), int(center_y), float(max_val))
+            best_val = max_val
+            best_loc = max_loc
+        else:
+            best_val = -1.0
+            best_loc = None
+
         best_w, best_h = t_w, t_h
 
-        # Multi-scale matching to tolerate different screen resolutions and DPIs
-        for scale in scales:
-            scaled_w = int(t_w * scale)
-            scaled_h = int(t_h * scale)
+        # 2. Multi-scale fallback only if native scale showed plausible candidate (>= 0.40)
+        if best_val >= 0.40:
+            for scale in scales:
+                if scale == 1.0:
+                    continue
+                scaled_w = int(t_w * scale)
+                scaled_h = int(t_h * scale)
 
-            if scaled_w > s_w or scaled_h > s_h or scaled_w < 10 or scaled_h < 10:
-                continue
+                if scaled_w > s_w or scaled_h > s_h or scaled_w < 10 or scaled_h < 10:
+                    continue
 
-            scaled_template = cv2.resize(template, (scaled_w, scaled_h), interpolation=cv2.INTER_AREA)
-            res = cv2.matchTemplate(screen, scaled_template, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+                scaled_template = cv2.resize(template, (scaled_w, scaled_h), interpolation=cv2.INTER_AREA)
+                res = cv2.matchTemplate(screen, scaled_template, cv2.TM_CCOEFF_NORMED)
+                _, max_val, _, max_loc = cv2.minMaxLoc(res)
 
-            if max_val > best_val:
-                best_val = max_val
-                best_loc = max_loc
-                best_w, best_h = scaled_w, scaled_h
+                if max_val > best_val:
+                    best_val = max_val
+                    best_loc = max_loc
+                    best_w, best_h = scaled_w, scaled_h
+                    if best_val >= thresh:
+                        break
 
         if best_val >= thresh and best_loc is not None:
             center_x = best_loc[0] + best_w // 2
             center_y = best_loc[1] + best_h // 2
-            return (center_x, center_y, float(best_val))
+            return (int(center_x), int(center_y), float(best_val))
 
         return None
 
@@ -106,15 +123,18 @@ class Vision:
         modal_matches = [m for m in matches if 0.40 <= (m[1] / s_h) <= 0.75]
         if modal_matches:
             modal_matches.sort(key=lambda x: x[2], reverse=True)
-            return modal_matches[0]
+            best = modal_matches[0]
+            return (int(best[0]), int(best[1]), float(best[2]))
 
         bottom_matches = [m for m in matches if (m[1] / s_h) > 0.75]
         if bottom_matches:
             bottom_matches.sort(key=lambda x: x[2], reverse=True)
-            return bottom_matches[0]
+            best = bottom_matches[0]
+            return (int(best[0]), int(best[1]), float(best[2]))
 
         matches.sort(key=lambda x: x[2], reverse=True)
-        return matches[0]
+        best = matches[0]
+        return (int(best[0]), int(best[1]), float(best[2]))
 
     def find_any_template(
         self,
