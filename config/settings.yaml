@@ -1,0 +1,29 @@
+# Configuration for Dokkan Battle Automation Bot
+
+device:
+  serial: "" # Leave blank to auto-detect the first connected device
+  package_name: "com.bandainamcogames.dbzdokkanww" # Global Dokkan package
+  scrcpy_path: "scrcpy"
+  adb_path: "adb"
+
+vision:
+  confidence_threshold: 0.78
+  template_dir: "templates/glb"
+  debug_save_screens: false # Save unrecognized screens for debugging/template creation
+
+bot:
+  loop_delay: 1.5 # Seconds between screen state evaluations
+  tap_delay: 0.8 # Delay after sending a tap input
+  max_unknown_screens: 15 # Warn if screen is unrecognized for consecutive cycles
+  auto_restart_app: true # Relaunch Dokkan if not running
+
+farming:
+  stamina_refill_mode: "none" # "none", "meat", "stones"
+  friend_selection_mode: "first" # "first", "best_rank"
+  default_runs: 10
+  eza_target_level: 30 # Default target level for EZA climbing
+
+discord:
+  token: "" # Paste your Discord bot token here
+  channel_id: 0 # Default channel to send alerts & screenshots
+  allowed_user_ids: [] # Discord user IDs allowed to run commands (empty = anyone in channel)

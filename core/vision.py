@@ -1,0 +1,123 @@
+import os
+import cv2
+import numpy as np
+from typing import Optional, Tuple, List, Dict
+
+
+class Vision:
+    """Handles Computer Vision, template matching, and UI element detection for Dokkan."""
+
+    def __init__(self, template_dir: str = "templates/glb", default_threshold: float = 0.78):
+        self.template_dir = template_dir
+        self.default_threshold = default_threshold
+        self._template_cache: Dict[str, np.ndarray] = {}
+        os.makedirs(self.template_dir, exist_ok=True)
+
+    def load_template(self, template_name: str) -> Optional[np.ndarray]:
+        """Loads and caches a template image from disk."""
+        if not template_name.endswith((".png", ".jpg")):
+            template_name += ".png"
+
+        if template_name in self._template_cache:
+            return self._template_cache[template_name]
+
+        path = os.path.join(self.template_dir, template_name)
+        if not os.path.exists(path):
+            return None
+
+        img = cv2.imread(path, cv2.IMREAD_COLOR)
+        if img is not None:
+            self._template_cache[template_name] = img
+        return img
+
+    def find_template(
+        self,
+        screen: np.ndarray,
+        template_name: str,
+        threshold: Optional[float] = None,
+        scales: List[float] = [0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15]
+    ) -> Optional[Tuple[int, int, float]]:
+        """
+        Locates a template on the screen using multi-scale template matching.
+        Returns: (center_x, center_y, max_val) or None
+        """
+        template = self.load_template(template_name)
+        if template is None:
+            return None
+
+        thresh = threshold if threshold is not None else self.default_threshold
+        t_h, t_w = template.shape[:2]
+        s_h, s_w = screen.shape[:2]
+
+        best_val = -1.0
+        best_loc = None
+        best_w, best_h = t_w, t_h
+
+        # Multi-scale matching to tolerate different screen resolutions and DPIs
+        for scale in scales:
+            scaled_w = int(t_w * scale)
+            scaled_h = int(t_h * scale)
+
+            if scaled_w > s_w or scaled_h > s_h or scaled_w < 10 or scaled_h < 10:
+                continue
+
+            scaled_template = cv2.resize(template, (scaled_w, scaled_h), interpolation=cv2.INTER_AREA)
+            res = cv2.matchTemplate(screen, scaled_template, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+
+            if max_val > best_val:
+                best_val = max_val
+                best_loc = max_loc
+                best_w, best_h = scaled_w, scaled_h
+
+        if best_val >= thresh and best_loc is not None:
+            center_x = best_loc[0] + best_w // 2
+            center_y = best_loc[1] + best_h // 2
+            return (center_x, center_y, float(best_val))
+
+        return None
+
+    def find_any_template(
+        self,
+        screen: np.ndarray,
+        template_names: List[str],
+        threshold: Optional[float] = None
+    ) -> Optional[Tuple[str, int, int, float]]:
+        """Tests multiple templates and returns the first match found with (name, x, y, conf)."""
+        for name in template_names:
+            match = self.find_template(screen, name, threshold)
+            if match:
+                return (name, match[0], match[1], match[2])
+        return None
+
+    def save_template_crop(
+        self,
+        screen: np.ndarray,
+        box: Tuple[int, int, int, int],
+        name: str
+    ) -> str:
+        """
+        Saves a cropped region as a template file for future matching.
+        box: (x, y, width, height)
+        """
+        x, y, w, h = box
+        crop = screen[y:y+h, x:x+w]
+        if not name.endswith(".png"):
+            name += ".png"
+        path = os.path.join(self.template_dir, name)
+        cv2.imwrite(path, crop)
+        # Clear cache for this template
+        self._template_cache.pop(name, None)
+        return path
+
+    @staticmethod
+    def get_dominant_color_in_rect(
+        screen: np.ndarray,
+        x1: int, y1: int, x2: int, y2: int
+    ) -> Tuple[int, int, int]:
+        """Returns average BGR color in a given rectangular area."""
+        roi = screen[y1:y2, x1:x2]
+        if roi.size == 0:
+            return (0, 0, 0)
+        mean_bgr = cv2.mean(roi)[:3]
+        return (int(mean_bgr[0]), int(mean_bgr[1]), int(mean_bgr[2]))
