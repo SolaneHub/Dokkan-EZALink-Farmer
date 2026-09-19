@@ -1,4 +1,5 @@
-from typing import Dict, Any, Optional, Callable
+import time
+from typing import Dict, Any, Optional, Callable, List
 from core.adb_client import ADBClient
 from core.vision import Vision
 from core.game_state import GameState
@@ -12,6 +13,8 @@ class LinkLevelFarmTask(BaseTask):
     - Uses Aged Meat or refills if configured
     - Automatically enables Auto-Map and Auto-Battle
     - Skips Link Level up popups and clears stages
+    - Detects when a unit hits MAX (Lv. 10) on all links and replaces it
+      automatically with the next available unit from the box!
     """
 
     def __init__(
@@ -26,10 +29,86 @@ class LinkLevelFarmTask(BaseTask):
         super().__init__(adb, vision, config, on_status, on_run_complete)
         self.runs_target = runs
 
+        ll_cfg = self.config.get("link_leveling", {})
+        self.auto_swap = ll_cfg.get("auto_swap_maxed_units", True)
+        self.protected_slots: List[int] = ll_cfg.get("protected_slots", []) # Empty = all slots swappable
+        self.box_card_coords = ll_cfg.get("box_first_slot_coords", [0.18, 0.28])
+        self.box_confirm_coords = ll_cfg.get("box_confirm_coords", [0.50, 0.90])
+
+    def swap_maxed_unit(self, slot_idx: int, screen_w: int, screen_h: int, meta: Dict[str, Any]):
+        """
+        Executes the replacement routine for a unit that reached MAX link level:
+        1. Enters Team Formation
+        2. Taps the maxed slot
+        3. Taps the next eligible unit in the filtered Box (sorted by release date)
+        4. Confirms and returns to stage
+        """
+        self.log(f"🔄 Sostituzione carta nello Slot {slot_idx + 1} (Link completati a Lv. 10)...")
+
+        # 1. Open Team Formation / Edit Deck
+        if "edit_team_button" in meta:
+            self.adb.tap(*meta["edit_team_button"], delay_after=2.0)
+        else:
+            # Fallback coordinate for "Edit Deck" on pre-stage screen
+            self.adb.tap(int(screen_w * 0.85), int(screen_h * 0.38), delay_after=2.0)
+
+        # 2. Tap the specific character slot in Team Formation
+        # Team formation 6 slots layout (2 rows x 3 columns)
+        team_slot_coords = [
+            (0.22, 0.30),  # Slot 1 (Leader)
+            (0.50, 0.30),  # Slot 2
+            (0.78, 0.30),  # Slot 3
+            (0.22, 0.55),  # Slot 4
+            (0.50, 0.55),  # Slot 5
+            (0.78, 0.55),  # Slot 6
+        ]
+
+        if 0 <= slot_idx < len(team_slot_coords):
+            rx, ry = team_slot_coords[slot_idx]
+            self.log(f"Apertura selezione per Slot {slot_idx + 1}...")
+            self.adb.tap(int(screen_w * rx), int(screen_h * ry), delay_after=2.5)
+
+        # 3. In the Box (Character List):
+        # Tap the first available card in the pre-filtered grid (Row 1, Column 1)
+        bx, by = self.box_card_coords
+        self.log(f"Selezione nuova carta dal Box (Row 1, Col 1 a {bx*100:.0f}%, {by*100:.0f}%)...")
+        self.adb.tap(int(screen_w * bx), int(screen_h * by), delay_after=1.2)
+
+        # 4. Confirm selection in Box
+        cx, cy = self.box_confirm_coords
+        self.log("Conferma selezione personaggio...")
+        self.adb.tap(int(screen_w * cx), int(screen_h * cy), delay_after=2.0)
+
+        # 5. Confirm Team Formation / Return to pre-stage screen
+        self.log("Conferma nuovo team e ritorno alla missione...")
+        self.adb.tap(int(screen_w * 0.50), int(screen_h * 0.90), delay_after=2.5)
+
+    def check_and_swap_team_if_needed(self, screen: Any, screen_w: int, screen_h: int, meta: Dict[str, Any]) -> bool:
+        """
+        Inspects all swappable slots (0 to 5) for MAX link level badges.
+        If a maxed slot is found, performs swap and returns True.
+        """
+        if not self.auto_swap:
+            return False
+
+        for slot_idx in range(6):
+            human_slot_number = slot_idx + 1
+            if human_slot_number in self.protected_slots:
+                continue
+
+            if self.vision.is_slot_link_max(screen, slot_idx):
+                self.log(f"⭐ Rilevato MAX LINK su Slot {human_slot_number}!")
+                self.swap_maxed_unit(slot_idx, screen_w, screen_h, meta)
+                return True # Swapped one unit; screen refreshed
+
+        return False
+
     def run(self):
         self.is_running = True
         self.runs_completed = 0
         self.log(f"Inizio Link Level farming su stage attuale: {self.runs_target} run programmate.")
+        if self.auto_swap:
+            self.log("Funzione Auto-Swap attiva: qualsiasi carta con link a Lv. 10 (MAX) verrà sostituita automaticamente.")
 
         unknown_counter = 0
         in_run = False
@@ -56,6 +135,14 @@ class LinkLevelFarmTask(BaseTask):
 
             elif state == GameState.TEAM_CONFIRM:
                 unknown_counter = 0
+
+                # Check if any slot has all links maxed before starting
+                swapped = self.check_and_swap_team_if_needed(screen, w, h, meta)
+                if swapped:
+                    # After swap, let screen re-render before proceeding to start
+                    self.wait_check(2.0)
+                    continue
+
                 self.tap_start_team(w, h, meta)
                 in_run = True
                 self.wait_check(3.0)

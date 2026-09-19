@@ -21,6 +21,8 @@ class GameState(enum.Enum):
     FRIEND_REQUEST = "FRIEND_REQUEST"
     GAME_OVER = "GAME_OVER"
     EZA_SELECT = "EZA_SELECT"
+    TEAM_EDIT = "TEAM_EDIT"
+    CHARACTER_BOX = "CHARACTER_BOX"
 
 
 class StateDetector:
@@ -78,7 +80,23 @@ class StateDetector:
         start_match = self.vision.find_template(screen, "button_start")
         if start_match:
             meta["start_button"] = (start_match[0], start_match[1])
+            edit_team = self.vision.find_template(screen, "button_edit_team")
+            if edit_team:
+                meta["edit_team_button"] = (edit_team[0], edit_team[1])
+            switch_disp = self.vision.find_template(screen, "button_switch_display")
+            if switch_disp:
+                meta["switch_display_button"] = (switch_disp[0], switch_disp[1])
             return (GameState.TEAM_CONFIRM, meta)
+
+        # 6b. Team Edit Screen (Team Formation / Deck Editor)
+        team_edit_match = self.vision.find_template(screen, "header_team_formation") or self.vision.find_template(screen, "button_auto_formation")
+        if team_edit_match:
+            return (GameState.TEAM_EDIT, meta)
+
+        # 6c. Character Box / Character Selection List
+        box_match = self.vision.find_template(screen, "header_character_list") or self.vision.find_template(screen, "button_filter")
+        if box_match:
+            return (GameState.CHARACTER_BOX, meta)
 
         # 7. Friend Selection Screen
         friend_header = self.vision.find_template(screen, "header_select_friend")

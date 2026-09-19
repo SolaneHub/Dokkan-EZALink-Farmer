@@ -121,3 +121,43 @@ class Vision:
             return (0, 0, 0)
         mean_bgr = cv2.mean(roi)[:3]
         return (int(mean_bgr[0]), int(mean_bgr[1]), int(mean_bgr[2]))
+
+    def is_slot_link_max(self, screen: np.ndarray, slot_idx: int) -> bool:
+        """
+        Inspects character slot (0 to 5) on the Team Preview screen to determine
+        if all links are MAX (Lv. 10). Checks for golden MAX badge or template match.
+        """
+        h, w = screen.shape[:2]
+        # Relative horizontal centers for slots 0 to 5 (Leader = 0, Sub units = 1..5)
+        slot_centers_x = [0.15, 0.29, 0.43, 0.57, 0.71, 0.85]
+        if slot_idx < 0 or slot_idx >= len(slot_centers_x):
+            return False
+
+        cx = int(w * slot_centers_x[slot_idx])
+        cy = int(h * 0.48)
+
+        # Region around the character's link skill badge (lower portion of character circle)
+        badge_h = int(h * 0.05)
+        badge_w = int(w * 0.10)
+        y1 = cy + int(h * 0.015)
+        y2 = min(h, y1 + badge_h)
+        x1 = max(0, cx - badge_w // 2)
+        x2 = min(w, cx + badge_w // 2)
+
+        roi = screen[y1:y2, x1:x2]
+        if roi.size == 0:
+            return False
+
+        # 1. Try template match if badge_link_max.png exists
+        tmpl_match = self.find_template(roi, "badge_link_max", threshold=0.72)
+        if tmpl_match is not None:
+            return True
+
+        # 2. Color analysis: Gold/Yellow badge detection in HSV
+        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        lower_gold = np.array([18, 100, 140], dtype=np.uint8)
+        upper_gold = np.array([38, 255, 255], dtype=np.uint8)
+        mask = cv2.inRange(hsv, lower_gold, upper_gold)
+        gold_ratio = np.count_nonzero(mask) / float(roi.shape[0] * roi.shape[1])
+
+        return gold_ratio > 0.12

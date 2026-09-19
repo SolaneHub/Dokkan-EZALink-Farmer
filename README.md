@@ -9,7 +9,7 @@ Bot di automazione avanzato per **Dragon Ball Z: Dokkan Battle (Versione Global)
 - 🖥️ **Supporto scrcpy**: Visualizza e interagisci con lo schermo del tuo smartphone direttamente dal Mac a latenza zero.
 - 🔄 **Farming Stage Automatico**: Ripete qualsiasi evento o missione selezionata (selezione amico, avvio team, avanzamento mappa, auto-battle 2x, chiusura schermata premi/risultati, rifiuto richieste amicizia).
 - ⚔️ **Extreme Z-Battle (EZA) Auto-Climb**: Scala i livelli consecutivi degli EZA (fino al Lv. 30 o oltre per farmare Zeni/Statue di Hercule).
-- 🔗 **Link Level Farming**: Ottimizzato per run rapide e ripetute su Quest (es. Area 31-4 o 34-4) con gestione carni (Aged Meat) o stamina.
+- 🔗 **Link Level Farming con Auto-Swap**: Ottimizzato per run rapide su Quest (es. Area 31-4 o 34-4) con gestione carni (Aged Meat). **Rileva in automatico se un personaggio ha raggiunto tutti i link a Lv. 10 (MAX) e lo sostituisce nel team con la prossima carta dal box** (anche il leader!).
 - 📱 **Terminale Interattivo (Rich CLI)**: Interfaccia a riga di comando con log in tempo reale e tabella di stato.
 - 🤖 **Bot Discord Integrato**: Controlla il bot a distanza tramite Slash Commands (`/status`, `/farm`, `/eza`, `/link`, `/screenshot`, `/stop`, `/scrcpy`) e ricevi gli screenshot del gioco direttamente in chat!
 

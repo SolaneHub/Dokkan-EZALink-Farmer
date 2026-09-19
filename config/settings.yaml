@@ -18,10 +18,17 @@ bot:
   auto_restart_app: true # Relaunch Dokkan if not running
 
 farming:
-  stamina_refill_mode: "none" # "none", "meat", "stones"
+  stamina_refill_mode: "meat" # "none", "meat", "stones"
   friend_selection_mode: "first" # "first", "best_rank"
-  default_runs: 10
+  default_runs: 20
   eza_target_level: 30 # Default target level for EZA climbing
+
+link_leveling:
+  auto_swap_maxed_units: true # Automatically replace units that hit max link level (Lv. 10)
+  protected_slots: [] # Empty list = all slots (including Leader) can be replaced!
+  box_first_slot_coords: [0.18, 0.28] # (rx, ry) for first card in filtered character box
+  box_confirm_coords: [0.50, 0.90] # (rx, ry) for confirm button in character box
+
 
 discord:
   token: "" # Paste your Discord bot token here
