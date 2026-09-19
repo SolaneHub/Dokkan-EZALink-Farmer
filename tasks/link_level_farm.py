@@ -206,7 +206,11 @@ class LinkLevelFarmTask(BaseTask):
 
             else:
                 unknown_counter += 1
-                if unknown_counter % 5 == 0:
+                if in_run:
+                    self.log(f"Avanzamento post-stage (ciclo {unknown_counter}): tocco skip e OK a ({int(w*0.50)}, {int(h*0.88)})...")
+                    self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.4)
+                    self.adb.tap(int(w * 0.50), int(h * 0.88), delay_after=1.0)
+                elif unknown_counter % 5 == 0:
                     self.log(f"Schermata ({unknown_counter} cicli). Tap di avanzamento...")
                     self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.5)
 

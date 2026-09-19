@@ -108,10 +108,12 @@ class BaseTask:
             self.log(f"Rifiuto richiesta amicizia a {x}, {y}...")
             self.adb.tap(x, y, delay_after=1.2)
         else:
-            # Fallback: tap center/bottom to skip clear animations
-            center_x, center_y = int(screen_w * 0.50), int(screen_h * 0.82)
-            self.log(f"Avanzamento schermata risultati a {center_x}, {center_y}...")
-            self.adb.tap(center_x, center_y, delay_after=1.0)
+            # Tap center to skip counting animations, then tap OK button (50% X, 88% Y)
+            ok_x = int(screen_w * 0.50)
+            ok_y = int(screen_h * 0.88)
+            self.log(f"Avanzamento risultati: tap skip e pressione OK a ({ok_x}, {ok_y})...")
+            self.adb.tap(ok_x, int(screen_h * 0.50), delay_after=0.4)
+            self.adb.tap(ok_x, ok_y, delay_after=1.2)
 
     def handle_stamina_refill(self, screen_w: int, screen_h: int, meta: Dict[str, Any]) -> bool:
         """Handles stamina empty prompt based on settings. Returns True if handled, False to abort."""
