@@ -112,21 +112,20 @@ class EZAFarmTask(BaseTask):
             elif state == GameState.KO_SCREEN:
                 unknown_counter = 0
                 self.log("💥 Boss sconfitto! Avanzamento K.O...")
-                # Tap center to skip KO animation, then tap OK position
+                # Tap center to skip KO animation, then tap OK position (85% Y)
                 self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.5)
-                self.adb.tap(int(w * 0.50), int(h * 0.88), delay_after=1.0)
+                self.adb.tap(int(w * 0.50), int(h * 0.85), delay_after=1.0)
 
             # 6. Results / Clear / Rewards Screen: PRESS OK!
             elif state == GameState.RESULTS_SCREEN:
                 unknown_counter = 0
                 self.log("Schermata risultati: premuto OK...")
-                # First tap to skip EXP/Zeni count animations
-                self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.4)
-                # Then press the OK button at center bottom (50% X, 88% Y)
                 if "ok_button" in meta:
                     self.adb.tap(*meta["ok_button"], delay_after=1.5)
                 else:
-                    self.adb.tap(int(w * 0.50), int(h * 0.88), delay_after=1.5)
+                    # First tap to skip EXP/Zeni count animations, then tap OK at 85% Y
+                    self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.4)
+                    self.adb.tap(int(w * 0.50), int(h * 0.85), delay_after=1.5)
                 self.wait_check(1.0)
 
             # 7. Friend Request Popup
@@ -159,16 +158,19 @@ class EZAFarmTask(BaseTask):
             # 10. Unknown / Post-Battle Transition Screen
             else:
                 unknown_counter += 1
-                if in_battle:
+                if "ok_button" in meta:
+                    self.log(f"Pulsante OK rilevato ({meta['ok_button']}). Tap di conferma...")
+                    self.adb.tap(*meta["ok_button"], delay_after=1.2)
+                elif in_battle:
                     # Battle ended and game is cycling through Clear / Rewards / Dialog screens
-                    self.log(f"Avanzamento post-battaglia (ciclo {unknown_counter}): tocco OK a ({int(w*0.50)}, {int(h*0.88)})...")
+                    self.log(f"Avanzamento post-battaglia (ciclo {unknown_counter}): tocco OK a ({int(w*0.50)}, {int(h*0.85)})...")
                     # Tap center to skip dialogue/animations
                     self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.4)
                     # Tap OK button position at center bottom
-                    self.adb.tap(int(w * 0.50), int(h * 0.88), delay_after=1.0)
+                    self.adb.tap(int(w * 0.50), int(h * 0.85), delay_after=1.0)
                 elif unknown_counter % 4 == 0:
                     self.log(f"In attesa schermata EZA ({unknown_counter} cicli). Tap di avanzamento...")
-                    self.adb.tap(int(w * 0.50), int(h * 0.88), delay_after=0.5)
+                    self.adb.tap(int(w * 0.50), int(h * 0.85), delay_after=0.5)
 
             self.wait_check(loop_delay)
 

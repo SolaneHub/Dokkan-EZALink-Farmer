@@ -41,13 +41,19 @@ class StateDetector:
 
         # 1. Check for popups first: OK button / Cancel / Close
         # Dokkan popups have distinct OK / CANCEL buttons
-        ok_match = self.vision.find_template(screen, "button_ok")
+        ok_match = self.vision.find_ok_button(screen)
         if ok_match:
             meta["ok_button"] = (ok_match[0], ok_match[1])
 
         cancel_match = self.vision.find_template(screen, "button_cancel")
         if cancel_match:
             meta["cancel_button"] = (cancel_match[0], cancel_match[1])
+
+        close_match = self.vision.find_template(screen, "button_close")
+        if close_match:
+            meta["close_button"] = (close_match[0], close_match[1])
+            if "ok_button" not in meta:
+                meta["ok_button"] = (close_match[0], close_match[1])
 
         dont_send_match = self.vision.find_template(screen, "button_dont_send")
         if dont_send_match:
@@ -70,10 +76,9 @@ class StateDetector:
         if game_over_match:
             return (GameState.GAME_OVER, meta)
 
-        # 5. Results Screen (Stage Cleared / Exp / Drops / OK button)
+        # 5. Results Screen or Modal OK Dialog
         results_match = self.vision.find_template(screen, "header_clear") or self.vision.find_template(screen, "header_rewards")
-        if results_match or (ok_match and ok_match[1] > int(h * 0.75)):
-            # If an OK button is in the lower quadrant and no other popup
+        if results_match or ok_match:
             return (GameState.RESULTS_SCREEN, meta)
 
         # 6. Team Confirmation Screen (Large Start button at bottom right)
@@ -123,9 +128,15 @@ class StateDetector:
             return (GameState.MAP_SCREEN, meta)
 
         # 10. EZA (Extreme Z-Battle) Level Select Screen
-        eza_challenge = self.vision.find_template(screen, "button_eza_challenge") or self.vision.find_template(screen, "button_eza_next_level")
-        if eza_challenge:
-            meta["eza_button"] = (eza_challenge[0], eza_challenge[1])
+        eza_screen = (
+            self.vision.find_template(screen, "button_eza_battle_info")
+            or self.vision.find_template(screen, "button_eza_select_lv")
+            or self.vision.find_template(screen, "text_eza_fight")
+            or self.vision.find_template(screen, "button_eza_challenge")
+            or self.vision.find_template(screen, "button_eza_next_level")
+        )
+        if eza_screen:
+            meta["eza_button"] = (int(w * 0.50), int(h * 0.65))
             return (GameState.EZA_SELECT, meta)
 
         # 11. KO Animation Screen

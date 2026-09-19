@@ -77,6 +77,45 @@ class Vision:
 
         return None
 
+    def find_ok_button(self, screen: np.ndarray, threshold: float = 0.80) -> Optional[Tuple[int, int, float]]:
+        """
+        Finds OK button. If a modal dialog OK button is present (between 40% and 75% Y),
+        returns that modal OK button with priority to dismiss the dialog.
+        Otherwise returns the bottom results OK button (80-95% Y).
+        """
+        template = self.load_template("button_ok")
+        if template is None:
+            return None
+
+        s_h, s_w = screen.shape[:2]
+        res = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+        loc = np.where(res >= threshold)
+
+        matches = []
+        for pt in zip(*loc[::-1]):
+            cx = pt[0] + template.shape[1] // 2
+            cy = pt[1] + template.shape[0] // 2
+            conf = float(res[pt[1], pt[0]])
+            if not any(abs(cx - m[0]) < 30 and abs(cy - m[1]) < 30 for m in matches):
+                matches.append((cx, cy, conf))
+
+        if not matches:
+            return None
+
+        # Separate into modal popup OK (40% to 75% Y) and bottom OK (> 75% Y)
+        modal_matches = [m for m in matches if 0.40 <= (m[1] / s_h) <= 0.75]
+        if modal_matches:
+            modal_matches.sort(key=lambda x: x[2], reverse=True)
+            return modal_matches[0]
+
+        bottom_matches = [m for m in matches if (m[1] / s_h) > 0.75]
+        if bottom_matches:
+            bottom_matches.sort(key=lambda x: x[2], reverse=True)
+            return bottom_matches[0]
+
+        matches.sort(key=lambda x: x[2], reverse=True)
+        return matches[0]
+
     def find_any_template(
         self,
         screen: np.ndarray,

@@ -103,14 +103,18 @@ class BaseTask:
             x, y = meta["ok_button"]
             self.log(f"Click su OK a {x}, {y}...")
             self.adb.tap(x, y, delay_after=1.5)
+        elif "close_button" in meta:
+            x, y = meta["close_button"]
+            self.log(f"Click su Close a {x}, {y}...")
+            self.adb.tap(x, y, delay_after=1.5)
         elif "dont_send_button" in meta:
             x, y = meta["dont_send_button"]
             self.log(f"Rifiuto richiesta amicizia a {x}, {y}...")
             self.adb.tap(x, y, delay_after=1.2)
         else:
-            # Tap center to skip counting animations, then tap OK button (50% X, 88% Y)
+            # Tap center to skip counting animations, then tap OK button (50% X, 85% Y)
             ok_x = int(screen_w * 0.50)
-            ok_y = int(screen_h * 0.88)
+            ok_y = int(screen_h * 0.85)
             self.log(f"Avanzamento risultati: tap skip e pressione OK a ({ok_x}, {ok_y})...")
             self.adb.tap(ok_x, int(screen_h * 0.50), delay_after=0.4)
             self.adb.tap(ok_x, ok_y, delay_after=1.2)
