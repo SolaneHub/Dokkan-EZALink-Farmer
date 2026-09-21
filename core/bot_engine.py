@@ -12,7 +12,6 @@ from core.system_tools import get_config_path, ToolLocator
 from core.i18n import t, set_language
 from core.dokkandb_client import DokkanDBClient
 from tasks.base_task import BaseTask
-from tasks.stage_farm import StageFarmTask
 from tasks.eza_farm import EZAFarmTask
 from tasks.link_level_farm import LinkLevelFarmTask
 
@@ -137,22 +136,6 @@ class BotEngine:
         state, _ = self.detector.detect(screen)
         return state
 
-    def start_stage_farm(self, runs: int = 10) -> bool:
-        """Starts stage repeat task."""
-        if self.is_task_running():
-            self.emit_log(t("tasks.task_already_running"))
-            return False
-
-        self.current_task = StageFarmTask(
-            self.adb,
-            self.vision,
-            self.config,
-            runs=runs,
-            on_status=self.emit_log,
-            on_run_complete=self.emit_run
-        )
-        self._start_task_thread()
-        return True
 
     def start_eza_farm(
         self,

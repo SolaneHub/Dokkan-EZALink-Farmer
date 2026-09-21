@@ -83,14 +83,47 @@ class ADBClient:
             devices.append({"serial": serial, "status": status, "model": model})
         return devices
 
+    COMMON_EMULATOR_PORTS = [
+        5555,   # BlueStacks, LDPlayer, default ADB over TCP
+        5554,   # Android Studio AVD
+        7555,   # MuMu Player 6/X
+        16384,  # MuMu Player 12
+        62001,  # NoxPlayer
+        21503,  # MEmu Play
+        5556,   # Multi-instance emulator 2
+        5558,   # Multi-instance emulator 3
+    ]
+
+    def probe_and_connect_emulators(self) -> List[str]:
+        """Probes standard emulator loopback ports on localhost and connects if open."""
+        import socket
+        connected = []
+        for port in self.COMMON_EMULATOR_PORTS:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.04)
+                    if s.connect_ex(("127.0.0.1", port)) == 0:
+                        res = self.run_cmd(["connect", f"127.0.0.1:{port}"], timeout=3)
+                        if "connected" in res.lower():
+                            connected.append(f"127.0.0.1:{port}")
+            except Exception:
+                pass
+        return connected
+
     def auto_connect(self) -> str:
-        """Finds the first available authorized device and connects to it."""
+        """Finds the first available authorized device and connects to it, auto-probing emulators if needed."""
         devices = self.list_devices()
         authorized = [d for d in devices if d["status"] == "device"]
         if not authorized:
+            # Probe common local emulator ports (BlueStacks, LDPlayer, MuMu, Nox, AVD)
+            self.probe_and_connect_emulators()
+            devices = self.list_devices()
+            authorized = [d for d in devices if d["status"] == "device"]
+
+        if not authorized:
             if any(d["status"] == "unauthorized" for d in devices):
                 raise RuntimeError("Device found but unauthorized. Please check your phone display and allow USB debugging!")
-            raise RuntimeError("No Android device connected. Please connect your phone via USB with USB Debugging enabled.")
+            raise RuntimeError("No Android device or emulator detected. Connect via USB or start your emulator with ADB enabled.")
         
         self.serial = authorized[0]["serial"]
         self.get_screen_size(force_refresh=True)
