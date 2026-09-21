@@ -16,13 +16,14 @@ from interfaces.discord_bot import run_discord_bot
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Dokkan Battle Automation Bot (CLI & Discord)")
+    parser = argparse.ArgumentParser(
+        description="Dokkan-EZALink-Farmer: Automated EZA Climbing & Link Level Grinder (CLI & Discord)"
+    )
     parser.add_argument("--lang", "-l", type=str, choices=["en", "it"], default=None, help="Set interface language ('en' for English, 'it' for Italian)")
     parser.add_argument("--discord", action="store_true", help="Launch Discord Bot interface")
     parser.add_argument("--scrcpy", action="store_true", help="Launch scrcpy zero-latency screen mirroring")
     parser.add_argument("--doctor", action="store_true", help="Run full environment diagnostics (scrcpy, adb, OS, devices)")
     parser.add_argument("--devices", action="store_true", help="List connected Android devices and exit")
-    parser.add_argument("--farm", type=int, nargs="?", const=10, help="Directly start repeated stage farming for N runs (default: 10)")
     parser.add_argument("--eza", type=int, nargs="?", const=999, help="Directly start EZA continuous climbing up to specified level (default: 999)")
     parser.add_argument("--link", type=int, nargs="?", const=-1, default=None, help="Directly start Link Level farming (optional: N runs, default: until stamina depleted)")
     parser.add_argument("--boost", dest="boost", action="store_true", default=None, help="Enable Boost for Link Level farming")
@@ -69,14 +70,7 @@ def main():
             engine.stop_scrcpy()
         return
 
-    # Direct task execution flags
-    if args.farm is not None:
-        engine.connect()
-        engine.start_stage_farm(runs=args.farm)
-        cli = TerminalCLI(engine)
-        cli.run()
-        return
-
+    # Direct task execution flags (EZA or Link Level)
     if args.eza is not None:
         engine.connect()
         engine.start_eza_farm(target_level=args.eza)

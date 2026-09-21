@@ -24,7 +24,6 @@ farming:
   stamina_refill_mode: "none" # "none", "meat", "stones"
   friend_selection_mode: "refresh" # "refresh" (auto-assigns friend via refresh button)
   friend_refresh_coords: [0.82, 0.18] # (rx, ry) for refresh/auto-assign button on friend screen
-  default_runs: 20
   eza_target_level: 999 # Continuous climbing up to max level 999
 
 link_leveling:

@@ -6,7 +6,7 @@ import cv2
 import discord
 from discord import app_commands
 from discord.ext import commands
-from typing import Optional
+from typing import Any, Optional
 
 from core.bot_engine import BotEngine
 from core.i18n import t
@@ -45,7 +45,7 @@ class DiscordBotClient(commands.Bot):
             keywords = ["complet", "Stamina", "Game Over", "Error", "Errore", "Start", "Inizio", "trovat", "found", "victory"]
             if any(k.lower() in msg.lower() for k in keywords):
                 asyncio.run_coroutine_threadsafe(
-                    self._main_channel.send(f"🤖 **[DokkanBot]** {msg}"),
+                    self._main_channel.send(f"🤖 **[Dokkan-EZALink]** {msg}"),
                     self._loop
                 )
 
@@ -59,6 +59,12 @@ class DiscordBotClient(commands.Bot):
 
     async def on_ready(self):
         print(f"[Discord] Bot logged in as {self.user.name} (ID: {self.user.id})")
+        try:
+            await self.change_presence(
+                activity=discord.Activity(type=discord.ActivityType.playing, name="EZA 999 & Link Leveling")
+            )
+        except Exception:
+            pass
         target_channel_id = self.engine.config.get("discord", {}).get("channel_id")
         if target_channel_id:
             self._main_channel = self.get_channel(target_channel_id)
@@ -101,20 +107,6 @@ class DiscordBotClient(commands.Bot):
                 await interaction.followup.send(content=t("discord.screenshot_caption"), file=file)
             except Exception as e:
                 await interaction.followup.send(t("discord.screenshot_error", error=str(e)))
-
-        @self.tree.command(name="farm", description="Starts repeated automated farming of the current stage")
-        @app_commands.describe(runs="Desired completion count (default: 10)")
-        async def cmd_farm(interaction: discord.Interaction, runs: Optional[int] = 10):
-            if not self._is_user_allowed(interaction.user.id):
-                await interaction.response.send_message(t("discord.not_authorized"), ephemeral=True)
-                return
-
-            self._main_channel = interaction.channel
-            ok = self.engine.start_stage_farm(runs=runs or 10)
-            if ok:
-                await interaction.response.send_message(t("discord.farm_started", runs=runs or 10))
-            else:
-                await interaction.response.send_message(t("discord.task_conflict"))
 
         @self.tree.command(name="eza", description="Starts continuous automated climbing in Extreme Z-Battle")
         @app_commands.describe(target_level="Target level to reach (default: 999)")
@@ -193,12 +185,86 @@ class DiscordBotClient(commands.Bot):
             await interaction.response.send_message(msg)
 
 
+def setup_discord_interactive(engine: BotEngine) -> bool:
+    """Interactively guides the user through setting up Discord bot credentials and saves them to settings.yaml."""
+    print("=" * 65)
+    print("🤖 CONFIGURAZIONE DISCORD BOT / DISCORD SETUP WIZARD")
+    print("=" * 65)
+    print("Per collegare il bot a Discord ti servono:")
+    print("1. Il Bot Token (da https://discord.com/developers/applications)")
+    print("2. L'ID del canale Discord per notifiche e screenshot")
+    print("Guida dettagliata passo-passo: docs/DISCORD_SETUP.it.md")
+    print("-" * 65)
+
+    current_discord = engine.config.get("discord", {})
+    current_token = current_discord.get("token", "")
+    masked_token = f"...{current_token[-6:]}" if len(current_token) > 6 else "(nessuno)"
+
+    try:
+        token = input(f"Inserisci Bot Token [{masked_token}]: ").strip()
+        if not token and current_token:
+            token = current_token
+
+        if not token or token.startswith("YOUR_DISCORD"):
+            print("❌ Token non inserito. Configurazione annullata.")
+            return False
+
+        current_channel = str(current_discord.get("channel_id", "") or "")
+        channel_input = input(f"Inserisci ID Canale Discord [{current_channel or 'nessuno'}]: ").strip()
+        if not channel_input and current_channel:
+            channel_input = current_channel
+
+        try:
+            channel_id = int(channel_input) if channel_input else 0
+        except ValueError:
+            print("⚠️ ID canale non valido, impostato a 0.")
+            channel_id = 0
+
+        current_users = current_discord.get("allowed_user_ids", [])
+        current_users_str = ", ".join(str(u) for u in current_users) if current_users else "tutti"
+        user_input = input(f"Inserisci il tuo ID Utente Discord (opzionale, attuale: {current_users_str}): ").strip()
+        allowed_user_ids = current_users
+        if user_input:
+            try:
+                allowed_user_ids = [int(user_input)]
+            except ValueError:
+                pass
+
+        if "discord" not in engine.config:
+            engine.config["discord"] = {}
+
+        engine.config["discord"]["token"] = token
+        engine.config["discord"]["channel_id"] = channel_id
+        engine.config["discord"]["allowed_user_ids"] = allowed_user_ids
+        engine.save_config()
+
+        print("✓ Credenziali salvate con successo in config/settings.yaml!")
+        print("=" * 65)
+        return True
+    except (KeyboardInterrupt, EOFError):
+        print("\nOperazione annullata.")
+        return False
+
+
 def run_discord_bot(engine: BotEngine):
     """Starts the Discord bot client with token from settings."""
-    token = engine.config.get("discord", {}).get("token")
-    if not token or token == "YOUR_DISCORD_BOT_TOKEN_HERE":
+    token = (engine.config.get("discord", {}).get("token") or "").strip()
+    if not token or token.startswith("YOUR_DISCORD"):
         print(t("discord.missing_token_warning"))
         print(t("discord.missing_token_hint"))
+        try:
+            choice = input("\nVuoi configurare il bot Discord adesso? [S/n]: ").strip().lower()
+            if choice not in ("n", "no"):
+                ok = setup_discord_interactive(engine)
+                if not ok:
+                    return
+                token = (engine.config.get("discord", {}).get("token") or "").strip()
+            else:
+                return
+        except (KeyboardInterrupt, EOFError):
+            return
+
+    if not token:
         return
 
     bot = DiscordBotClient(engine)

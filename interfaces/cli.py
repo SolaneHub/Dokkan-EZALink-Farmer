@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+from typing import Any, Optional
 
 if sys.platform == "win32":
     try:
@@ -20,7 +21,7 @@ from core.i18n import t, set_language, get_language, get_available_languages
 
 
 class TerminalCLI:
-    """Rich interactive Terminal Command Interface for DokkanBattleBot."""
+    """Rich interactive Terminal Command Interface for Dokkan-EZALink-Farmer."""
 
     def __init__(self, engine: BotEngine):
         self.engine = engine
@@ -60,10 +61,9 @@ class TerminalCLI:
         table.add_row("scrcpy-stop", "", t("cli.help.desc_scrcpy_stop"))
         table.add_row("inspect", "", t("cli.help.desc_inspect"))
         table.add_row("shot", "[file.png]", t("cli.help.desc_shot"))
-        table.add_row("farm", "[run=10]", t("cli.help.desc_farm"))
         table.add_row("eza", "[level=999]", t("cli.help.desc_eza"))
-        table.add_row("events", "", t("cli.help.desc_events"))
         table.add_row("link", "[runs] [boost]", t("cli.help.desc_link"))
+        table.add_row("discord", "[setup|run]", t("cli.help.desc_discord"))
         table.add_row("doctor / check", "", t("cli.help.desc_doctor"))
         table.add_row("status", "", t("cli.help.desc_status"))
         table.add_row("lang", "[en|it]", t("cli.help.desc_lang"))
@@ -275,28 +275,6 @@ class TerminalCLI:
             self.console.print(f"[yellow]⚠️ Evento Spirito del Tempo non trovato in DokkanDB. Avvio con parametri predefiniti ({runs_display}, {boost_label})...[/yellow]")
             self.engine.start_link_level_farm(runs=runs, use_boost=use_boost)
 
-    def handle_events_browser(self):
-        """Displays available general events from DokkanDB."""
-        try:
-            self.console.print(f"[cyan]{t('cli.dokkandb.fetching')}[/]")
-            events = self.engine.dokkandb.get_events()
-            if not events:
-                self.console.print(f"[red]{t('cli.dokkandb.fetch_error', error='No events returned')}[/]")
-                return
-
-            t_events = Table(title="DokkanDB Events", border_style="cyan")
-            t_events.add_column("ID", style="bold green", width=6)
-            t_events.add_column("Name", style="white")
-            t_events.add_column("Category", style="yellow", width=12)
-
-            for ev in events[:25]:
-                t_events.add_row(str(ev.get("id")), str(ev.get("name")), str(ev.get("category")))
-
-            self.console.print(t_events)
-            self.console.print(f"[dim]Total events in DokkanDB: {len(events)} (showing first 25)[/dim]")
-        except Exception as e:
-            self.console.print(f"[red]Error fetching events: {e}[/]")
-
     def run(self):
         """Runs the interactive CLI command loop."""
         self.print_banner()
@@ -392,18 +370,25 @@ class TerminalCLI:
                     except Exception as e:
                         self.console.print(f"[red]{t('cli.shot.error', error=str(e))}[/]")
 
-                elif cmd == "farm":
-                    runs = int(args[0]) if args and args[0].isdigit() else 10
-                    self.engine.start_stage_farm(runs=runs)
-
                 elif cmd == "eza":
                     self.handle_eza_interactive(args)
 
-                elif cmd in ("events", "event", "dokkandb"):
-                    self.handle_events_browser()
-
                 elif cmd == "link":
                     self.handle_link_interactive(args)
+
+                elif cmd == "discord":
+                    from interfaces.discord_bot import setup_discord_interactive, run_discord_bot
+                    sub = args[0].lower() if args else "setup"
+                    if sub in ("setup", "config", "init"):
+                        setup_discord_interactive(self.engine)
+                    elif sub in ("start", "run"):
+                        self.console.print("[cyan]Avvio del bot Discord in corso (premi CTRL+C per tornare alla console)...[/cyan]")
+                        try:
+                            run_discord_bot(self.engine)
+                        except KeyboardInterrupt:
+                            self.console.print("[yellow]\nBot Discord arrestato.[/yellow]")
+                    else:
+                        self.console.print("[yellow]Uso: discord setup  oppure  discord start[/yellow]")
 
                 elif cmd == "stop":
                     self.engine.stop_task()
