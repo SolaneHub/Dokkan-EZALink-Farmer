@@ -72,7 +72,10 @@ class StateDetector:
             return (GameState.FRIEND_REQUEST, meta)
 
         # 3. Stamina Empty Popup
-        stamina_empty_match = self.vision.find_template(screen, "popup_stamina_empty")
+        stamina_empty_match = (
+            self.vision.find_template(screen, "popup_stamina_empty")
+            or self.vision.find_template(screen, "header_restore_sta")
+        )
         meat_match = self.vision.find_template(screen, "button_use_meat")
         if stamina_empty_match or meat_match:
             if meat_match:

@@ -278,6 +278,16 @@ class TestLinkLeveling(unittest.TestCase):
         self.assertEqual(again_coords[0], int(1080 * 0.72))
         self.assertEqual(again_coords[1], 1600)
 
+    def test_restore_sta_detection_and_cancel(self):
+        canvas = self._create_canvas()
+        self._paste_template(canvas, "header_restore_sta", 540, 380)
+        self._paste_template(canvas, "button_cancel", 540, 1500)
+
+        state, meta = self.detector.detect(canvas)
+        self.assertEqual(state, GameState.STAMINA_EMPTY)
+        self.assertIn("cancel_button", meta)
+        self.assertEqual(meta["cancel_button"], (540, 1500))
+
 
 if __name__ == "__main__":
     unittest.main()

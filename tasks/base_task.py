@@ -154,9 +154,9 @@ class BaseTask:
         if mode == "none":
             self.log(t("tasks.base.stamina_depleted_abort"))
             if "cancel_button" in meta:
-                self.adb.tap(*meta["cancel_button"])
+                self.adb.tap(*meta["cancel_button"], delay_after=1.5)
             else:
-                self.adb.tap(int(screen_w * 0.28), int(screen_h * 0.65))
+                self.adb.tap(int(screen_w * 0.50), int(screen_h * 0.785), delay_after=1.5)
             return False
 
         if mode == "meat":
