@@ -27,12 +27,18 @@ class EZAFarmTask(BaseTask):
         vision: Vision,
         config: Dict[str, Any],
         target_level: int = 999,
+        target_eza: Optional[Dict[str, Any]] = None,
         on_status: Optional[Callable[[str], None]] = None,
         on_run_complete: Optional[Callable[[int, int], None]] = None
     ):
         super().__init__(adb, vision, config, on_status, on_run_complete)
         self.target_level = target_level
+        self.target_eza = target_eza
+        self.target_eza_selected = False
         self.platinum_statues_earned = 0
+        self._target_banner_img: Optional[np.ndarray] = None
+        if self.target_eza and self.target_eza.get("banner_local_path"):
+            self._target_banner_img = cv2.imread(self.target_eza["banner_local_path"], cv2.IMREAD_UNCHANGED)
 
     def _record_victory(self):
         """Records cleared stage and calculates estimated Zeni earnings."""
@@ -132,6 +138,54 @@ class EZAFarmTask(BaseTask):
         self.log(t("tasks.eza.all_completed"))
         return False
 
+    def find_and_select_specific_eza(self, max_scrolls: int = 20) -> bool:
+        """
+        Scans the Z-Battle list for the specific banner matching self.target_eza.
+        Scrolls down through the list if not initially found.
+        Taps the banner when located.
+        """
+        if self._target_banner_img is None:
+            return False
+
+        target_name = self.target_eza.get("name", "Target EZA")
+        self.log(t("tasks.eza.searching_target", name=target_name))
+
+        prev_screen = None
+        for attempt in range(max_scrolls):
+            if self._stop_event.is_set():
+                return False
+
+            screen = self.adb.screencap()
+            h, w = screen.shape[:2]
+
+            # Check if target banner is visible on screen
+            match = self.vision.find_banner_on_screen(screen, self._target_banner_img, threshold=0.72)
+            if match:
+                cx, cy, conf = match
+                self.log(t("tasks.eza.target_banner_found", name=target_name, conf=f"{conf:.2f}"))
+                # Tap safely within the banner vertical bounds
+                tap_x = int(w * 0.50)
+                tap_y = max(int(h * 0.20), min(int(h * 0.80), cy))
+                self.adb.tap(tap_x, tap_y, delay_after=2.5)
+                return True
+
+            # Check if bottom or end of list is reached (screen stopped changing)
+            if prev_screen is not None:
+                r_y1, r_y2 = int(h * 0.25), int(h * 0.75)
+                r_x1, r_x2 = int(w * 0.05), int(w * 0.95)
+                diff = float(np.mean(np.abs(prev_screen[r_y1:r_y2, r_x1:r_x2].astype(float) - screen[r_y1:r_y2, r_x1:r_x2].astype(float))))
+                if diff < 6.0:
+                    self.log(t("tasks.eza.target_banner_not_found", name=target_name))
+                    return False
+
+            prev_screen = screen
+            # Smooth drag-scroll downwards (swipe up) to show next banners
+            self.adb.swipe(int(w * 0.50), int(h * 0.70), int(w * 0.50), int(h * 0.38), duration_ms=400)
+            self.wait_check(1.0)
+
+        self.log(t("tasks.eza.target_banner_not_found", name=target_name))
+        return False
+
     def run(self):
         """Main EZA loop."""
         self.is_running = True
@@ -142,6 +196,18 @@ class EZAFarmTask(BaseTask):
         unknown_counter = 0
         in_battle = False
         loop_delay = self.config.get("bot", {}).get("loop_delay", 1.2)
+
+        # Universal entry navigation: ensure we reach Z_BATTLE_LIST if target_eza is specified
+        if self.target_eza and not self.target_eza_selected:
+            try:
+                initial_screen = self.adb.screencap()
+                initial_state, _ = self.detector.detect(initial_screen)
+                if initial_state != GameState.Z_BATTLE_LIST:
+                    self.log(t("tasks.nav.navigating_to_zbattle"))
+                    if not self.navigate_to_zbattle_list():
+                        self.log(t("tasks.eza.nav_retry"))
+            except Exception as e:
+                self.log(f"Navigation check error: {e}")
 
         while not self._stop_event.is_set():
             self._pause_event.wait()
@@ -167,6 +233,13 @@ class EZAFarmTask(BaseTask):
                         self.log(t("tasks.eza.target_reached", level=self.target_level))
                         self.stop()
                         break
+
+                # If a specific target EZA was requested and hasn't been selected yet,
+                # navigate to Z_BATTLE_LIST to avoid farming whatever random EZA is currently open
+                if self.target_eza and not self.target_eza_selected:
+                    self.log(t("tasks.eza.not_target_eza_navigating"))
+                    self.navigate_to_zbattle_list()
+                    continue
 
                 if "eza_button" in meta:
                     x, y = meta["eza_button"]
@@ -215,10 +288,10 @@ class EZAFarmTask(BaseTask):
             elif state == GameState.RESULTS_SCREEN:
                 unknown_counter = 0
                 self.log(t("tasks.eza.results_ok"))
+                self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.3)
                 if "ok_button" in meta:
                     self.adb.tap(*meta["ok_button"], delay_after=1.5)
                 else:
-                    self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.4)
                     self.adb.tap(int(w * 0.50), int(h * 0.85), delay_after=1.5)
                 self.wait_check(1.0)
 
@@ -278,14 +351,26 @@ class EZAFarmTask(BaseTask):
                 else:
                     self.adb.tap(int(w * 0.83), int(h * 0.21), delay_after=2.0)
 
-            # 14. Z-Battle Event List Screen -> Scroll down to bottom & pick lowest non-999 EZA
+            # 14. Z-Battle Event List Screen -> Select specific EZA or bottom non-999
             elif state == GameState.Z_BATTLE_LIST:
                 unknown_counter = 0
                 self.log(t("tasks.eza.list_detected"))
-                self.scroll_to_bottom()
-                selected = self.find_and_select_target_eza()
-                if not selected:
-                    self.log(t("tasks.eza.no_banner_found"))
+                if self.target_eza and self._target_banner_img is not None:
+                    selected = self.find_and_select_specific_eza()
+                    if selected:
+                        self.target_eza_selected = True
+                    else:
+                        target_name = self.target_eza.get("name", "Target EZA")
+                        self.log(t("tasks.eza.target_not_available_stop", name=target_name))
+                        self.stop()
+                        break
+                else:
+                    self.scroll_to_bottom()
+                    selected = self.find_and_select_target_eza()
+                    if selected:
+                        self.target_eza_selected = True
+                    else:
+                        self.log(t("tasks.eza.no_banner_found"))
                 self.wait_check(2.0)
 
             # 15. Unknown / Post-Battle Transition Screen
@@ -293,6 +378,7 @@ class EZAFarmTask(BaseTask):
                 unknown_counter += 1
                 if "ok_button" in meta:
                     self.log(t("tasks.eza.ok_popup_detected", coords=str(meta["ok_button"])))
+                    self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.2)
                     self.adb.tap(*meta["ok_button"], delay_after=1.2)
                 elif "close_button" in meta:
                     self.log(t("tasks.eza.close_popup_detected", coords=str(meta["close_button"])))
@@ -303,9 +389,11 @@ class EZAFarmTask(BaseTask):
                     self.log(t("tasks.eza.post_battle_advance", cycles=unknown_counter))
                     self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.4)
                     self.adb.tap(int(w * 0.50), int(h * 0.85), delay_after=0.8)
-                elif unknown_counter >= 6 and not in_battle:
+                elif unknown_counter >= 3 and not in_battle:
                     self.log(t("tasks.eza.reset_to_home", cycles=unknown_counter))
-                    self.adb.tap(int(w * 0.10), int(h * 0.854), delay_after=2.0)
+                    home_x = int(w * 0.095)
+                    home_y = int(h * 0.854)
+                    self.adb.tap(home_x, home_y, delay_after=2.0)
                     unknown_counter = 0
                 elif unknown_counter % 2 == 0:
                     self.log(t("tasks.eza.waiting_screen", cycles=unknown_counter))

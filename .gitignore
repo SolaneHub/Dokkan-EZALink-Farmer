@@ -16,3 +16,4 @@ dist/
 # Ignore test screenshots and debug dumps in root
 *.png
 !templates/**/*.png
+cache/
