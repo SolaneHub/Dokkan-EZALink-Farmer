@@ -1,19 +1,63 @@
-venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.log
-.DS_Store
-.idea/
-.vscode/
+# =====================================================================
+# Git Ignore - Dokkan Battle Automation Bot
+# =====================================================================
 
-# Build and Distribution Artifacts
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# Linters, Type Checkers & Tooling
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# Build & Packaging Artifacts
 build/
 dist/
+*.egg-info/
+*.egg
+.eggs/
 *.spec
 
-# Ignore test screenshots and debug dumps in root
+# IDE & Editor Settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Operating System Metadata
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Logs & Runtime Dumps
+*.log
+
+# Cache & Temporary Screenshots
+cache/
 *.png
 !templates/**/*.png
-cache/
+!assets/**/*.png
+!assets/**/*.svg

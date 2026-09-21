@@ -1,0 +1,118 @@
+name: Build and Release Dokkan-EZALink-Farmer
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version tag (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: dokkan-eza-link-windows-x64
+            asset_filename: dokkan-eza-link-windows-x64.zip
+          - os: macos-latest
+            artifact_name: dokkan-eza-link-macos
+            asset_filename: dokkan-eza-link-macos.zip
+          - os: ubuntu-latest
+            artifact_name: dokkan-eza-link-linux-x64
+            asset_filename: dokkan-eza-link-linux-x64.zip
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build Standalone Distribution
+        run: |
+          python scripts/build_dist.py
+
+      - name: Package Artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/dokkan-eza-link -DestinationPath dokkan-eza-link-windows-x64.zip
+
+      - name: Package Artifacts (macOS / Linux)
+        if: matrix.os != 'windows-latest'
+        run: |
+          chmod +x dist/dokkan-eza-link/dokkan-eza-link dist/dokkan-eza-link/Launch-Dokkan-EZALink.command dist/dokkan-eza-link/Launch-Dokkan-EZALink.sh 2>/dev/null || true
+          cd dist
+          zip -r ../${{ matrix.asset_filename }} dokkan-eza-link
+          cd ..
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.asset_filename }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dokkan-eza-link-windows-x64
+
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dokkan-eza-link-macos
+
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dokkan-eza-link-linux-x64
+
+      - name: Publish Release to GitHub
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.version }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "Target Release Tag: $TAG"
+
+          # Create or update GitHub Release with compiled binaries
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, uploading/overwriting assets..."
+            gh release upload "$TAG" dokkan-eza-link-windows-x64.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip --clobber
+          else
+            echo "Creating new release $TAG..."
+            gh release create "$TAG" dokkan-eza-link-windows-x64.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip \
+              --title "Dokkan-EZALink-Farmer $TAG" \
+              --generate-notes
+          fi
