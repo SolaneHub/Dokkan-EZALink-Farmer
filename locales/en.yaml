@@ -1,10 +1,10 @@
-# English Localization Catalog for DokkanBattleBot
+# English Localization Catalog for Dokkan-EZALink-Farmer
 
 cli:
-  banner_title: "🔥 DOKKAN BATTLE AUTOMATION BOT 🔥"
-  banner_subtitle: "ADB & scrcpy Controller | Terminal & Discord Support"
+  banner_title: "🔥 DOKKAN EZA & LINK LEVEL FARMER 🔥"
+  banner_subtitle: "Extreme Z-Battle (Zeni 999) & Chamber of Spirit and Time (Links) | CLI & Discord"
   banner_help_hint: "Type 'help' for available commands."
-  prompt: "dokkan-bot>"
+  prompt: "dokkan-farmer>"
   no_device_warning: "No Android device connected at startup ({error})."
   no_device_connect_hint: "Connect your phone with USB Debugging enabled and type 'connect'."
   exit_message: "Exiting bot... Goodbye!"
@@ -26,10 +26,9 @@ cli:
     desc_scrcpy_stop: "Close scrcpy window"
     desc_inspect: "Capture screen and inspect current game state"
     desc_shot: "Save a game screenshot to disk"
-    desc_farm: "Start repeating current stage for N runs"
     desc_eza: "Start EZA Farming (select from DokkanDB or quick auto-farm)"
-    desc_events: "Browse or search available events and Z-Battles from DokkanDB"
     desc_link: "Start Link Level farming (Chamber of Spirit and Time; default: until stamina depleted)"
+    desc_discord: "Configure (setup) or start Discord bot remote controller"
     desc_doctor: "Run diagnostics for scrcpy, adb, OS, and devices"
     desc_status: "Show bot summary and running task progress"
     desc_lang: "View or change UI language (en / it)"
@@ -55,7 +54,7 @@ cli:
     error: "Screenshot error: {error}"
 
   doctor:
-    title: "🩺 DokkanBattleBot System Diagnostics ({os})"
+    title: "🩺 Dokkan-EZALink-Farmer System Diagnostics ({os})"
     col_component: "Component"
     col_status: "Status"
     col_details: "Details / Path"
@@ -182,16 +181,6 @@ tasks:
     reset_to_home: "Resetting to HOME via bottom navigation bar ({x}, {y})..."
     nav_failed: "⚠️ Could not reach Z-Battle event list automatically."
 
-  stage:
-    started: "Starting stage farming: target {runs} runs."
-    screencap_error: "Screen capture error: {error}"
-    stage_completed: "Stage completed! [{curr}/{tot}]"
-    restarting_stage: "Restarting stage..."
-    enemy_defeated: "Enemy defeated! Advancing K.O..."
-    game_over: "Game Over detected! Aborting continuation and ending task."
-    post_stage_advance: "Post-stage progress (cycle {cycles}): tapping skip and OK..."
-    unknown_screen_advance: "Unrecognized screen ({cycles} cycles). Advancing tap in center..."
-    farming_finished: "Stage farming completed successfully! {curr}/{tot} runs finished."
 
   link:
     started: "Starting Link Level farming on '{event}': {runs} runs scheduled."
@@ -256,7 +245,6 @@ discord:
   val_none: "None"
   screenshot_caption: "📸 **Current Dokkan Battle screen:**"
   screenshot_error: "❌ Screen capture error: {error}"
-  farm_started: "▶️ **Stage farming started:** {runs} runs scheduled."
   task_conflict: "⚠️ Cannot start: another task is already running."
   eza_started: "⚔️ **EZA Farming started:** climbing continuously up to Level {level}!"
   link_started: "🔗 **Link Level farming started:** {runs} runs scheduled."

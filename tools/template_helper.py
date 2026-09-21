@@ -32,7 +32,7 @@ def main():
 
     if args.list:
         cats = vision.list_templates_by_category()
-        print("=== DokkanBattleBot UI Templates ===")
+        print("=== Dokkan-EZALink-Farmer UI Templates ===")
         for cat, files in sorted(cats.items()):
             print(f"[{cat}] ({len(files)} templates):")
             for f in files:

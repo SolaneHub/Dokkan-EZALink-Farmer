@@ -1,10 +1,10 @@
-# Italian Localization Catalog for DokkanBattleBot
+# Italian Localization Catalog for Dokkan-EZALink-Farmer
 
 cli:
-  banner_title: "🔥 DOKKAN BATTLE AUTOMATION BOT 🔥"
-  banner_subtitle: "Controllore via ADB & scrcpy | Supporto Terminale & Discord"
+  banner_title: "🔥 DOKKAN EZA & LINK LEVEL FARMER 🔥"
+  banner_subtitle: "Extreme Z-Battle (Zeni 999) & Stanza dello Spirito e del Tempo (Link) | CLI & Discord"
   banner_help_hint: "Digita 'help' per la lista dei comandi disponibili."
-  prompt: "dokkan-bot>"
+  prompt: "dokkan-farmer>"
   no_device_warning: "Nessun dispositivo Android connesso all'avvio ({error})."
   no_device_connect_hint: "Collega il telefono con Debug USB attivo e digita 'connect'."
   exit_message: "Uscita dal bot... Ciao!"
@@ -26,10 +26,9 @@ cli:
     desc_scrcpy_stop: "Chiude la finestra di scrcpy"
     desc_inspect: "Cattura lo schermo e rileva lo stato attuale del gioco"
     desc_shot: "Salva uno screenshot del gioco su disco"
-    desc_farm: "Avvia il farming a ripetizione dello stage attuale per N run"
     desc_eza: "Avvia EZA Farming (seleziona da DokkanDB o auto-farm rapido)"
-    desc_events: "Consulta o cerca gli eventi e Z-Battle disponibili da DokkanDB"
     desc_link: "Avvia il Link Level farming (Stanza dello Spirito e del Tempo; default: fino a esaurimento stamina)"
+    desc_discord: "Configura (setup) o avvia il controllo remoto con Bot Discord"
     desc_doctor: "Esegue la diagnostica di scrcpy, adb, OS e dispositivi"
     desc_status: "Mostra lo stato del bot e il progresso dell'attività in corso"
     desc_lang: "Visualizza o modifica la lingua dell'interfaccia (en / it)"
@@ -55,7 +54,7 @@ cli:
     error: "Errore screenshot: {error}"
 
   doctor:
-    title: "🩺 Diagnostica Sistema DokkanBattleBot ({os})"
+    title: "🩺 Diagnostica Sistema Dokkan-EZALink-Farmer ({os})"
     col_component: "Componente"
     col_status: "Stato"
     col_details: "Dettagli / Percorso"
@@ -182,16 +181,6 @@ tasks:
     reset_to_home: "Ritorno alla HOME tramite la barra inferiore ({x}, {y})..."
     nav_failed: "⚠️ Impossibile raggiungere automaticamente la lista Z-Battle."
 
-  stage:
-    started: "Inizio farming stage: obiettivo {runs} completamenti."
-    screencap_error: "Errore cattura schermo: {error}"
-    stage_completed: "Stage completato! [{curr}/{tot}]"
-    restarting_stage: "Riavvio stage..."
-    enemy_defeated: "Nemico sconfitto! Avanzamento K.O..."
-    game_over: "Game Over rilevato! Annullamento continuazione e fine task."
-    post_stage_advance: "Avanzamento post-stage (ciclo {cycles}): tocco skip e OK..."
-    unknown_screen_advance: "Schermata non riconosciuta ({cycles} cicli). Tocco di avanzamento al centro..."
-    farming_finished: "Farming completato con successo! {curr}/{tot} run eseguite."
 
   link:
     started: "Inizio Link Level farming su '{event}': {runs} run programmate."
@@ -256,7 +245,6 @@ discord:
   val_none: "Nessuno"
   screenshot_caption: "📸 **Schermata attuale di Dokkan Battle:**"
   screenshot_error: "❌ Errore cattura schermo: {error}"
-  farm_started: "▶️ **Farming stage avviato:** {runs} run impostate."
   task_conflict: "⚠️ Impossibile avviare: un'attività è già in esecuzione."
   eza_started: "⚔️ **EZA Farming avviato:** scalata continua fino al Livello {level}!"
   link_started: "🔗 **Link Level farming avviato:** {runs} run impostate."

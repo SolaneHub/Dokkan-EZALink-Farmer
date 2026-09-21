@@ -1,4 +1,4 @@
-# DokkanBattleBot - UI Template Assets
+# Dokkan-EZALink-Farmer - UI Template Assets
 
 This directory contains the Computer Vision template images (.png) used by OpenCV to identify UI elements within Dragon Ball Z: Dokkan Battle (Global).
 
