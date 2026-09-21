@@ -21,17 +21,22 @@ bot:
   auto_restart_app: true # Relaunch Dokkan if not running
 
 farming:
-  stamina_refill_mode: "meat" # "none", "meat", "stones"
+  stamina_refill_mode: "none" # "none", "meat", "stones"
   friend_selection_mode: "refresh" # "refresh" (auto-assigns friend via refresh button)
   friend_refresh_coords: [0.82, 0.18] # (rx, ry) for refresh/auto-assign button on friend screen
   default_runs: 20
   eza_target_level: 999 # Continuous climbing up to max level 999
 
 link_leveling:
-  auto_swap_maxed_units: true # Automatically replace units that hit max link level (Lv. 10)
+  target_event: "spirit_and_time" # "spirit_and_time" (Chamber of Spirit and Time / Stanza dello Spirito e del Tempo)
+  target_stage: "saiyan_training" # Target stage: "saiyan_training" (1. Saiyan Training / Allenamento Saiyan)
+  preferred_difficulty: "super" # Difficulty: "super" (40 STA)
+  use_boost: false # Flag: true to use Boost when available, false to keep Boost OFF
+  rebuild_team_every_run: true # If true, removes all cards and inserts top 6 cards (Released + Level Up Possible) before every stage start
+  ensure_filter_every_run: false # If false, verifies filter on screen and only opens filter dialog if missing; if true, re-opens filter dialog every run
   protected_slots: [] # Empty list = all slots (including Leader) can be replaced!
-  box_first_slot_coords: [0.18, 0.28] # (rx, ry) for first card in filtered character box
-  box_confirm_coords: [0.50, 0.90] # (rx, ry) for confirm button in character box
+  box_confirm_coords: [0.88, 0.88] # (rx, ry) for modern red confirm button in team formation
+  use_attempt_again: true # If true, taps 'Attempt Again' on stage clear screen to loop directly via team management
 
 discord:
   token: "" # Paste your Discord bot token here

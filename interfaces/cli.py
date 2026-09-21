@@ -34,9 +34,10 @@ class TerminalCLI:
         """Displays formatted log message in terminal."""
         self.console.print(f"[dim]{time.strftime('%H:%M:%S')}[/dim] [cyan][BOT][/cyan] {msg}")
 
-    def _on_run_update(self, curr: int, tot: int):
+    def _on_run_update(self, curr: int, tot: Any):
         """Displays run completion counter."""
-        self.console.print(f"[bold green]{t('cli.progress_format', curr=curr, tot=tot)}[/]")
+        tot_str = str(tot) if tot and tot > 0 else "∞"
+        self.console.print(f"[bold green]{t('cli.progress_format', curr=curr, tot=tot_str)}[/]")
 
     def print_banner(self):
         """Renders stylized welcome banner."""
@@ -61,7 +62,8 @@ class TerminalCLI:
         table.add_row("shot", "[file.png]", t("cli.help.desc_shot"))
         table.add_row("farm", "[run=10]", t("cli.help.desc_farm"))
         table.add_row("eza", "[level=999]", t("cli.help.desc_eza"))
-        table.add_row("link", "[run=20]", t("cli.help.desc_link"))
+        table.add_row("events", "", t("cli.help.desc_events"))
+        table.add_row("link", "[runs] [boost]", t("cli.help.desc_link"))
         table.add_row("doctor / check", "", t("cli.help.desc_doctor"))
         table.add_row("status", "", t("cli.help.desc_status"))
         table.add_row("lang", "[en|it]", t("cli.help.desc_lang"))
@@ -139,10 +141,161 @@ class TerminalCLI:
         table.add_row(t("cli.status.prop_device"), str(device_val))
         table.add_row(t("cli.status.prop_task_running"), running_val)
         table.add_row(t("cli.status.prop_task_type"), str(info["task_type"]))
-        table.add_row(t("cli.status.prop_runs_completed"), f"{info['runs_completed']} / {info['runs_target']}")
+        runs_target_val = info.get("runs_target")
+        target_display = str(runs_target_val) if runs_target_val is not None and runs_target_val > 0 else "∞"
+        table.add_row(t("cli.status.prop_runs_completed"), f"{info['runs_completed']} / {target_display}")
         table.add_row(t("cli.status.prop_screen_state"), str(info["current_state"]))
 
         self.console.print(table)
+
+    def handle_eza_interactive(self, args: list):
+        """Handles EZA command: interactive DokkanDB selection or direct execution."""
+        default_lvl = self.engine.config.get("farming", {}).get("eza_target_level", 999)
+
+        # 1. Direct command if level is given as integer (e.g. 'eza 30')
+        if args and args[0].isdigit():
+            target_lvl = int(args[0])
+            self.engine.start_eza_farm(target_level=target_lvl)
+            return
+
+        # 2. Direct command if 'auto' is specified (e.g. 'eza auto 30')
+        if args and args[0].lower() in ("auto", "classic"):
+            target_lvl = int(args[1]) if len(args) > 1 and args[1].isdigit() else default_lvl
+            self.engine.start_eza_farm(target_level=target_lvl)
+            return
+
+        # 3. Interactive prompt via questionary
+        try:
+            import questionary
+            choices = [
+                questionary.Choice(title=t("cli.dokkandb.opt_select"), value="select"),
+                questionary.Choice(title=t("cli.dokkandb.opt_auto"), value="auto"),
+                questionary.Choice(title=t("cli.dokkandb.opt_cancel"), value="cancel"),
+            ]
+            action = questionary.select(
+                t("cli.dokkandb.menu_title"),
+                choices=choices
+            ).ask()
+
+            if not action or action == "cancel":
+                self.console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/]")
+                return
+
+            if action == "auto":
+                lvl_str = questionary.text(
+                    t("cli.dokkandb.target_level_prompt", default=default_lvl),
+                    default=str(default_lvl)
+                ).ask()
+                target_lvl = int(lvl_str) if lvl_str and lvl_str.isdigit() else default_lvl
+                self.engine.start_eza_farm(target_level=target_lvl)
+                return
+
+            if action == "select":
+                self.console.print(f"[cyan]{t('cli.dokkandb.fetching')}[/]")
+                events = self.engine.dokkandb.get_zbattles()
+                if not events:
+                    self.console.print(f"[red]{t('cli.dokkandb.fetch_error', error='No events returned')}[/]")
+                    return
+
+                # Sort: open events first, then by ID descending
+                events.sort(key=lambda x: (not x.get("is_currently_open", False), -int(x.get("id", 0))))
+
+                choices_eza = []
+                for e in events:
+                    status_tag = "🟢 [OPEN]" if e.get("is_currently_open") else "🔑 [PORTAL]"
+                    name = e.get("name", "Unknown EZA")
+                    eid = e.get("id", "?")
+                    choices_eza.append(questionary.Choice(
+                        title=f"{status_tag} {name} (ID: {eid})",
+                        value=e
+                    ))
+                choices_eza.append(questionary.Choice(title=t("cli.dokkandb.opt_cancel"), value=None))
+
+                chosen = questionary.select(
+                    t("cli.dokkandb.select_prompt"),
+                    choices=choices_eza,
+                    use_search_filter=True,
+                    use_arrow_keys=True,
+                    use_jk_keys=False
+                ).ask()
+
+                if not chosen:
+                    self.console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/]")
+                    return
+
+                lvl_str = questionary.text(
+                    t("cli.dokkandb.target_level_prompt", default=default_lvl),
+                    default=str(default_lvl)
+                ).ask()
+                target_lvl = int(lvl_str) if lvl_str and lvl_str.isdigit() else default_lvl
+
+                chosen_name = chosen.get("name", "Selected EZA")
+                self.console.print(f"[dim]{t('cli.dokkandb.downloading_banner', name=chosen_name)}[/dim]")
+                banner_path = self.engine.dokkandb.download_banner(chosen)
+                if banner_path:
+                    chosen["banner_local_path"] = banner_path
+                    self.console.print(f"[green]{t('cli.dokkandb.banner_downloaded', path=os.path.basename(banner_path))}[/green]")
+                else:
+                    self.console.print("[yellow]⚠️ Banner download unavailable, will attempt in-game search.[/yellow]")
+
+                self.console.print(f"[bold green]{t('cli.dokkandb.selected_summary', name=chosen_name, level=target_lvl)}[/bold green]")
+                self.engine.start_eza_farm(target_level=target_lvl, target_eza=chosen)
+
+        except (KeyboardInterrupt, EOFError):
+            self.console.print(f"\n[yellow]{t('cli.dokkandb.canceled')}[/]")
+        except Exception as e:
+            self.console.print(f"[bold red]{t('cli.unexpected_error', error=str(e))}[/]")
+
+    def handle_link_interactive(self, args: list):
+        """Handles Link Leveling command focusing on Chamber of Spirit and Time."""
+        runs: Optional[int] = None
+        use_boost = None
+        for arg in args:
+            low = arg.lower()
+            if low in ("boost", "--boost", "-b"):
+                use_boost = True
+            elif low in ("noboost", "no-boost", "--no-boost", "-nb"):
+                use_boost = False
+            elif arg.isdigit():
+                val = int(arg)
+                if val > 0:
+                    runs = val
+
+        self.console.print(f"[cyan]{t('cli.dokkandb.fetching')}[/]")
+        spirit = self.engine.dokkandb.get_chamber_of_spirit_and_time()
+        boost_label = "Boost: ATTIVO" if use_boost is True else "Boost: DISATTIVO" if use_boost is False else "Boost: Da config"
+        runs_display = f"{runs} runs" if runs is not None else "Finché c'è stamina (Illimitate)"
+        if spirit:
+            status_text = "🟢 [ATTIVO / OPEN]" if spirit.get("is_currently_open") else "🟡 [IN ROTAZIONE]"
+            name = spirit.get("name", "Ultimate Leveling Up! Chamber of Spirit and Time")
+            self.console.print(f"[bold green]⚡ [Link Level] Evento: {name} {status_text}[/bold green]")
+            self.console.print(f"[dim]Runs programmate: {runs_display} | Difficoltà: SUPER (40 STA) | {boost_label} | Auto-Team (Released + Level Up Possible)[/dim]")
+            self.engine.start_link_level_farm(runs=runs, target_event=spirit, use_boost=use_boost)
+        else:
+            self.console.print(f"[yellow]⚠️ Evento Spirito del Tempo non trovato in DokkanDB. Avvio con parametri predefiniti ({runs_display}, {boost_label})...[/yellow]")
+            self.engine.start_link_level_farm(runs=runs, use_boost=use_boost)
+
+    def handle_events_browser(self):
+        """Displays available general events from DokkanDB."""
+        try:
+            self.console.print(f"[cyan]{t('cli.dokkandb.fetching')}[/]")
+            events = self.engine.dokkandb.get_events()
+            if not events:
+                self.console.print(f"[red]{t('cli.dokkandb.fetch_error', error='No events returned')}[/]")
+                return
+
+            t_events = Table(title="DokkanDB Events", border_style="cyan")
+            t_events.add_column("ID", style="bold green", width=6)
+            t_events.add_column("Name", style="white")
+            t_events.add_column("Category", style="yellow", width=12)
+
+            for ev in events[:25]:
+                t_events.add_row(str(ev.get("id")), str(ev.get("name")), str(ev.get("category")))
+
+            self.console.print(t_events)
+            self.console.print(f"[dim]Total events in DokkanDB: {len(events)} (showing first 25)[/dim]")
+        except Exception as e:
+            self.console.print(f"[red]Error fetching events: {e}[/]")
 
     def run(self):
         """Runs the interactive CLI command loop."""
@@ -244,13 +397,13 @@ class TerminalCLI:
                     self.engine.start_stage_farm(runs=runs)
 
                 elif cmd == "eza":
-                    default_lvl = self.engine.config.get("farming", {}).get("eza_target_level", 999)
-                    target_lvl = int(args[0]) if args and args[0].isdigit() else default_lvl
-                    self.engine.start_eza_farm(target_level=target_lvl)
+                    self.handle_eza_interactive(args)
+
+                elif cmd in ("events", "event", "dokkandb"):
+                    self.handle_events_browser()
 
                 elif cmd == "link":
-                    runs = int(args[0]) if args and args[0].isdigit() else 20
-                    self.engine.start_link_level_farm(runs=runs)
+                    self.handle_link_interactive(args)
 
                 elif cmd == "stop":
                     self.engine.stop_task()

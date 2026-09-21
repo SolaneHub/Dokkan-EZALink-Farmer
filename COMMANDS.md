@@ -42,7 +42,8 @@ You can pass arguments directly to the executable to perform specific tasks with
 | `--devices` | *none* | Displays all connected Android devices (USB or Wi-Fi) |
 | `--eza` | `[level=999]` | Automatically navigates to EZA Events, scrolls to the bottom, finds the first uncompleted EZA (< 999), and farms up to the target level (default: `999`) |
 | `--farm` | `[runs=10]` | Starts continuous stage farming for the currently selected stage for N runs (default: `10`) |
-| `--link` | `[runs=20]` | Starts continuous Link Level farming with automatic swapping of maxed units (default: `20`) |
+| `--link` | `[runs]` | Starts Link Level farming on the Chamber of Spirit and Time (stage "1. Saiyan Training", SUPER difficulty) with auto-rebuilding of the team using "Released" and "Level Up Possible" filters (optional: default until stamina depleted) |
+| `--boost` / `--no-boost` | *none* | Enables (`--boost`) or disables (`--no-boost`) using Boost energy charges during Link Level farming |
 | `--scrcpy` | *none* | Opens the zero-latency screen mirroring window |
 | `--discord` | *none* | Runs the bot as a background service controlled remotely via Discord |
 | `--config` | `<path>` | Path to custom configuration file (default: `config/settings.yaml`) |
@@ -82,9 +83,10 @@ Running the executable without extra arguments enters the interactive Rich termi
 | `scrcpy-stop` | `scrcpy-stop` | Closes the scrcpy mirroring process |
 | `inspect` / `state` | `inspect` | Captures the active screen and prints the detected game state |
 | `shot` | `shot [name.png]` | Takes and saves a screenshot of the current screen |
-| `eza` | `eza [level]` | Starts automated navigation and EZA climbing (default: 999) |
+| `eza` | `eza [level\|auto]` | Opens interactive DokkanDB selector (arrow keys & search) or starts directly if specified |
+| `events` | `events` | Displays available events and Z-Battles retrieved from DokkanDB |
 | `farm` | `farm [runs]` | Starts repetitive farming on the current stage |
-| `link` | `link [runs]` | Starts Link Level farming with auto-swap of maxed characters |
+| `link` | `link [runs] [boost]` | Starts Link Level farming with auto-swap of maxed characters (default: until stamina depleted) |
 | `status` | `status` | Shows current bot status, statistics, and running tasks |
 | `lang` | `lang [en\|it]` | Shows or dynamically changes the bot language at runtime |
 | `pause` | `pause` | Temporarily pauses the running farming task |
@@ -117,7 +119,7 @@ discord:
 - `/screenshot`: Captures phone display and sends an instant screenshot to Discord.
 - `/eza [target_level]`: Initiates automated EZA navigation and climb to target level.
 - `/farm [runs]`: Starts automated stage farming.
-- `/link [runs]`: Starts automated Link Leveling.
+- `/link [runs]`: Starts automated Link Leveling (optional: runs until stamina is depleted if omitted).
 - `/stop`: Aborts the current running task remotely.
 - `/pause` / `/resume`: Pauses or resumes automation.
 - `/scrcpy [start/stop]`: Controls the screen mirroring window on the host computer.

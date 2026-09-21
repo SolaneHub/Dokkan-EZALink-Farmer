@@ -49,10 +49,11 @@ class DiscordBotClient(commands.Bot):
                     self._loop
                 )
 
-    def _on_bot_run(self, curr: int, tot: int):
+    def _on_bot_run(self, curr: int, tot: Any):
         if self._main_channel and self._loop:
+            tot_str = str(tot) if tot and tot > 0 else "∞"
             asyncio.run_coroutine_threadsafe(
-                self._main_channel.send(f"📊 **Progress:** `{curr}/{tot}` runs completed."),
+                self._main_channel.send(f"📊 **Progress:** `{curr}/{tot_str}` runs completed."),
                 self._loop
             )
 
@@ -79,7 +80,9 @@ class DiscordBotClient(commands.Bot):
             embed.add_field(name=t("discord.field_device"), value=str(info["device_serial"] or t("discord.val_none")), inline=True)
             embed.add_field(name=t("discord.field_running"), value=t("discord.val_yes") if info["task_running"] else t("discord.val_no"), inline=True)
             embed.add_field(name=t("discord.field_task"), value=str(info["task_type"]), inline=True)
-            embed.add_field(name=t("discord.field_progress"), value=f"{info['runs_completed']} / {info['runs_target']}", inline=True)
+            runs_target_val = info.get("runs_target")
+            target_display = str(runs_target_val) if runs_target_val is not None and runs_target_val > 0 else "∞"
+            embed.add_field(name=t("discord.field_progress"), value=f"{info['runs_completed']} / {target_display}", inline=True)
             embed.add_field(name=t("discord.field_screen"), value=str(info["current_state"]), inline=True)
 
             await interaction.response.send_message(embed=embed)
@@ -127,17 +130,19 @@ class DiscordBotClient(commands.Bot):
             else:
                 await interaction.response.send_message(t("discord.task_conflict"))
 
-        @self.tree.command(name="link", description="Starts Link Level farming (Quest 31-4 / 34-4)")
-        @app_commands.describe(runs="Number of runs to execute (default: 20)")
-        async def cmd_link(interaction: discord.Interaction, runs: Optional[int] = 20):
+        @self.tree.command(name="link", description="Starts Link Level farming (Chamber of Spirit and Time)")
+        @app_commands.describe(runs="Number of runs (optional: leave empty to farm until stamina runs out)")
+        async def cmd_link(interaction: discord.Interaction, runs: Optional[int] = None):
             if not self._is_user_allowed(interaction.user.id):
                 await interaction.response.send_message(t("discord.not_authorized"), ephemeral=True)
                 return
 
             self._main_channel = interaction.channel
-            ok = self.engine.start_link_level_farm(runs=runs or 20)
+            actual_runs = runs if (runs is not None and runs > 0) else None
+            ok = self.engine.start_link_level_farm(runs=actual_runs)
             if ok:
-                await interaction.response.send_message(t("discord.link_started", runs=runs or 20))
+                runs_label = str(actual_runs) if actual_runs is not None else "illimitate (fino a esaurimento stamina)"
+                await interaction.response.send_message(t("discord.link_started", runs=runs_label))
             else:
                 await interaction.response.send_message(t("discord.task_conflict"))
 

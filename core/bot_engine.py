@@ -10,6 +10,7 @@ from core.vision import Vision
 from core.game_state import StateDetector, GameState
 from core.system_tools import get_config_path, ToolLocator
 from core.i18n import t, set_language
+from core.dokkandb_client import DokkanDBClient
 from tasks.base_task import BaseTask
 from tasks.stage_farm import StageFarmTask
 from tasks.eza_farm import EZAFarmTask
@@ -35,6 +36,7 @@ class BotEngine:
             default_threshold=self.config.get("vision", {}).get("confidence_threshold", 0.78)
         )
         self.detector = StateDetector(self.vision)
+        self.dokkandb = DokkanDBClient()
         self.current_task: Optional[BaseTask] = None
         self._task_thread: Optional[threading.Thread] = None
 
@@ -152,7 +154,11 @@ class BotEngine:
         self._start_task_thread()
         return True
 
-    def start_eza_farm(self, target_level: int = 30) -> bool:
+    def start_eza_farm(
+        self,
+        target_level: int = 999,
+        target_eza: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """Starts EZA continuous battle climbing task."""
         if self.is_task_running():
             self.emit_log(t("tasks.task_already_running"))
@@ -163,14 +169,20 @@ class BotEngine:
             self.vision,
             self.config,
             target_level=target_level,
+            target_eza=target_eza,
             on_status=self.emit_log,
             on_run_complete=self.emit_run
         )
         self._start_task_thread()
         return True
 
-    def start_link_level_farm(self, runs: int = 20) -> bool:
-        """Starts Link Level farming with auto-swap task."""
+    def start_link_level_farm(
+        self,
+        runs: Optional[int] = None,
+        target_event: Optional[Dict[str, Any]] = None,
+        use_boost: Optional[bool] = None
+    ) -> bool:
+        """Starts Link Level farming with DokkanDB event integration and auto-swap."""
         if self.is_task_running():
             self.emit_log(t("tasks.task_already_running"))
             return False
@@ -180,6 +192,9 @@ class BotEngine:
             self.vision,
             self.config,
             runs=runs,
+            target_event=target_event,
+            dokkandb=self.dokkandb,
+            use_boost=use_boost,
             on_status=self.emit_log,
             on_run_complete=self.emit_run
         )
@@ -218,7 +233,7 @@ class BotEngine:
             "task_running": running,
             "task_type": type(self.current_task).__name__ if running else t("cli.status.none"),
             "runs_completed": self.current_task.runs_completed if self.current_task else 0,
-            "runs_target": self.current_task.runs_target if self.current_task else 0,
+            "runs_target": getattr(self.current_task, "runs_target", None) if self.current_task else 0,
             "current_state": self.current_task.current_state.value if self.current_task else "IDLE"
         }
 

@@ -24,7 +24,9 @@ def main():
     parser.add_argument("--devices", action="store_true", help="List connected Android devices and exit")
     parser.add_argument("--farm", type=int, nargs="?", const=10, help="Directly start repeated stage farming for N runs (default: 10)")
     parser.add_argument("--eza", type=int, nargs="?", const=999, help="Directly start EZA continuous climbing up to specified level (default: 999)")
-    parser.add_argument("--link", type=int, nargs="?", const=20, help="Directly start Link Level farming for N runs (default: 20)")
+    parser.add_argument("--link", type=int, nargs="?", const=-1, default=None, help="Directly start Link Level farming (optional: N runs, default: until stamina depleted)")
+    parser.add_argument("--boost", dest="boost", action="store_true", default=None, help="Enable Boost for Link Level farming")
+    parser.add_argument("--no-boost", dest="boost", action="store_false", help="Disable Boost for Link Level farming")
     parser.add_argument("--config", type=str, default="config/settings.yaml", help="Path to YAML configuration file")
 
     args = parser.parse_args()
@@ -84,7 +86,8 @@ def main():
 
     if args.link is not None:
         engine.connect()
-        engine.start_link_level_farm(runs=args.link)
+        runs = args.link if args.link > 0 else None
+        engine.start_link_level_farm(runs=runs, use_boost=args.boost)
         cli = TerminalCLI(engine)
         cli.run()
         return

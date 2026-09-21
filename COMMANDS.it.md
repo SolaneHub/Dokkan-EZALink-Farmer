@@ -42,7 +42,8 @@ Puoi passare argomenti diretti all'eseguibile per eseguire compiti specifici sen
 | `--devices` | *nessuno* | Mostra l'elenco dei dispositivi Android collegati via USB o Wi-Fi |
 | `--eza` | `[livello=999]` | Naviga automaticamente agli Eventi EZA, scorre fino in fondo, individua il primo EZA non a 999 e avvia la scalata fino al livello indicato (default: `999`) |
 | `--farm` | `[run=10]` | Avvia il farming a ripetizione dello stage attualmente aperto sul telefono per N run (default: `10`) |
-| `--link` | `[run=20]` | Avvia il Link Level farming continuo con auto-swap automatico delle carte a link MAX Lv. 10 (default: `20`) |
+| `--link` | `[run]` | Avvia il Link Level farming sulla Stanza dello Spirito e del Tempo (stage "1. Saiyan Training", difficoltà SUPER) con ricostruzione automatica del team con filtri "Released" e "Level Up Possible" (opzionale: default fino a esaurimento stamina) |
+| `--boost` / `--no-boost` | *nessuno* | Attiva (`--boost`) o disattiva forzatamente (`--no-boost`) l'uso delle cariche Boost durante il Link Level farming |
 | `--scrcpy` | *nessuno* | Apre la finestra di mirroring a latenza zero dello schermo del telefono |
 | `--discord` | *nessuno* | Avvia il bot in background collegato a Discord per il controllo remoto |
 | `--config` | `<percorso>` | Specifica un file di configurazione personalizzato (default: `config/settings.yaml`) |
@@ -81,10 +82,10 @@ Avviando l'eseguibile senza parametri aggiuntivi, entrerai nella console interat
 | `scrcpy` | `scrcpy` | Apre la finestra di mirroring dello schermo |
 | `scrcpy-stop` | `scrcpy-stop` | Chiude la finestra video di scrcpy |
 | `inspect` / `state` | `inspect` | Cattura la schermata corrente e mostra lo stato di gioco rilevato |
-| `shot` | `shot [nome.png]` | Salva uno screenshot della schermata attuale |
-| `eza` | `eza [livello]` | Avvia la navigazione automatica e la scalata dell'EZA (default: 999) |
+| `eza` | `eza [livello\|auto]` | Apre il selettore interattivo DokkanDB (frecce ↑/↓ e ricerca) o avvia direttamente se specificato |
+| `events` | `events` | Visualizza gli eventi e Z-Battle disponibili recuperati da DokkanDB |
 | `farm` | `farm [run]` | Avvia il farming a ripetizione dello stage selezionato |
-| `link` | `link [run]` | Avvia il Link Level farming con auto-sostituzione delle unità al MAX |
+| `link` | `link [run] [boost]` | Avvia il Link Level farming con auto-sostituzione delle unità al MAX (default: fino a esaurimento stamina) |
 | `status` | `status` | Mostra la tabella di riepilogo con le statistiche e l'attività in corso |
 | `lang` | `lang [en\|it]` | Visualizza o modifica dinamicamente a runtime la lingua del bot |
 | `pause` | `pause` | Mette temporaneamente in pausa l'attività di farming |
@@ -117,7 +118,7 @@ discord:
 - `/screenshot`: Cattura lo schermo del gioco e invia l'immagine istantanea nella chat di Discord.
 - `/eza [target_level]`: Avvia la navigazione e il farming dell'EZA fino al livello indicato.
 - `/farm [runs]`: Avvia il farming automatico di uno stage.
-- `/link [runs]`: Avvia il Link Leveling automatico.
+- `/link [runs]`: Avvia il Link Leveling automatico (opzionale: se omesso, prosegue fino a esaurimento stamina).
 - `/stop`: Arresta l'attività in corso da remoto.
 - `/pause` / `/resume`: Mette in pausa o riprende l'automazione.
 - `/scrcpy [start/stop]`: Controlla la finestra di mirroring sul computer.
