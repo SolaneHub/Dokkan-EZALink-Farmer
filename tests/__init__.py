@@ -1,0 +1,3 @@
+"""
+DokkanBattleBot Test Suite.
+"""
