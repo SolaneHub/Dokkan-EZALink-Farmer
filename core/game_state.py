@@ -26,6 +26,7 @@ class GameState(enum.Enum):
     MODE_SELECT = "MODE_SELECT"
     TEAM_EDIT = "TEAM_EDIT"
     CHARACTER_BOX = "CHARACTER_BOX"
+    FILTER_MODAL = "FILTER_MODAL"
 
 
 class StateDetector:
@@ -62,6 +63,10 @@ class StateDetector:
         if dont_send_match:
             meta["dont_send_button"] = (dont_send_match[0], dont_send_match[1])
 
+        back_green_match = self.vision.find_template(screen, "button_back_green", threshold=0.80)
+        if back_green_match:
+            meta["back_green_button"] = (back_green_match[0], back_green_match[1])
+
         # 2. Friend Request Popup
         if dont_send_match or self.vision.find_template(screen, "popup_friend_request"):
             return (GameState.FRIEND_REQUEST, meta)
@@ -79,9 +84,19 @@ class StateDetector:
         if game_over_match:
             return (GameState.GAME_OVER, meta)
 
-        # 5. Results Screen or Modal OK Dialog
+        # 4b. Filter / Sort Modal (Display Order / Filter Select dialog)
+        filter_modal_match = (
+            self.vision.find_template(screen, "button_remove_all")
+            or self.vision.find_template(screen, "header_link_skill_level")
+        )
+        if filter_modal_match:
+            if "ok_button" in meta:
+                meta["filter_ok_button"] = meta["ok_button"]
+            return (GameState.FILTER_MODAL, meta)
+
+        # 5. Results Screen or Modal OK / Close Dialog
         results_match = self.vision.find_template(screen, "header_clear") or self.vision.find_template(screen, "header_rewards")
-        if results_match or ok_match:
+        if results_match or ok_match or close_match:
             return (GameState.RESULTS_SCREEN, meta)
 
         # 6. Team Confirmation Screen (Large Start button at bottom right)
@@ -91,14 +106,37 @@ class StateDetector:
             edit_team = self.vision.find_template(screen, "button_edit_team")
             if edit_team:
                 meta["edit_team_button"] = (edit_team[0], edit_team[1])
+            formation_btn = self.vision.find_template(screen, "button_team_formation")
+            if formation_btn:
+                meta["team_formation_button"] = (formation_btn[0], formation_btn[1])
             switch_disp = self.vision.find_template(screen, "button_switch_display")
             if switch_disp:
                 meta["switch_display_button"] = (switch_disp[0], switch_disp[1])
             return (GameState.TEAM_CONFIRM, meta)
 
         # 6b. Team Edit Screen (Team Formation / Deck Editor)
-        team_edit_match = self.vision.find_template(screen, "header_team_formation") or self.vision.find_template(screen, "button_auto_formation")
+        confirm_btn = self.vision.find_template(screen, "button_confirm_formation")
+        deck_remove_all = self.vision.find_template(screen, "button_deck_remove_all")
+        team_edit_match = (
+            self.vision.find_template(screen, "header_team_formation")
+            or self.vision.find_template(screen, "button_auto_formation")
+            or confirm_btn
+            or deck_remove_all
+        )
         if team_edit_match:
+            if confirm_btn:
+                meta["button_confirm_formation"] = (confirm_btn[0], confirm_btn[1])
+            if deck_remove_all:
+                meta["button_deck_remove_all"] = (deck_remove_all[0], deck_remove_all[1])
+            tag_sort_rel = self.vision.find_yellow_sort_button(screen)
+            if tag_sort_rel:
+                meta["tag_sort_released"] = tag_sort_rel
+                meta["filter_button"] = tag_sort_rel
+            else:
+                meta["filter_button"] = (int(w * 0.80), int(h * 0.958))
+            filter_on = self.vision.find_template(screen, "tag_filter_on")
+            if filter_on:
+                meta["filter_on"] = (filter_on[0], filter_on[1])
             return (GameState.TEAM_EDIT, meta)
 
         # 6c. Character Box / Character Selection List
@@ -108,20 +146,28 @@ class StateDetector:
 
         # 7. Friend Selection Screen
         friend_header = self.vision.find_template(screen, "header_select_friend")
-        refresh_match = self.vision.find_template(screen, "button_friend_refresh") or self.vision.find_template(screen, "button_friend_auto")
+        refresh_match = self.vision.find_template(screen, "button_friend_refresh", threshold=0.90) or self.vision.find_template(screen, "button_friend_auto")
         if friend_header or refresh_match:
             if refresh_match:
                 meta["friend_refresh_button"] = (refresh_match[0], refresh_match[1])
             return (GameState.FRIEND_SELECT, meta)
 
-        # 8. Battle Screen (Auto Battle toggle, x2 Speed, Ki orbs, Character bubbles)
-        auto_battle = self.vision.find_template(screen, "battle_auto_on") or self.vision.find_template(screen, "battle_auto_off")
+        # 8. Battle Screen (Auto Battle toggle, Battle Menu, Item button, x2 Speed)
+        battle_menu = self.vision.find_template(screen, "button_battle_menu", threshold=0.75)
+        auto_battle = (
+            self.vision.find_template(screen, "button_auto_battle", threshold=0.75)
+            or self.vision.find_template(screen, "battle_auto_on")
+            or self.vision.find_template(screen, "battle_auto_off")
+        )
+        item_button = self.vision.find_template(screen, "button_item", threshold=0.75)
         speed_toggle = self.vision.find_template(screen, "battle_speed_2x") or self.vision.find_template(screen, "battle_speed_1x")
-        if auto_battle or speed_toggle:
+        if battle_menu or auto_battle or item_button or speed_toggle:
             if auto_battle:
                 meta["auto_button"] = (auto_battle[0], auto_battle[1])
             if speed_toggle:
                 meta["speed_button"] = (speed_toggle[0], speed_toggle[1])
+            if battle_menu:
+                meta["battle_menu"] = (battle_menu[0], battle_menu[1])
             return (GameState.BATTLE_SCREEN, meta)
 
         # 9. Map / Quest Board Screen (Dice buttons 1, 2, 3 or Auto Map button)
@@ -162,6 +208,12 @@ class StateDetector:
         zbattle_inactive = self.vision.find_template(screen, "tab_zbattle_inactive")
         if zbattle_inactive:
             meta["zbattle_tab"] = (zbattle_inactive[0], zbattle_inactive[1])
+            bonus_tab = self.vision.find_template(screen, "tab_bonus")
+            if bonus_tab:
+                meta["bonus_tab"] = (bonus_tab[0], bonus_tab[1])
+            growth_tab = self.vision.find_template(screen, "tab_growth")
+            if growth_tab:
+                meta["growth_tab"] = (growth_tab[0], growth_tab[1])
             return (GameState.EVENT_SELECT, meta)
 
         # 10d. Mode Select Menu (Start pressed -> Quest, Event, Dokkan Frontier)
@@ -187,9 +239,25 @@ class StateDetector:
             meta["start_button"] = (home_match[0], home_match[1])
             return (GameState.HOME_SCREEN, meta)
 
-        # 14. Stage Select Screen
-        stage_match = self.vision.find_template(screen, "diff_z_hard") or self.vision.find_template(screen, "diff_super") or self.vision.find_template(screen, "diff_super2")
+        # 14. Stage Select Screen (Difficulty buttons or Event Stage List cards)
+        diff_super = self.vision.find_template(screen, "diff_super")
+        diff_z_hard = self.vision.find_template(screen, "diff_z_hard")
+        diff_super2 = self.vision.find_template(screen, "diff_super2")
+        cleared_tag = self.vision.find_template(screen, "tag_cleared")
+        saiyan_training = self.vision.find_template(screen, "stage_saiyan_training")
+        boost_off = self.vision.find_template(screen, "button_boost_off")
+        stage_match = diff_super or diff_z_hard or diff_super2 or cleared_tag or saiyan_training or boost_off
         if stage_match:
+            if diff_super:
+                meta["diff_super"] = (diff_super[0], diff_super[1])
+            if diff_z_hard:
+                meta["diff_z_hard"] = (diff_z_hard[0], diff_z_hard[1])
+            if diff_super2:
+                meta["diff_super2"] = (diff_super2[0], diff_super2[1])
+            if saiyan_training:
+                meta["stage_saiyan_training"] = (saiyan_training[0], saiyan_training[1])
+            if boost_off:
+                meta["boost_off"] = (boost_off[0], boost_off[1])
             return (GameState.STAGE_SELECT, meta)
 
         return (GameState.UNKNOWN, meta)

@@ -1,5 +1,6 @@
 import time
 import threading
+import numpy as np
 from typing import Callable, Optional, Dict, Any
 from core.adb_client import ADBClient
 from core.vision import Vision
@@ -100,20 +101,45 @@ class BaseTask:
         self.log(t("tasks.base.mission_start", x=x, y=y))
         self.adb.tap(x, y, delay_after=2.0)
 
-    def dismiss_results_and_popups(self, screen_w: int, screen_h: int, meta: Dict[str, Any]):
-        """Taps to dismiss result screens, rank up, rewards, or OK popups."""
-        if "ok_button" in meta:
-            x, y = meta["ok_button"]
-            self.log(t("tasks.base.ok_clicked", x=x, y=y))
-            self.adb.tap(x, y, delay_after=1.5)
-        elif "close_button" in meta:
-            x, y = meta["close_button"]
-            self.log(t("tasks.base.close_clicked", x=x, y=y))
-            self.adb.tap(x, y, delay_after=1.5)
-        elif "dont_send_button" in meta:
+    def dismiss_results_and_popups(
+        self,
+        screen_w: int,
+        screen_h: int,
+        meta: Dict[str, Any],
+        prefer_again: bool = False
+    ):
+        """
+        Taps to dismiss result screens, rank up, rewards, or OK popups.
+        If prefer_again is True and 'Attempt Again' button is available on final results screen,
+        taps 'Attempt Again' to restart the stage directly via team management.
+        """
+        if "dont_send_button" in meta:
             x, y = meta["dont_send_button"]
             self.log(t("tasks.base.friend_request_rejected", x=x, y=y))
             self.adb.tap(x, y, delay_after=1.2)
+            return
+
+        if "close_button" in meta:
+            x, y = meta["close_button"]
+            self.log(t("tasks.base.close_clicked", x=x, y=y))
+            self.adb.tap(x, y, delay_after=1.5)
+            return
+
+        screen = self.adb.screencap()
+
+        # Check for 'Attempt Again' on results screen if requested
+        if prefer_again:
+            again_pos = self.vision.find_attempt_again_button(screen)
+            if again_pos:
+                self.log(t("tasks.link.attempt_again_clicked", x=again_pos[0], y=again_pos[1]))
+                self.adb.tap(again_pos[0], again_pos[1], delay_after=2.0)
+                return
+
+        if "ok_button" in meta:
+            x, y = meta["ok_button"]
+            self.log(t("tasks.base.ok_clicked", x=x, y=y))
+            self.adb.tap(int(screen_w * 0.50), int(screen_h * 0.50), delay_after=0.2)
+            self.adb.tap(x, y, delay_after=1.5)
         else:
             # Tap center to skip counting animations, then tap OK button (50% X, 85% Y)
             ok_x = int(screen_w * 0.50)
@@ -146,17 +172,154 @@ class BaseTask:
 
         return False
 
+    def ensure_stage_auto_controls(self, screen: np.ndarray, screen_w: int, screen_h: int) -> bool:
+        """
+        Always verifies that Auto Map and Auto Battle are active whenever they appear in stage.
+        If either appears and is currently OFF (grey), taps it to activate.
+        Returns True if an inactive auto toggle was pressed, False otherwise.
+        """
+        map_off = self.vision.find_auto_map_off(screen)
+        if map_off:
+            self.log(t("tasks.base.enabling_auto_map", x=map_off[0], y=map_off[1]))
+            self.adb.tap(map_off[0], map_off[1], delay_after=0.5)
+            return True
+
+        battle_off = self.vision.find_auto_battle_off(screen)
+        if battle_off:
+            self.log(t("tasks.base.enabling_auto_battle", x=battle_off[0], y=battle_off[1]))
+            self.adb.tap(battle_off[0], battle_off[1], delay_after=0.5)
+            return True
+
+        return False
+
     def handle_battle(self, screen_w: int, screen_h: int, meta: Dict[str, Any]):
-        """Ensures Auto-Battle and 2x speed are enabled, taps screen to advance dialogue."""
-        if "auto_button" in meta:
-            self.adb.tap(*meta["auto_button"], delay_after=0.5)
-        # Tap the lower middle area occasionally to clear Dokkan mode target or any transition
-        self.adb.tap(int(screen_w * 0.50), int(screen_h * 0.78), delay_after=0.8)
+        """Ensures Auto-Battle and Auto-Map are enabled, advances dialogue/animations, or attacks manually."""
+        if "back_green_button" in meta:
+            # If a character details sheet was opened, tap the green 3-arrows button at bottom left to close it
+            self.adb.tap(*meta["back_green_button"], delay_after=0.6)
+            return
+
+        screen = self.adb.screencap()
+        if self.ensure_stage_auto_controls(screen, screen_w, screen_h):
+            return
+
+        # If auto controls are not present (e.g. first time entering stage)
+        if not self.vision.has_auto_controls(screen):
+            self.log(t("tasks.base.auto_controls_not_present"))
+            # Tap Ki spheres in center to perform attack manually
+            self.adb.tap(int(screen_w * 0.50), int(screen_h * 0.52), delay_after=0.8)
+        else:
+            # Tap the upper middle sky area to clear Dokkan mode target or dialogue safely without clicking characters
+            self.adb.tap(int(screen_w * 0.50), int(screen_h * 0.35), delay_after=0.8)
 
     def handle_map(self, screen_w: int, screen_h: int, meta: Dict[str, Any]):
-        """Ensures Auto-Map is active or taps dice."""
-        if "auto_map_button" in meta:
-            self.adb.tap(*meta["auto_map_button"], delay_after=0.5)
-        else:
-            # Tap center dice button (~50% X, ~82% Y)
-            self.adb.tap(int(screen_w * 0.50), int(screen_h * 0.82), delay_after=1.2)
+        """Ensures Auto-Map and Auto-Battle are enabled, or advances manually if auto controls are not present."""
+        screen = self.adb.screencap()
+        if self.ensure_stage_auto_controls(screen, screen_w, screen_h):
+            return
+
+        # Advance along the map path: tap center dice button (~50% X, ~80% Y)
+        # to ensure movement if auto map is not present or paused at a STOP space
+        self.adb.tap(int(screen_w * 0.50), int(screen_h * 0.80), delay_after=1.2)
+
+    def navigate_to_zbattle_list(self, max_steps: int = 15) -> bool:
+        """
+        Universally navigates to the Z-Battle event list screen from any game screen:
+        1. If already on Z_BATTLE_LIST -> done!
+        2. If on EVENT_SELECT -> taps Z-Battle tab.
+        3. If on MODE_SELECT -> taps Event button.
+        4. If on HOME_SCREEN -> taps START button.
+        5. If on TITLE_SCREEN -> taps to start.
+        6. If on RESULTS_SCREEN -> taps to skip and confirms OK.
+        7. If on FRIEND_REQUEST -> rejects or dismisses friend popup.
+        8. If popups (Close, OK, Cancel) -> dismisses them.
+        9. Anywhere else (EZA screen, Team, Box, Shop, etc.) -> taps bottom bar HOME icon to reset to Home.
+        """
+        self.log(t("tasks.nav.navigating_to_zbattle"))
+
+        for step in range(1, max_steps + 1):
+            if self._stop_event.is_set():
+                return False
+
+            try:
+                screen = self.adb.screencap()
+            except Exception as e:
+                self.log(f"Screencap error during navigation: {e}")
+                self.wait_check(1.5)
+                continue
+
+            h, w = screen.shape[:2]
+            state, meta = self.detector.detect(screen)
+
+            if state == GameState.Z_BATTLE_LIST:
+                self.log(t("tasks.nav.zbattle_list_reached"))
+                return True
+
+            elif state == GameState.EVENT_SELECT:
+                self.log(t("tasks.nav.event_select"))
+                if "zbattle_tab" in meta:
+                    self.adb.tap(*meta["zbattle_tab"], delay_after=2.0)
+                else:
+                    self.adb.tap(int(w * 0.83), int(h * 0.21), delay_after=2.0)
+
+            elif state == GameState.MODE_SELECT:
+                self.log(t("tasks.nav.mode_select"))
+                if "event_button" in meta:
+                    self.adb.tap(*meta["event_button"], delay_after=2.5)
+                else:
+                    self.adb.tap(int(w * 0.50), int(h * 0.32), delay_after=2.5)
+
+            elif state == GameState.HOME_SCREEN:
+                self.log(t("tasks.nav.home_screen"))
+                if "start_button" in meta:
+                    self.adb.tap(*meta["start_button"], delay_after=2.0)
+                else:
+                    self.adb.tap(int(w * 0.50), int(h * 0.64), delay_after=2.0)
+
+            elif state == GameState.TITLE_SCREEN:
+                self.log(t("tasks.nav.title_tap"))
+                if "touch_start" in meta:
+                    self.adb.tap(*meta["touch_start"], delay_after=3.0)
+                else:
+                    self.adb.tap(int(w * 0.50), int(h * 0.70), delay_after=3.0)
+
+            elif state == GameState.RESULTS_SCREEN:
+                self.log(t("tasks.eza.results_ok"))
+                self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.3)
+                if "ok_button" in meta:
+                    self.adb.tap(*meta["ok_button"], delay_after=1.5)
+                else:
+                    self.adb.tap(int(w * 0.50), int(h * 0.85), delay_after=1.5)
+
+            elif state == GameState.FRIEND_REQUEST:
+                self.dismiss_results_and_popups(w, h, meta)
+
+            elif "dont_send_button" in meta:
+                self.log(t("tasks.base.friend_request_rejected", x=meta["dont_send_button"][0], y=meta["dont_send_button"][1]))
+                self.adb.tap(*meta["dont_send_button"], delay_after=1.5)
+
+            elif "close_button" in meta:
+                self.log(t("tasks.nav.dismiss_close"))
+                self.adb.tap(*meta["close_button"], delay_after=1.5)
+
+            elif "ok_button" in meta:
+                self.log(t("tasks.nav.dismiss_ok"))
+                self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.2)
+                self.adb.tap(*meta["ok_button"], delay_after=1.5)
+
+            elif "cancel_button" in meta:
+                self.log(t("tasks.nav.dismiss_cancel"))
+                self.adb.tap(*meta["cancel_button"], delay_after=1.5)
+
+            else:
+                # Any other screen: tap bottom bar HOME button
+                home_x = int(w * 0.095)
+                home_y = int(h * 0.854)
+                self.log(t("tasks.nav.reset_to_home", x=home_x, y=home_y))
+                self.adb.tap(home_x, home_y, delay_after=2.5)
+
+            self.wait_check(1.0)
+
+        self.log(t("tasks.nav.nav_failed"))
+        return False
+

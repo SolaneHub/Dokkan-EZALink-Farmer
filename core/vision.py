@@ -1,7 +1,7 @@
 import os
 import cv2
 import numpy as np
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Any
 from core.system_tools import get_resource_path
 
 
@@ -247,6 +247,33 @@ class Vision:
         best = matches[0]
         return (int(best[0]), int(best[1]), float(best[2]))
 
+    def find_attempt_again_button(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+        """
+        Detects the 'Attempt Again' button on the stage results / clear screen.
+        Checks:
+        1. Template 'button_attempt_again' if present.
+        2. Geometry of bottom OK button: when 'Attempt Again' is present, Dokkan places
+           the 'OK' button on the left (cx / w < 0.42, typically ~0.28).
+           The 'Attempt Again' button is positioned on the right (~0.72 * w, at the same Y height).
+        Returns (x, y) coordinates of the 'Attempt Again' button, or None if single centered OK.
+        """
+        # 1. Template match
+        m = self.find_template(screen, "button_attempt_again", threshold=0.75)
+        if m:
+            return (m[0], m[1])
+
+        # 2. Bottom OK geometry
+        s_h, s_w = screen.shape[:2]
+        ok_match = self.find_ok_button(screen)
+        if ok_match:
+            ok_x, ok_y = ok_match[0], ok_match[1]
+            if (ok_y / s_h) > 0.75 and (ok_x / s_w) < 0.42:
+                attempt_x = int(s_w * 0.72)
+                attempt_y = ok_y
+                return (attempt_x, attempt_y)
+
+        return None
+
     def find_any_template(
         self,
         screen: np.ndarray,
@@ -307,38 +334,324 @@ class Vision:
         """
         Inspects character slot (0 to 5) on the Team Preview screen to determine
         if all links are MAX (Lv. 10). Checks for golden MAX badge or template match.
+        Supports both modern UI and legacy layouts.
         """
         h, w = screen.shape[:2]
         # Relative horizontal centers for slots 0 to 5 (Leader = 0, Sub units = 1..5)
-        slot_centers_x = [0.15, 0.29, 0.43, 0.57, 0.71, 0.85]
-        if slot_idx < 0 or slot_idx >= len(slot_centers_x):
+        # Modern UI: [0.123, 0.256, 0.393, 0.530, 0.667, 0.804]
+        # Legacy UI: [0.15, 0.29, 0.43, 0.57, 0.71, 0.85]
+        slot_centers_modern = [0.123, 0.256, 0.393, 0.530, 0.667, 0.804]
+        slot_centers_legacy = [0.15, 0.29, 0.43, 0.57, 0.71, 0.85]
+        
+        if slot_idx < 0 or slot_idx >= len(slot_centers_modern):
             return False
 
-        cx = int(w * slot_centers_x[slot_idx])
-        cy = int(h * 0.48)
+        # Try both modern vertical center (~0.43) and legacy (~0.48)
+        candidate_coords = [
+            (slot_centers_modern[slot_idx], 0.429),
+            (slot_centers_legacy[slot_idx], 0.480)
+        ]
 
-        # Region around the character's link skill badge (lower portion of character circle)
-        badge_h = int(h * 0.05)
-        badge_w = int(w * 0.10)
-        y1 = cy + int(h * 0.015)
-        y2 = min(h, y1 + badge_h)
-        x1 = max(0, cx - badge_w // 2)
-        x2 = min(w, cx + badge_w // 2)
+        for rx, ry in candidate_coords:
+            cx = int(w * rx)
+            cy = int(h * ry)
 
-        roi = screen[y1:y2, x1:x2]
-        if roi.size == 0:
-            return False
+            # Region around the character's link skill badge (lower portion of character circle)
+            badge_h = int(h * 0.05)
+            badge_w = int(w * 0.10)
+            y1 = cy + int(h * 0.015)
+            y2 = min(h, y1 + badge_h)
+            x1 = max(0, cx - badge_w // 2)
+            x2 = min(w, cx + badge_w // 2)
 
-        # 1. Try template match if badge_link_max.png exists
-        tmpl_match = self.find_template(roi, "badge_link_max", threshold=0.72)
-        if tmpl_match is not None:
-            return True
+            roi = screen[y1:y2, x1:x2]
+            if roi.size == 0:
+                continue
 
-        # 2. Color analysis: Gold/Yellow badge detection in HSV
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        lower_gold = np.array([18, 100, 140], dtype=np.uint8)
-        upper_gold = np.array([38, 255, 255], dtype=np.uint8)
-        mask = cv2.inRange(hsv, lower_gold, upper_gold)
-        gold_ratio = np.count_nonzero(mask) / float(roi.shape[0] * roi.shape[1])
+            # 1. Try template match if badge_link_max exists
+            tmpl_match = self.find_template(roi, "badge_link_max", threshold=0.82)
+            if tmpl_match is not None:
+                return True
 
-        return gold_ratio > 0.12
+            # 2. Color analysis: Gold/Yellow badge detection in HSV
+            # High threshold prevents false positives from character artwork (yellow hair, armor, background)
+            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            lower_gold = np.array([18, 140, 160], dtype=np.uint8)
+            upper_gold = np.array([32, 255, 255], dtype=np.uint8)
+            mask = cv2.inRange(hsv, lower_gold, upper_gold)
+            gold_ratio = np.count_nonzero(mask) / float(roi.shape[0] * roi.shape[1])
+
+            if gold_ratio > 0.35:
+                return True
+
+        return False
+
+    def find_banner_on_screen(
+        self,
+        screen: np.ndarray,
+        banner_img: np.ndarray,
+        threshold: float = 0.72,
+        scales: Optional[List[float]] = None
+    ) -> Optional[Tuple[int, int, float]]:
+        """
+        Locates a DokkanDB banner on the game screen using multi-scale template matching.
+        Crops the inner graphic region (10% to 88% width) including artwork for maximum recognition.
+        Returns (center_x, center_y, confidence) or None.
+        """
+        if banner_img is None or screen is None:
+            return None
+
+        # Clean 4-channel BGRA to 3-channel BGR if needed
+        if len(banner_img.shape) == 3 and banner_img.shape[2] == 4:
+            banner_bgr = banner_img[:, :, :3]
+        else:
+            banner_bgr = banner_img
+
+        bh, bw = banner_bgr.shape[:2]
+        s_h, s_w = screen.shape[:2]
+
+        # Crop inner portion (both logo and character artwork, omitting outer bezels)
+        crop = banner_bgr[int(bh * 0.10):int(bh * 0.90), int(bw * 0.10):int(bw * 0.88)]
+        ch, cw = crop.shape[:2]
+
+        if scales is None:
+            # Game banners typically span ~88-92% of screen width.
+            ideal_scale = (s_w * 0.90) / max(1, bw)
+            scales = [ideal_scale * f for f in [0.88, 0.94, 1.0, 1.06, 1.12]]
+
+        best_val = -1.0
+        best_loc = None
+        best_w, best_h = cw, ch
+
+        for s in scales:
+            scaled_w = int(cw * s)
+            scaled_h = int(ch * s)
+
+            if scaled_w > s_w or scaled_h > s_h or scaled_w < 20 or scaled_h < 20:
+                continue
+
+            scaled_crop = cv2.resize(crop, (scaled_w, scaled_h), interpolation=cv2.INTER_AREA)
+            res = cv2.matchTemplate(screen, scaled_crop, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+
+            if max_val > best_val:
+                best_val = max_val
+                best_loc = max_loc
+                best_w, best_h = scaled_w, scaled_h
+                if best_val >= threshold:
+                    break
+
+        if best_val >= threshold and best_loc is not None:
+            center_x = best_loc[0] + best_w // 2
+            center_y = best_loc[1] + best_h // 2
+            return (int(center_x), int(center_y), float(best_val))
+
+        return None
+
+    def is_filter_dialog_open(self, screen: np.ndarray) -> bool:
+        """Determines if the Filter / Sort modal is currently displayed."""
+        return (
+            self.find_template(screen, "button_remove_all", threshold=0.80) is not None
+            or self.find_template(screen, "header_link_skill_level", threshold=0.80) is not None
+        )
+
+    def get_link_level_filter_status(self, screen: np.ndarray) -> Dict[str, Any]:
+        """
+        Inspects the Filter / Sort modal (specifically the Link Skill Level section at the bottom)
+        and detects the state and click coordinates of:
+        - 'Level Up Possible' (unmaxed units)
+        - 'All at Max Level' (maxed units)
+        - 'OK' button
+        - 'Remove All' button
+        """
+        h, w = screen.shape[:2]
+        header_link = self.find_template(screen, "header_link_skill_level", threshold=0.80)
+        has_link_section = (header_link is not None)
+        default_btn_y = int(header_link[1] + 95) if header_link else int(h * 0.63)
+
+        res: Dict[str, Any] = {
+            "is_open": self.is_filter_dialog_open(screen),
+            "has_link_section": has_link_section,
+            "level_up_possible": {"selected": False, "coords": (int(w * 0.27), default_btn_y)},
+            "all_at_max": {"selected": False, "coords": (int(w * 0.66), default_btn_y)},
+            "ok_button": None,
+            "remove_all": None,
+        }
+
+        # Check OK and Remove All buttons
+        ok_match = self.find_ok_button(screen)
+        if ok_match:
+            res["ok_button"] = (ok_match[0], ok_match[1])
+        else:
+            res["ok_button"] = (int(w * 0.50), int(h * 0.85))
+
+        rm_match = self.find_template(screen, "button_remove_all", threshold=0.80)
+        if rm_match:
+            res["remove_all"] = (rm_match[0], rm_match[1])
+
+        # Detect 'Level Up Possible' (threshold 0.85 to avoid false matches on unscrolled screens)
+        lu_sel = self.find_template(screen, "btn_level_up_possible_selected", threshold=0.88)
+        if lu_sel:
+            res["level_up_possible"]["selected"] = True
+            res["level_up_possible"]["coords"] = (lu_sel[0], lu_sel[1])
+        else:
+            lu_unsel = self.find_template(screen, "btn_level_up_possible_unselected", threshold=0.85)
+            if lu_unsel:
+                res["level_up_possible"]["coords"] = (lu_unsel[0], lu_unsel[1])
+
+        # Detect 'All at Max Level' (threshold 0.85)
+        max_sel = self.find_template(screen, "btn_all_at_max_selected", threshold=0.88)
+        if max_sel:
+            res["all_at_max"]["selected"] = True
+            res["all_at_max"]["coords"] = (max_sel[0], max_sel[1])
+        else:
+            max_unsel = self.find_template(screen, "btn_all_at_max_unselected", threshold=0.85)
+            if max_unsel:
+                res["all_at_max"]["coords"] = (max_unsel[0], max_unsel[1])
+
+        return res
+
+    def get_team_slots_in_box(self, screen: np.ndarray) -> List[int]:
+        """
+        Scans the character box screen for active team slot badges (1 to 6).
+        Returns a list of integer slot numbers (1..6) that are currently visible on cards in the box.
+        """
+        found_slots: List[int] = []
+        for slot in range(1, 7):
+            tmpl = f"badge_team_slot_{slot}"
+            m = self.find_template(screen, tmpl, threshold=0.85)
+            if m:
+                found_slots.append(slot)
+        return found_slots
+
+    def find_first_unselected_card(
+        self,
+        screen: np.ndarray
+    ) -> Tuple[int, int]:
+        """
+        Locates the first available card coordinate in the Character Box grid (Rows 1-4, Cols 1-5)
+        that does not have an active team slot badge.
+        Returns (x, y) tap coordinates.
+        """
+        h, w = screen.shape[:2]
+        cols = [0.097, 0.296, 0.500, 0.699, 0.898]
+        rows = [0.215, 0.323, 0.431, 0.539]
+
+        # Find all active team slot badges and their locations
+        badge_locations: List[Tuple[int, int]] = []
+        for slot in range(1, 7):
+            tmpl = f"badge_team_slot_{slot}"
+            m = self.find_template(screen, tmpl, threshold=0.85)
+            if m:
+                badge_locations.append((m[0], m[1]))
+
+        for ry in rows:
+            for rx in cols:
+                cx = int(w * rx)
+                cy = int(h * ry)
+                # Check if this card slot has a team badge (within badge area)
+                has_badge = False
+                for bx, by in badge_locations:
+                    if abs(cx - bx) < int(w * 0.10) and abs(cy - by) < int(h * 0.08):
+                        has_badge = True
+                        break
+                if not has_badge:
+                    return (cx, cy)
+
+        # Fallback to Row 1, Col 1 coordinates
+        return (int(w * cols[0]), int(h * rows[0]))
+
+    def is_boost_off(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+        """Returns (x, y) coordinates of the BOOST OFF button if boost is currently disabled, else None."""
+        m = self.find_template(screen, "button_boost_off", threshold=0.80)
+        if m:
+            return (m[0], m[1])
+        return None
+
+    def find_stage_saiyan_training(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+        """Finds '1. Saiyan Training' stage header on event stage select screen."""
+        m = self.find_template(screen, "stage_saiyan_training", threshold=0.80)
+        if m:
+            return (m[0], m[1])
+        return None
+
+    def find_deck_remove_all(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+        """Finds the 'Remove All' button on the team deck in Team Formation."""
+        m = self.find_template(screen, "button_deck_remove_all", threshold=0.80)
+        if m:
+            return (m[0], m[1])
+        return None
+
+    def find_yellow_sort_button(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+        """
+        Locates the yellow/gold Display Order & Filter button in the bottom right of the Character Box / Team Formation screen.
+        First tries template matching for 'tag_sort_released'.
+        If not found, falls back to the exact bottom-right position (X: ~80%, Y: ~96%).
+        """
+        m = self.find_template(screen, "tag_sort_released", threshold=0.75)
+        if m:
+            return (m[0], m[1])
+        h, w = screen.shape[:2]
+        return (int(w * 0.80), int(h * 0.958))
+
+    def is_sort_released(self, screen: np.ndarray) -> bool:
+        """Checks if character box sort order tag is currently set to 'Released'."""
+        return self.find_template(screen, "tag_sort_released", threshold=0.80) is not None
+
+    def is_filter_released_selected(self, screen: np.ndarray) -> bool:
+        """Checks if 'Released' is selected in the Display Order filter dialog."""
+        return self.find_template(screen, "btn_released_selected", threshold=0.80) is not None
+
+    def get_top_box_card_coords(self, screen: np.ndarray, count: int = 6) -> List[Tuple[int, int]]:
+        """
+        Calculates coordinates for the top cards in the character box,
+        ordered strictly top-to-bottom and left-to-right (Row 1 Cols 1..5, Row 2 Cols 1..5, etc.).
+        Dynamically adapts between standard 16:9 (1080x1920) and tall 20:9 (1080x2400) aspect ratios.
+        """
+        h, w = screen.shape[:2]
+        cols = [0.10, 0.30, 0.50, 0.70, 0.90]
+        aspect = h / float(w)
+        if aspect < 1.85:
+            # Standard 16:9 display (e.g. 1080x1920 on emulator)
+            rows = [0.172, 0.284, 0.396, 0.508, 0.620]
+        else:
+            # Tall 20:9 display with top padding (e.g. 1080x2400 on modern phones)
+            rows = [0.215, 0.323, 0.431, 0.539]
+
+        coords: List[Tuple[int, int]] = []
+        for ry in rows:
+            for rx in cols:
+                coords.append((int(w * rx), int(h * ry)))
+                if len(coords) >= count:
+                    return coords
+        return coords
+
+    def find_auto_map_off(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+        """Returns (x, y) coordinates of the Auto Map button if it is currently OFF (grey), else None."""
+        m = self.find_template(screen, "btn_auto_map_off", threshold=0.82)
+        return (m[0], m[1]) if m else None
+
+    def find_auto_battle_off(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+        """Returns (x, y) coordinates of the Auto Battle button if it is currently OFF (grey), else None."""
+        m = self.find_template(screen, "btn_auto_battle_off", threshold=0.82)
+        return (m[0], m[1]) if m else None
+
+    def find_auto_map_on(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+        """Returns (x, y) coordinates of the Auto Map button if it is currently ON (green), else None."""
+        m = self.find_template(screen, "btn_auto_map_on", threshold=0.82)
+        return (m[0], m[1]) if m else None
+
+    def find_auto_battle_on(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+        """Returns (x, y) coordinates of the Auto Battle button if it is currently ON (green), else None."""
+        m = self.find_template(screen, "btn_auto_battle_on", threshold=0.82)
+        return (m[0], m[1]) if m else None
+
+    def has_auto_controls(self, screen: np.ndarray) -> bool:
+        """Checks if Auto Map or Auto Battle buttons are visible on screen."""
+        return (
+            self.find_auto_map_off(screen) is not None
+            or self.find_auto_map_on(screen) is not None
+            or self.find_auto_battle_off(screen) is not None
+            or self.find_auto_battle_on(screen) is not None
+        )
+
