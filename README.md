@@ -1,199 +1,192 @@
-# 🛠️ Autonomous Tool Locator: `scrcpy` & `adb` (`ToolLocator`)
+# ⚡ Dokkan-EZALink-Farmer ⚡
 
-This document details the **architectural and technical specifications** of the autonomous detection subsystem for **scrcpy** and **ADB** integrated into the bot core ([`core/system_tools.py`](core/system_tools.py)).
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)]()
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Build & Release](https://img.shields.io/badge/releases-GitHub%20Actions-orange.svg)]()
 
-> 📖 **User Guide Note**:  
-> For bot setup, CLI parameters, console commands, and Discord bot usage:  
-> 👉 [**COMMANDS.md**](COMMANDS.md) *(Available in [English](COMMANDS.md) and [Italian](COMMANDS.it.md))*
-
----
-
-## 🎯 1. Architectural Goals
-
-The `ToolLocator` module provides complete, zero-friction bot portability across any operating system without requiring manual PATH adjustments, dedicated launcher scripts (`.bat` / `.sh`), or hardcoded machine-specific absolute directories.
-
-Key architectural requirements:
-1. **Zero-Configuration**: Transparent detection of `scrcpy` and `adb` if already installed on the host system (via package managers, manual folder extractions, or existing PATH entries).
-2. **Native Cross-Platform**: Full agnostic support for **Windows 10/11**, **macOS (Apple Silicon M1/M2/M3/M4 & Intel)**, and **Linux**.
-3. **Standalone Binary Resilience**: Identical behavior whether executed as source code (`python main.py`) or packaged as a standalone binary ([`build_dist.py`](build_dist.py) -> `dist/dokkan-bot/`).
-4. **Intelligent Co-Location**: Opportunistic cross-discovery between tools (official `scrcpy` releases include a bundled copy of `adb`).
+> 📖 **Language Guides / Guide di Utilizzo:**  
+> [ 🇬🇧 Full Commands Guide ](docs/COMMANDS.md) | [ 🇮🇹 Guida ai Comandi in Italiano ](docs/COMMANDS.it.md)
 
 ---
 
-## 🏛️ 2. Hierarchical 5-Tier Discovery Sequence
+### 🛑 What this bot is NOT
+* This is **NOT** a general-purpose "do everything" bot or full-game emulator assistant.
+* It does **NOT** farm Story Quest mode (e.g. Area 31/32/34).
+* It does **NOT** summon, sell characters, farm medals, or clear story events.
 
-When the bot requests a tool binary (`find_scrcpy()` or `find_adb()`), `_resolve(tool_name, configured_path)` systematically evaluates a strict 5-tier resolution ladder:
-
-### 📊 Animated Architecture Diagram (5-Tier Discovery)
-![Hierarchical Resolution Sequence](assets/tier_resolution.svg)
-
----
-
-### 🔹 Tier 1: Explicit Configuration (`config/settings.yaml`)
-- **Purpose**: Allows advanced users to force a custom path via configuration.
-- **Resolution logic**:
-  1. Checks if configured value (`tools.scrcpy_path` or `tools.adb_path`) differs from generic fallback names (`"scrcpy"` or `"adb"`).
-  2. If an existing file is provided, converts it to a normalized absolute path.
-  3. If a directory is provided, appends the OS-specific executable name (`scrcpy.exe` on Windows, `scrcpy` on Unix/macOS) and validates existence.
-  4. If invalid or empty, silently falls back to Tier 2.
+### 🎯 What this bot IS
+A laser-focused, lightweight computer-vision automation tool designed exclusively for the **two most tedious, repetitive endgame chores** in *Dragon Ball Z: Dokkan Battle*:
+1. 💰 **Endless Zeni Farming via EZA (Extreme Z-Battle):** Automatically climbs Z-Battles up to Level 999 to farm endless Platinum Hercule Statues (~1.5M Zeni per stage clear).
+2. 🥋 **Event-Based Link Leveling (Chamber of Spirit and Time):** Clears the daily *Ultimate Leveling Up! Chamber of Spirit and Time* (*Stanza dello Spirito e del Tempo*) event with automated deck rotation (Release Order & Level Up Possible filters).
 
 ---
 
-### 🔹 Tier 2: Dedicated Environment Variables
-- **Purpose**: Supports CI/CD pipelines, containerized environments, and developer Android SDK configurations.
-- **Variables evaluated for `scrcpy`**:
-  - `SCRCPY_PATH`
-  - `SCRCPY_DIR`
-  - `SCRCPY_HOME`
-  - `SCRCPY_BIN`
-- **Variables evaluated for `adb`**:
-  - `ADB_PATH`
-  - `ANDROID_HOME`
-  - `ANDROID_SDK_ROOT`
-- **Logic**: For `ANDROID_HOME` and `ANDROID_SDK_ROOT`, automatically scans the standard `platform-tools/adb` (or `platform-tools/adb.exe`) subdirectory.
+## 🎯 Core Features
+
+### ⚔️ 1. Extreme Z-Battle (EZA) Auto-Climbing (Infinite Zeni)
+* **Automatic Navigation:** Navigates from Home/Events straight to the **Z-Battle** tab.
+* **Smart Detection:** Rapidly scrolls to the bottom of the list and automatically targets the first uncompleted EZA (< Lv. 999), or challenges a specific event selected via DokkanDB.
+* **Endless Zeni Farming:** Automates continuous consecutive battles up to Level 999 to farm infinite Platinum Hercule Statues (~1.5M Zeni each).
+* **Speed & Safety:** Auto-assigns friend leaders, enables 2x Auto-Battle, skips reward screens, dismisses friend requests, and stops safely on Game Over or when your character box is full.
+
+### 🥋 2. Chamber of Spirit and Time (Event Link Leveling)
+* **Dedicated Event Integration:** Automatically identifies the *Ultimate Leveling Up! Chamber of Spirit and Time* (*Stanza dello Spirito e del Tempo*) in the BONUS tab using DokkanDB templates.
+* **Stage & Difficulty:** Targets *1. Saiyan Training* on **SUPER** difficulty (40 STA).
+* **Intelligent Team Rotation:**
+  * Opens the Character Box and applies the **Released** (Acquisition Order) and **Level Up Possible** filters (excluding characters whose links are all MAX Lv. 10).
+  * Uses *Remove All* to clear the deck and reloads the top 6 cards needing leveling.
+  * Replaces units as soon as their link skills reach Level 10.
+* **Boost Energy Support:** Toggle Boost on or off via CLI flags (`--boost` / `--no-boost`) or configuration.
+* **Rapid Looping:** Leverages the 'Attempt Again' button to chain runs quickly and detects daily attempt limits automatically.
 
 ---
 
-### 🔹 Tier 3: System PATH & Live Windows Registry Bypass
+## 📱 Supported Devices & Connection
 
-1. **Standard Lookup (`shutil.which`)**:
-   - Queries directories in the current process `PATH` environment variable.
-2. **Tier 3b - Live Windows Registry Scan (`winreg`)**:
-   - **Real-world issue**: When a user installs `scrcpy` or `adb` (via installer or manual system variable edit), existing open terminal windows do not inherit the updated PATH unless restarted.
-   - **Solution**: `_scan_windows_registry_path()` directly queries Windows Registry hives:
-     - User Key: `HKCU\Environment` -> `Path`
-     - System Key: `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment` -> `Path`
-   - Dynamically parses registered directories to detect newly installed binaries immediately, without requiring a shell or terminal restart.
+### 1. Android Emulators (Windows & Mac)
+* **Supported:** BlueStacks, LDPlayer, MuMu Player (12 / X), NoxPlayer, MEmu Play, Android Studio AVD, Genymotion.
+* **Plug & Play:** Automatically probes standard emulator ports (`5555`, `5554`, `7555`, `16384`, `62001`, `21503`). Just start your emulator with ADB debugging enabled, and the bot connects automatically.
+* *Note:* Emulators run in their own desktop window, so screen mirroring (`scrcpy`) is not required.
 
----
+### 2. Physical Android Phones
+* Connect your Android phone via USB (or wireless ADB) with **USB Debugging** enabled.
+* **Zero-Latency Mirroring:** Use `dokkan-eza-link --scrcpy` (or the `scrcpy` console command) to open a real-time mirroring window of your phone on your computer screen.
 
-### 🔹 Tier 4: Canonical OS Paths & Package Managers
-
-If the binary is not in PATH, the resolver probes standard package manager installation targets by operating system:
-
-#### 🍏 macOS (Darwin)
-- **Homebrew (Apple Silicon)**: `/opt/homebrew/bin/scrcpy`, `/opt/homebrew/bin/adb`
-- **Homebrew (Intel x86_64)**: `/usr/local/bin/scrcpy`, `/usr/local/bin/adb`
-- **Android Studio macOS SDK**: `~/Library/Android/sdk/platform-tools/adb`
-- **MacPorts**: `/opt/local/bin/scrcpy`
-- **macOS App Bundles**: `/Applications/scrcpy.app/Contents/MacOS/scrcpy` and `~/Applications/scrcpy.app/...`
-
-#### 🪟 Windows (`win32`)
-- **WinGet**:
-  - `%LOCALAPPDATA%\Microsoft\WinGet\Links\scrcpy.exe`
-  - `%LOCALAPPDATA%\Microsoft\WinGet\Packages\...`
-- **Scoop**:
-  - `%USERPROFILE%\scoop\shims\scrcpy.exe` (and `adb.exe`)
-  - `%USERPROFILE%\scoop\apps\scrcpy\current\scrcpy.exe`
-  - `%PROGRAMDATA%\scoop\shims\...`
-- **Chocolatey**:
-  - `%PROGRAMDATA%\chocolatey\bin\scrcpy.exe`
-  - `C:\tools\scrcpy\scrcpy.exe`
-- **Android Studio Windows SDK**:
-  - `%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe`
-- **Typical Standalone Locations**:
-  - `C:\platform-tools\adb.exe`
-  - `C:\scrcpy\scrcpy.exe`
-  - `C:\Program Files\scrcpy\scrcpy.exe`
-  - `C:\Program Files (x86)\scrcpy\scrcpy.exe`
-
-#### 🐧 Linux
-- Standard FHS and Snap targets: `/usr/bin`, `/usr/local/bin`, `/snap/bin`, `~/.local/bin`.
+### 3. Autonomous Tool Detection (`ToolLocator`)
+* The bot automatically detects `adb` and `scrcpy` binaries on your system across **Windows** (WinGet, Scoop, Chocolatey, Program Files, Downloads) and **macOS** (Homebrew Apple Silicon M1–M4 & Intel, Android Studio SDK, `/Applications`). No manual PATH configuration is required.
 
 ---
 
-### 🔹 Tier 5: Dynamic Personal Folder Heuristics (Globbing)
+## 🚀 Quick Start
 
-Users frequently extract official `scrcpy` releases (ZIP format) into `Downloads` or `Desktop` without configuring system PATH.
+### Option A: Standalone Executable (Recommended, No Python Required)
+Download the pre-compiled package for your operating system from the [**Releases**](https://github.com/) page:
+- **Windows:** Download `dokkan-eza-link-windows-x64.zip`, extract, and double-click `Launch-Dokkan-EZALink.bat` (or `dokkan-eza-link.exe`).
+- **macOS:** Download `dokkan-eza-link-macos.zip`, extract, and double-click `Launch-Dokkan-EZALink.command` (opens Terminal automatically).
+- **Linux:** Download `dokkan-eza-link-linux-x64.zip`, extract, and double-click `Launch-Dokkan-EZALink.sh`.
 
-- **Root directories inspected**:
-  - `~/Downloads`
-  - `~/Desktop`
-  - `~/Documents`
-  - `%LOCALAPPDATA%\Programs` (Windows)
-  - `%LOCALAPPDATA%\Microsoft\WinGet\Packages` (Windows)
-  - `C:\Program Files` and `C:\`
-- **Recursive search patterns**:
-  - `scrcpy*/scrcpy.exe`
-  - `scrcpy*/**/scrcpy.exe`
-  - `platform-tools*/adb.exe`
-- **Heuristic Temporal Selection**:
-  If multiple extracted folders exist (e.g. `scrcpy-win64-v2.7` and `scrcpy-win64-v3.1`), the engine collects all matches (excluding `.lnk` shortcuts) and sorts by last modification date (`os.path.getmtime`) in descending order:
-  ```python
-  matches.sort(key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)
-  return os.path.abspath(matches[0])  # Most recent build takes priority
-  ```
+### Option B: Running from Python Source
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/your-repo/Dokkan-EZALink-Farmer.git
+   cd Dokkan-EZALink-Farmer
+   ```
 
----
+2. **Create a virtual environment & install dependencies:**
+   ```bash
+   python -m venv venv
+   # On Windows:
+   .\venv\Scripts\activate
+   # On macOS/Linux:
+   source venv/bin/activate
 
-## 🔄 3. Bidirectional Co-Location Algorithm (Cross-Discovery)
+   pip install -r requirements.txt
+   ```
 
-Official Windows packages of `scrcpy` bundle both `scrcpy.exe` and `adb.exe`.
-
-To maximize performance and prevent redundant filesystem scans:
-1. When `ToolLocator.find_scrcpy()` locates a binary, it invokes `_check_adjacent(scrcpy_path, "adb")`.
-2. If `adb.exe` exists in the same folder and is executable, it is cached immediately as default ADB binary (`_cached_adb`).
-3. The identical process works in reverse: discovering `adb` automatically registers adjacent `scrcpy.exe`.
-
-### 📊 Co-Location Diagram (Cross-Discovery)
-![Bidirectional Co-Location Algorithm](assets/cross_discovery.svg)
+3. **Verify your environment:**
+   ```bash
+   python main.py --doctor
+   ```
 
 ---
 
-## ⚡ 4. In-Memory Caching & Runtime Invalidation
+## ⚡ Command Line Usage
 
-Successful discoveries are preserved in class-level cache:
-- `ToolLocator._cached_scrcpy`
-- `ToolLocator._cached_adb`
-
-Before returning a cached path, `os.path.isfile()` ensures the physical binary still exists on disk. If the user deleted or moved the folder during runtime, the cache is invalidated and discovery triggers afresh.
-
----
-
-## 🩺 5. Diagnostic Engine & Runtime Inspection (`doctor`)
-
-A built-in diagnostic tool can be run from the terminal (`dokkan-bot --doctor` or the interactive `doctor` command):
+You can start tasks directly from your terminal:
 
 ```bash
+# Verify environment (scrcpy, adb, OS, connected phones/emulators)
 python main.py --doctor
+
+# Set interface to Italian and run doctor check
+python main.py --lang it --doctor
+
+# Start automated EZA climbing up to Lv. 999 (Zeni farming)
+python main.py --eza
+
+# Start Link Level farming on Chamber of Spirit and Time (runs until stamina empty)
+python main.py --link
+
+# Farm 10 runs of Chamber of Spirit and Time with Boost active
+python main.py --link 10 --boost
+
+# Open real-time scrcpy screen mirroring (for physical phones)
+python main.py --scrcpy
 ```
 
-### Diagnostic Features:
-1. **Safe Version Detection**:
-   - Executes identified binaries with `--version` or `version`.
-   - Uses `subprocess.run` with `capture_output=True` and a **strict 4-second timeout** to prevent hanging if ADB freezes while spawning daemon instances.
-2. **OS-Specific Installation Guidance**:
-   - If either tool is missing, the diagnostic output provides exact copy-paste installation commands:
-     - **macOS**: `brew install scrcpy android-platform-tools`
-     - **Windows**: `winget install Genymobile.scrcpy`
-     - **Linux**: `sudo apt install scrcpy adb`
+*(If using the standalone binary, replace `python main.py` with `.\dokkan-eza-link.exe` on Windows or `./dokkan-eza-link` on macOS/Linux).*
 
 ---
 
-## 📦 6. Standalone Binary Compatibility (PyInstaller)
+## ⌨️ Interactive CLI Console
 
-In the standalone executable produced by [`build_dist.py`](build_dist.py), the Python runtime is frozen:
+Running `python main.py` (or double-clicking `Launch-Dokkan-EZALink.*`) opens the interactive console:
 
-1. **Internal Resource Resolution (`get_resource_path`)**:
-   - When `sys.frozen` is active, static assets (CV templates in `templates/glb/` and translation files in `locales/`) are resolved from `sys._MEIPASS`.
-2. **User Configuration Resolution (`get_config_path`)**:
-   - To let users customize settings (Discord token, language, custom paths) without rebuilding, `config/settings.yaml` is searched in order:
-     1. Current working directory (`cwd`).
-     2. Directory containing the executable (`exe_dir/config/settings.yaml`).
-     3. Fallback bundled default inside the executable.
+```text
+dokkan-farmer> help
+dokkan-farmer> devices          # List connected devices / emulators
+dokkan-farmer> connect          # Auto-connects to first available device
+dokkan-farmer> eza              # Interactive EZA selector or auto-climb
+dokkan-farmer> link             # Start Chamber of Spirit and Time farming
+dokkan-farmer> status           # Show task progress, completed runs, and Zeni stats
+dokkan-farmer> pause / resume   # Pause or resume automation
+dokkan-farmer> stop             # Stop running automation safely
+dokkan-farmer> scrcpy           # Launch phone mirroring window
+dokkan-farmer> discord setup    # Launch interactive Discord bot setup wizard
+```
 
 ---
 
-## 📊 7. Platform Support Matrix
+## 🤖 Remote Control via Discord
 
-| Feature | Windows | macOS (Apple Silicon) | macOS (Intel) | Linux |
-|---|:---:|:---:|:---:|:---:|
-| Standard PATH Resolution | ✅ | ✅ | ✅ | ✅ |
-| Live Registry Bypass (WinReg) | ✅ | N/A | N/A | N/A |
-| Homebrew (`/opt/homebrew`) | N/A | ✅ | N/A | N/A |
-| Homebrew (`/usr/local`) | N/A | N/A | ✅ | ✅ |
-| Android SDK Platform-Tools | ✅ | ✅ | ✅ | ✅ |
-| Package Managers (WinGet, Scoop, Choco) | ✅ | N/A | N/A | N/A |
-| User Folder Globbing (Downloads/Desktop) | ✅ | ✅ | ✅ | ✅ |
-| Scrcpy / ADB Co-Location | ✅ | ✅ | ✅ | ✅ |
-| Integrated `doctor` Diagnostics | ✅ | ✅ | ✅ | ✅ |
+The bot includes an optional Discord bot interface with real-time alerts, live screenshots, and Slash Command support:
+
+### Quick Setup Wizard (No manual file editing needed)
+Run the setup wizard directly from the console:
+```text
+dokkan-farmer> discord setup
+```
+Or launch Discord mode directly from the terminal:
+```bash
+python main.py --discord
+# or with standalone executable:
+.\dokkan-eza-link.exe --discord
+```
+If no token is configured, the bot will prompt you to paste your **Bot Token** and **Channel ID** and save it directly to [`config/settings.yaml`](config/settings.yaml).
+
+> 📖 **Step-by-Step Setup Guides:**  
+> * 🇮🇹 [**Guida Configurazione Bot Discord (Italiano)**](docs/DISCORD_SETUP.it.md)  
+> * 🇬🇧 [**Discord Bot Setup Guide (English)**](docs/DISCORD_SETUP.md)
+
+### Available Slash Commands on Discord:
+* `/status`: Displays bot state, completed runs, Hercule statues, and estimated Zeni.
+* `/screenshot`: Sends a real-time screenshot of the game to your Discord channel.
+* `/eza [target_level]`: Starts continuous EZA climbing (default: 999).
+* `/link [runs]`: Starts Link Level farming on Chamber of Spirit and Time.
+* `/stop`: Aborts the running task remotely.
+* `/pause` / `/resume`: Pauses or resumes farming.
+* `/scrcpy [start/stop]`: Controls phone mirroring window on your computer.
+
+---
+
+## 🛠️ Building Standalone Binaries
+
+To compile your own standalone executables locally:
+```bash
+python scripts/build_dist.py
+```
+Pre-compiled builds are also generated automatically on **GitHub Releases** via GitHub Actions for Windows, macOS, and Linux.
+
+---
+
+## 📄 Documentation
+
+* 🇬🇧 [**English Commands Guide**](docs/COMMANDS.md) | 🇮🇹 [**Guida Comandi in Italiano**](docs/COMMANDS.it.md)
+* 🇬🇧 [**Discord Setup Guide**](docs/DISCORD_SETUP.md) | 🇮🇹 [**Guida Configurazione Discord**](docs/DISCORD_SETUP.it.md)
+
+---
+
+## ⚠️ Disclaimer
+
+This project is a free, open-source automation tool created for educational and personal use. *Dragon Ball Z: Dokkan Battle* is a registered trademark of Bandai Namco Entertainment Inc. and Akatsuki Inc.

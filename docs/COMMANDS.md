@@ -2,9 +2,14 @@
 
 ---
 
-# 🎮 DokkanBattleBot - Commands & Usage Guide
+# 🎮 Dokkan-EZALink-Farmer - Commands & Usage Guide
 
-This guide provides a comprehensive overview of all available commands, command-line startup options, interactive CLI usage, and remote Discord integration.
+> ⚠️ **IMPORTANT SCOPE NOTICE:**  
+> This tool is **strictly specialized** for two endgame routines:
+> 1. **Extreme Z-Battle (EZA Lv. 999):** Auto-climbing and infinite Platinum Hercule Statue (Zeni) farming.
+> 2. **Chamber of Spirit and Time:** Event-based Link Level grinding with automatic team deck replenishment.
+>
+> It does **NOT** farm Story Quest mode, summon, or clear generic story/growth events.
 
 ---
 
@@ -12,22 +17,22 @@ This guide provides a comprehensive overview of all available commands, command-
 
 The bot is bundled as a pure terminal (console) executable. It does not require Python or any external packages to be installed on the target machine.
 
-Open your terminal (PowerShell / Command Prompt on Windows, Terminal / iTerm on macOS / Linux), navigate to the extracted folder, and run:
+You can launch the bot immediately with a simple **double-click** (no terminal commands needed):
+* **On Windows:** Double-click `Launch-Dokkan-EZALink.bat` (or `dokkan-eza-link.exe`).
+* **On macOS:** Double-click `Launch-Dokkan-EZALink.command` (automatically opens Terminal and runs the bot).
+* **On Linux:** Double-click `Launch-Dokkan-EZALink.sh` (or run `./Launch-Dokkan-EZALink.sh`).
 
-### On Windows:
-```powershell
-cd dist\dokkan-bot
-.\dokkan-bot.exe
-```
+---
 
-### On macOS / Linux:
+Alternatively, you can run it from any shell / terminal (PowerShell, CMD, bash, zsh):
+
 ```bash
-cd dist/dokkan-bot
-chmod +x dokkan-bot
-./dokkan-bot
-```
+# Windows:
+.\dokkan-eza-link.exe
 
-*(Alternatively, in a Python development environment, you can run `python main.py`)*.
+# macOS / Linux:
+./dokkan-eza-link
+```
 
 ---
 
@@ -41,7 +46,6 @@ You can pass arguments directly to the executable to perform specific tasks with
 | `--doctor` | *none* | Runs a complete system diagnostic check (scrcpy, adb, OS, connected devices) |
 | `--devices` | *none* | Displays all connected Android devices (USB or Wi-Fi) |
 | `--eza` | `[level=999]` | Automatically navigates to EZA Events, scrolls to the bottom, finds the first uncompleted EZA (< 999), and farms up to the target level (default: `999`) |
-| `--farm` | `[runs=10]` | Starts continuous stage farming for the currently selected stage for N runs (default: `10`) |
 | `--link` | `[runs]` | Starts Link Level farming on the Chamber of Spirit and Time (stage "1. Saiyan Training", SUPER difficulty) with auto-rebuilding of the team using "Released" and "Level Up Possible" filters (optional: default until stamina depleted) |
 | `--boost` / `--no-boost` | *none* | Enables (`--boost`) or disables (`--no-boost`) using Boost energy charges during Link Level farming |
 | `--scrcpy` | *none* | Opens the zero-latency screen mirroring window |
@@ -51,24 +55,24 @@ You can pass arguments directly to the executable to perform specific tasks with
 ### Quick Examples:
 ```bash
 # System diagnostic check in English (default)
-./dokkan-bot --doctor
+./dokkan-eza-link --doctor
 
 # System diagnostic check in Italian
-./dokkan-bot --lang it --doctor
+./dokkan-eza-link --lang it --doctor
 
 # Start EZA automated climb up to level 999
-./dokkan-bot --eza
+./dokkan-eza-link --eza
 
-# Run 30 Link Level farming iterations
-./dokkan-bot --link 30
+# Run 30 Link Level farming iterations on Chamber of Spirit and Time
+./dokkan-eza-link --link 30
 
 # Launch scrcpy screen mirror
-./dokkan-bot --scrcpy
+./dokkan-eza-link --scrcpy
 ```
 
 ---
 
-## ⌨️ 3. Interactive CLI Console (`dokkan-bot>`)
+## ⌨️ 3. Interactive CLI Console (`dokkan-farmer>`)
 
 Running the executable without extra arguments enters the interactive Rich terminal console with real-time colored log output.
 
@@ -84,8 +88,6 @@ Running the executable without extra arguments enters the interactive Rich termi
 | `inspect` / `state` | `inspect` | Captures the active screen and prints the detected game state |
 | `shot` | `shot [name.png]` | Takes and saves a screenshot of the current screen |
 | `eza` | `eza [level\|auto]` | Opens interactive DokkanDB selector (arrow keys & search) or starts directly if specified |
-| `events` | `events` | Displays available events and Z-Battles retrieved from DokkanDB |
-| `farm` | `farm [runs]` | Starts repetitive farming on the current stage |
 | `link` | `link [runs] [boost]` | Starts Link Level farming with auto-swap of maxed characters (default: until stamina depleted) |
 | `status` | `status` | Shows current bot status, statistics, and running tasks |
 | `lang` | `lang [en\|it]` | Shows or dynamically changes the bot language at runtime |
@@ -111,14 +113,13 @@ discord:
 
 ### Starting Discord Mode:
 ```bash
-./dokkan-bot --discord
+./dokkan-eza-link --discord
 ```
 
 ### Available Discord Slash Commands:
 - `/status`: Displays an embed card with connected device, completed runs, active state, and Zeni / Platinum Statue statistics.
 - `/screenshot`: Captures phone display and sends an instant screenshot to Discord.
 - `/eza [target_level]`: Initiates automated EZA navigation and climb to target level.
-- `/farm [runs]`: Starts automated stage farming.
 - `/link [runs]`: Starts automated Link Leveling (optional: runs until stamina is depleted if omitted).
 - `/stop`: Aborts the current running task remotely.
 - `/pause` / `/resume`: Pauses or resumes automation.
@@ -126,19 +127,20 @@ discord:
 
 ---
 
-## 🛠️ 5. Compiling the Standalone Binary (`build_dist.py`)
+## 🛠️ 5. Compiling the Standalone Binary (`scripts/build_dist.py`)
 
-If you modify the source code and wish to recompile the `dist/dokkan-bot` distribution:
+If you modify the source code and wish to recompile the `dist/dokkan-eza-link` distribution:
 
 ```bash
 # Compile standalone distribution directory (--onedir)
-python build_dist.py
+python scripts/build_dist.py
 
 # Or compile into a single standalone executable (--onefile)
-python build_dist.py --onefile
+python scripts/build_dist.py --onefile
 ```
 The build script automatically handles:
 1. Bundling Python runtime and all dependencies (`opencv`, `numpy`, `rich`, `discord.py`).
 2. Setting `console=True` (strictly terminal-only, no GUI wrappers).
 3. Embedding all CV template assets from `templates/glb/`.
-4. Copying `config/settings.yaml`, translation catalogs `locales/`, and documentation files `COMMANDS.md`, `COMMANDS.it.md`, and `README.md` into the distribution folder.
+4. Copying `config/settings.yaml`, translation catalogs `locales/`, and documentation files into the distribution folder.
+5. Generating 1-click launchers (`Launch-Dokkan-EZALink.bat`, `Launch-Dokkan-EZALink.command`, `Launch-Dokkan-EZALink.sh`).
