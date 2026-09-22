@@ -1,54 +1,54 @@
 # ⚡ Dokkan-EZALink-Farmer v1.0.0
 
-Automazione da terminale e controllo remoto per **Dragon Ball Z Dokkan Battle**. Specializzato esclusivamente nelle due attività endgame più ripetitive e time-consuming: **scalata continua delle Extreme Z-Battle (EZA fino al livello 999)** e **Link Leveling automatico nella Stanza dello Spirito e del Tempo**.
+A high-performance terminal automation and remote control tool for **Dragon Ball Z Dokkan Battle**. Exclusively specialized in the two most tedious and time-consuming endgame tasks: **continuous Extreme Z-Battle climbing (EZA up to Level 999)** and **automated Link Level farming in the Chamber of Spirit and Time**.
 
 ---
 
-## 🌟 Caratteristiche Principali / Key Features
+## 🌟 Key Features
 
-### ⚔️ Extreme Z-Battle (EZA) Auto-Climber (Lv. 999 & Zeni Farming)
-- **Scalata Continua Automatica:** Navigazione automatica tra gli eventi EZA, rilevamento del livello corrente e avanzamento ininterrotto fino al livello 999.
-- **Farming Zeni Illimitato:** Guadagno costante di Statue di Mister Satan di Platino (~1.500.000 Zeni per ogni vittoria oltre il livello 30).
-- **Gestione Schermate Completa:** Rilevamento automatico di vittoria, sconfitta, amici di supporto, schermate di caricamento e riconnessione.
+### ⚔️ Extreme Z-Battle (EZA) Auto-Climber (Lv. 999 & Infinite Zeni)
+- **Continuous Automated Climb:** Automatically navigates through EZA events, detects the current stage level, and climbs continuously up to Level 999.
+- **Unlimited Zeni Grinding:** Consistent farming of Platinum Hercule Statues (~1,500,000 Zeni per victory past Level 30).
+- **Comprehensive Screen Handling:** Intelligent handling of victory, defeat, friend supporters, network reconnects, and loading screens.
 
-### 🔮 Link Level Farming (Stanza dello Spirito e del Tempo)
-- **Farming Automatico dei Link:** Esecuzione continua dello stage dedicato *"1. Saiyan Training"* a difficoltà SUPER.
-- **Ricambio Continuo del Team (Smart Rotation):** Quando un personaggio raggiunge il livello 10 su tutti i link, il bot lo rileva, apre la selezione del team, applica automaticamente i filtri *"Sbloccato"* e *"Aumento livello possibile"* e lo sostituisce con una nuova unità da livellare.
-- **Gestione Boost & Stamina:** Utilizzo opzionale delle cariche Boost e controllo automatico della barra stamina.
+### 🔮 Link Level Grinder (Chamber of Spirit and Time)
+- **Automated Link Farming:** Executes continuous runs of the dedicated *"1. Saiyan Training"* stage on SUPER difficulty.
+- **Smart Team Cycling (Auto-Swap):** When a character reaches Level 10 across all links, the bot detects it, opens the character selection menu, automatically applies the *"Released"* and *"Level Up Possible"* filters, and swaps in a fresh character to level up.
+- **Boost & Stamina Management:** Optional Boost charge consumption and automated stamina depletion detection.
 
-### 🤖 Controllo Remoto tramite Bot Discord Integrato
-- **Setup Guidato in 1 Minuto:** Configura Token e ID Canale direttamente dalla console interattiva con `discord setup` o `--discord`.
-- **Slash Commands Remoti:** Gestisci il bot da qualunque canale Discord autorizzato con `/status`, `/screenshot`, `/eza`, `/link`, `/stop`, `/pause`, `/resume`, `/scrcpy`.
-- **Screenshot in Tempo Reale:** Invia uno snapshot istantaneo dello schermo del telefono direttamente nella chat Discord.
+### 🤖 Remote Control via Integrated Discord Bot
+- **1-Minute Setup Wizard:** Configure your Bot Token and Channel ID effortlessly from the interactive console with `discord setup` or `--discord`.
+- **Remote Slash Commands:** Control and monitor the bot from any authorized Discord channel using `/status`, `/screenshot`, `/eza`, `/link`, `/stop`, `/pause`, `/resume`, and `/scrcpy`.
+- **Live Screen Capture:** Requests real-time high-resolution screenshots of the phone display directly in Discord chat.
 
-### 🖥️ Console Interattiva CLI & Diagnostica di Sistema
-- **Interfaccia Console Rich:** Tabella dei comandi, log colorati e statistiche di farming in tempo reale.
-- **Suite Diagnostica (`--doctor`):** Verifica immediata dell'ambiente, versione ADB, Scrcpy e rilevamento dispositivi Android (USB / Wi-Fi).
-- **Mirroring a Schermo Zero-Latenza:** Visualizzazione della schermata di gioco tramite Scrcpy con il comando `scrcpy`.
+### 🖥️ Interactive CLI Console & System Diagnostics
+- **Rich Terminal Interface:** Real-time colored logs, structured data tables, and live farming progress metrics.
+- **Diagnostic Suite (`--doctor`):** Immediate verification of ADB binaries, Scrcpy installation, and connected Android devices (USB / Wi-Fi).
+- **Zero-Latency Screen Mirroring:** Stream real-time gameplay directly to your desktop via Scrcpy using the `scrcpy` command.
 
-### 🌐 Supporto Multi-Lingua (EN / IT)
-- Interfaccia, diagnostica e comandi completamente bilingue (Inglese e Italiano), commutabili anche al volo con `lang it` / `lang en` o tramite flag `--lang it`.
+### 🌐 Multi-Language Support (EN / IT)
+- Fully bilingual console interface and documentation (English and Italian), switchable on the fly with `lang en` / `lang it` or the `--lang` flag.
 
-### 📦 Eseguibili Standalone Zero-Dipendenze
-- Distribuzioni standalone compilate per **Windows (x64)**, **macOS (Apple Silicon & Intel)** e **Linux (x64)**.
-- Nessuna necessità di installare Python, OpenCV o altre librerie esterne.
-- Avvio rapido con 1 clic tramite `Launch-Dokkan-EZALink.bat` (Windows), `Launch-Dokkan-EZALink.command` (macOS) o `Launch-Dokkan-EZALink.sh` (Linux).
+### 📦 Standalone Zero-Dependency Executables
+- Pre-compiled standalone distributions for **Windows (x64)**, **macOS (Apple Silicon & Intel)**, and **Linux (x64)**.
+- No need to install Python, OpenCV, or external dependencies.
+- 1-click desktop launchers: `Launch-Dokkan-EZALink.bat` (Windows), `Launch-Dokkan-EZALink.command` (macOS), or `Launch-Dokkan-EZALink.sh` (Linux).
 
 ---
 
-## 📥 Istruzioni Rapide / Quick Start
+## 📥 Quick Start
 
-1. Scarica lo zip corrispondente al tuo sistema operativo dagli Assets sottostanti:
+1. Download the zip archive corresponding to your operating system from the **Assets** below:
    - **Windows:** `dokkan-eza-link-windows-x64.zip`
    - **macOS:** `dokkan-eza-link-macos.zip`
    - **Linux:** `dokkan-eza-link-linux-x64.zip`
-2. Estrai la cartella sul tuo computer.
-3. Collega il tuo smartphone Android con Debug USB attivo (o avvia il tuo emulatore).
-4. Fai doppio clic sul launcher per il tuo OS:
-   - Su Windows: `Launch-Dokkan-EZALink.bat` (o `dokkan-eza-link.exe`)
-   - Su macOS: `Launch-Dokkan-EZALink.command`
-   - Su Linux: `Launch-Dokkan-EZALink.sh`
-5. Per collegare Discord: digita `discord setup` nella console interattiva oppure avvia con `--discord`.
+2. Extract the archive onto your computer.
+3. Connect your Android smartphone with USB Debugging enabled (or start your Android emulator).
+4. Double-click the launcher for your OS:
+   - On Windows: `Launch-Dokkan-EZALink.bat` (or `dokkan-eza-link.exe`)
+   - On macOS: `Launch-Dokkan-EZALink.command`
+   - On Linux: `Launch-Dokkan-EZALink.sh`
+5. To configure Discord: type `discord setup` inside the interactive console or launch with `--discord`.
 
 ---
 
