@@ -129,6 +129,10 @@ tasks:
     stamina_depleted_abort: "Stamina depleted! Refill mode is disabled. Stopping bot."
     stamina_refill_meat: "Stamina depleted: using Aged Meat..."
 
+  stage:
+    screencap_error: "⚠️ Screencap error: {error}"
+    post_stage_advance: "Post-stage advance (cycle {cycles}): tapping center & OK..."
+
   eza:
     navigating_to_events: "Navigating to Events screen..."
     scrolling_to_bottom: "Scrolling to bottom of EZA list..."
@@ -209,6 +213,7 @@ tasks:
     runs_target_reached: "Target of {curr} runs reached!"
     popup_dismiss_ok: "Detected confirmation/limit popup: tapping OK..."
     stage_card_advance: "Advancing stage selection..."
+    post_stage_advance: "Post-stage advance (cycle {cycles}): tapping center & OK..."
     opening_box_filter: "Opening Character Box filter options..."
     scrolling_to_link_filter: "Scrolling to Link Skill Level filter section..."
     setting_filter_level_up: "Setting filter to 'Level Up Possible' (showing unmaxed characters)..."

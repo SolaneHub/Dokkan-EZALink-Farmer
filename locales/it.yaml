@@ -129,6 +129,10 @@ tasks:
     stamina_depleted_abort: "Stamina esaurita! Modalità refill disattivata. Fermo il bot."
     stamina_refill_meat: "Stamina esaurita: utilizzo Aged Meat..."
 
+  stage:
+    screencap_error: "⚠️ Errore cattura schermo: {error}"
+    post_stage_advance: "Avanzamento post-stage (ciclo {cycles}): tap centro e OK..."
+
   eza:
     navigating_to_events: "Navigazione verso la schermata Eventi..."
     scrolling_to_bottom: "Scorrimento fino al fondo della lista EZA..."
@@ -209,6 +213,7 @@ tasks:
     runs_target_reached: "Obiettivo di {curr} run raggiunto!"
     popup_dismiss_ok: "Rilevato popup di conferma o limite: tap su OK..."
     stage_card_advance: "Avanzamento selezione stage..."
+    post_stage_advance: "Avanzamento post-stage (ciclo {cycles}): tap centro e OK..."
     opening_box_filter: "Apertura impostazioni filtro del Box personaggi..."
     scrolling_to_link_filter: "Scorrimento fino alla sezione Filtro Livello Abilità Link..."
     setting_filter_level_up: "Impostazione filtro su 'Livello aumentabile' (mostra personaggi non maxiati)..."

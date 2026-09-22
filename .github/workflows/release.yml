@@ -106,14 +106,17 @@ jobs:
           fi
           echo "Target Release Tag: $TAG"
 
+          # Extract release notes dynamically from CHANGELOG.md for this specific version
+          python scripts/extract_release_notes.py "$TAG" --output release_notes.md
+
           # Create or update GitHub Release with compiled binaries
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists, uploading/overwriting assets and updating notes..."
             gh release upload "$TAG" dokkan-eza-link-windows-x64.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip --clobber
-            gh release edit "$TAG" --notes-file .github/RELEASE_DESCRIPTION.md
+            gh release edit "$TAG" --notes-file release_notes.md
           else
             echo "Creating new release $TAG..."
             gh release create "$TAG" dokkan-eza-link-windows-x64.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip \
               --title "Dokkan-EZALink-Farmer $TAG" \
-              --notes-file .github/RELEASE_DESCRIPTION.md
+              --notes-file release_notes.md
           fi
