@@ -26,10 +26,16 @@ class DokkanDBClient:
         "Accept": "application/json, image/*, */*"
     }
 
-    def __init__(self, cache_dir: str = "cache", cache_ttl_seconds: int = 43200):
+    def __init__(self, cache_dir: Optional[str] = None, cache_ttl_seconds: int = 43200):
+        if cache_dir is None:
+            # Default to user home directory to keep application/distribution directory completely clean
+            cache_dir = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache")
         self.cache_dir = os.path.abspath(cache_dir)
         self.banners_dir = os.path.join(self.cache_dir, "banners")
         self.cache_ttl_seconds = cache_ttl_seconds
+
+    def _ensure_dirs(self):
+        """Creates cache directories lazily when actually writing files."""
         os.makedirs(self.cache_dir, exist_ok=True)
         os.makedirs(self.banners_dir, exist_ok=True)
 
@@ -66,6 +72,7 @@ class DokkanDBClient:
                 resp = requests.get(url, headers=self.DEFAULT_HEADERS, timeout=12)
                 resp.raise_for_status()
                 data = resp.json()
+                self._ensure_dirs()
                 with open(cache_file, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
             except Exception as e:
@@ -140,6 +147,7 @@ class DokkanDBClient:
                 resp = requests.get(url, headers=self.DEFAULT_HEADERS, timeout=15)
                 resp.raise_for_status()
                 data = resp.json()
+                self._ensure_dirs()
                 with open(cache_file, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
             except Exception as e:
@@ -193,6 +201,7 @@ class DokkanDBClient:
                 try:
                     r = requests.get(u, headers=self.DEFAULT_HEADERS, timeout=10)
                     if r.status_code == 200 and len(r.content) > 1000:
+                        self._ensure_dirs()
                         with open(local_path, "wb") as f:
                             f.write(r.content)
                         return local_path

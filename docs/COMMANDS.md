@@ -89,6 +89,7 @@ Running the executable without extra arguments enters the interactive Rich termi
 | `shot` | `shot [name.png]` | Takes and saves a screenshot of the current screen |
 | `eza` | `eza [level\|auto]` | Opens interactive DokkanDB selector (arrow keys & search) or starts directly if specified |
 | `link` | `link [runs] [boost]` | Starts Link Level farming with auto-swap of maxed characters (default: until stamina depleted) |
+| `discord` | `discord [setup\|start]` | Starts the interactive configuration wizard (`discord setup`) or runs the bot listener (`discord start`) |
 | `status` | `status` | Shows current bot status, statistics, and running tasks |
 | `lang` | `lang [en\|it]` | Shows or dynamically changes the bot language at runtime |
 | `pause` | `pause` | Temporarily pauses the running farming task |
@@ -101,27 +102,48 @@ Running the executable without extra arguments enters the interactive Rich termi
 
 ## 🤖 4. Remote Control via Discord
 
-You can control and monitor the bot from any authorized Discord channel using full Slash Commands:
+Dokkan-EZALink-Farmer comes with an integrated Discord bot allowing you to fully monitor and control farming sessions remotely using Slash Commands (`/status`, `/screenshot`, `/eza`, `/link`, etc.).
 
-### Configuration (`config/settings.yaml`):
-```yaml
-discord:
-  token: "YOUR_DISCORD_BOT_TOKEN"
-  channel_id: 123456789012345678  # Channel ID for notifications and screenshots
-  allowed_user_ids: []             # Authorized user IDs (empty = anyone in channel)
-```
+### ⚡ Interactive Setup Wizard (Recommended Method):
 
-### Starting Discord Mode:
-```bash
-./dokkan-eza-link --discord
-```
+You do NOT need to edit YAML files manually! You can set up your Discord bot in seconds through the interactive wizard:
 
-### Available Discord Slash Commands:
+1. **From the Interactive CLI Console:**
+   ```text
+   dokkan-farmer> discord setup
+   ```
+2. **Or from the Terminal / Command Prompt:**
+   ```bash
+   # With Python:
+   python main.py --discord
+
+   # With standalone executable (Windows):
+   .\dokkan-eza-link.exe --discord
+
+   # With standalone executable (macOS / Linux):
+   ./dokkan-eza-link --discord
+   ```
+   If not yet configured, the setup wizard will launch automatically and prompt you to input:
+   - **Bot Token**: Your bot token copied from the Discord Developer Portal
+   - **Channel ID**: The text channel ID for status messages and screenshots
+   - **User ID (optional)**: Your Discord User ID to restrict commands strictly to yourself
+
+   The wizard validates and persists these credentials automatically.
+
+> 📖 For a complete step-by-step tutorial on creating your bot application on Discord Developer Portal in under 2 minutes, see the [Discord Setup Guide](DISCORD_SETUP.md).
+
+### 🚀 Starting the Discord Bot:
+
+Once configured, run the Discord bot anytime:
+- From the interactive console: type `discord start`
+- From the command line: pass the `--discord` flag (`dokkan-eza-link.exe --discord`)
+
+### 🎮 Available Discord Slash Commands:
 - `/status`: Displays an embed card with connected device, completed runs, active state, and Zeni / Platinum Statue statistics.
-- `/screenshot`: Captures phone display and sends an instant screenshot to Discord.
-- `/eza [target_level]`: Initiates automated EZA navigation and climb to target level.
-- `/link [runs]`: Starts automated Link Leveling (optional: runs until stamina is depleted if omitted).
-- `/stop`: Aborts the current running task remotely.
+- `/screenshot`: Captures phone display and sends a real-time screenshot directly to Discord.
+- `/eza [target_level]`: Initiates automated EZA navigation and continuous climb to target level (default: 999).
+- `/link [runs]`: Starts automated Link Leveling on Chamber of Spirit and Time with automatic character cycling.
+- `/stop`: Aborts the current running task remotely and safely.
 - `/pause` / `/resume`: Pauses or resumes automation.
 - `/scrcpy [start/stop]`: Controls the screen mirroring window on the host computer.
 

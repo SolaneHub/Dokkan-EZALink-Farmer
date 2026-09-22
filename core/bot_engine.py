@@ -50,8 +50,16 @@ class BotEngine:
         return {}
 
     def save_config(self):
-        """Saves current configuration to YAML file."""
-        with open(self.config_path, "w", encoding="utf-8") as f:
+        """Saves current configuration to YAML file, ensuring directory exists."""
+        target_path = self.config_path
+        # If frozen in PyInstaller and config_path points inside read-only _MEIPASS, write next to executable
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS") and sys._MEIPASS in target_path:
+            exe_dir = os.path.dirname(sys.executable)
+            target_path = os.path.join(exe_dir, "config", "settings.yaml")
+            self.config_path = target_path
+
+        os.makedirs(os.path.dirname(os.path.abspath(target_path)), exist_ok=True)
+        with open(target_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(self.config, f)
 
     def register_log_callback(self, cb: Callable[[str], None]):

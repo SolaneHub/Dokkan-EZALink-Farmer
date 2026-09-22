@@ -61,7 +61,7 @@ jobs:
       - name: Package Artifacts (macOS / Linux)
         if: matrix.os != 'windows-latest'
         run: |
-          chmod +x dist/dokkan-eza-link/dokkan-eza-link dist/dokkan-eza-link/Launch-Dokkan-EZALink.command dist/dokkan-eza-link/Launch-Dokkan-EZALink.sh 2>/dev/null || true
+          chmod +x dist/dokkan-eza-link/dokkan-eza-link dist/dokkan-eza-link/Launch-Dokkan-EZALink.* 2>/dev/null || true
           cd dist
           zip -r ../${{ matrix.asset_filename }} dokkan-eza-link
           cd ..
@@ -108,11 +108,12 @@ jobs:
 
           # Create or update GitHub Release with compiled binaries
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists, uploading/overwriting assets..."
+            echo "Release $TAG already exists, uploading/overwriting assets and updating notes..."
             gh release upload "$TAG" dokkan-eza-link-windows-x64.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip --clobber
+            gh release edit "$TAG" --notes-file .github/RELEASE_DESCRIPTION.md
           else
             echo "Creating new release $TAG..."
             gh release create "$TAG" dokkan-eza-link-windows-x64.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip \
               --title "Dokkan-EZALink-Farmer $TAG" \
-              --generate-notes
+              --notes-file .github/RELEASE_DESCRIPTION.md
           fi

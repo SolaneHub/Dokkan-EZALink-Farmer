@@ -89,6 +89,7 @@ Eseguire il file senza parametri avvia la console interattiva Rich con log color
 | `shot` | `shot [nome.png]` | Scatta e salva uno screenshot dello schermo su disco |
 | `eza` | `eza [livello\|auto]` | Apre il menu interattivo DokkanDB (frecce e ricerca) o avvia la scalata fino a 999 |
 | `link` | `link [run] [boost]` | Avvia il farming dei link con ricambio continuo delle carte al livello 10 (default: fino a esaurimento stamina) |
+| `discord` | `discord [setup\|start]` | Avvia il setup guidato interattivo (`discord setup`) o avvia il bot in ascolto (`discord start`) |
 | `status` | `status` | Mostra lo stato attuale del bot, le statistiche Zeni e l'attività in corso |
 | `lang` | `lang [en\|it]` | Visualizza o cambia la lingua al volo |
 | `pause` | `pause` | Mette in pausa temporanea l'attività in corso |
@@ -101,29 +102,50 @@ Eseguire il file senza parametri avvia la console interattiva Rich con log color
 
 ## 🤖 4. Controllo Remoto tramite Discord
 
-Puoi gestire il bot da remoto da qualsiasi canale Discord autorizzato usando gli Slash Command:
+Dokkan-EZALink-Farmer include un bot Discord integrato per controllare e monitorare il farming da remoto tramite Slash Command (`/status`, `/screenshot`, `/eza`, `/link`, ecc.).
 
-### Configurazione (`config/settings.yaml`):
-```yaml
-discord:
-  token: "IL_TUO_TOKEN_BOT_DISCORD"
-  channel_id: 123456789012345678  # ID canale per notifiche e screenshot
-  allowed_user_ids: []             # ID utenti autorizzati (vuoto = chiunque nel canale)
-```
+### ⚡ Setup Guidato delle Credenziali (Nuovo Metodo Consigliato):
 
-### Avvio della Modalità Discord:
-```bash
-./dokkan-eza-link --discord
-```
+Non è necessario modificare manualmente i file YAML! Puoi configurare il bot in pochi secondi direttamente tramite il wizard interattivo:
 
-### Comandi Slash Disponibili su Discord:
-- `/status`: Mostra un riepilogo con dispositivo connesso, run completate, stato attuale e statistiche Zeni/Statue di Satan.
-- `/screenshot`: Cattura lo schermo dello smartphone/emulatore e invia un'immagine istantanea su Discord.
-- `/eza [target_level]`: Avvia la navigazione automatica e la scalata dell'EZA fino al livello scelto.
-- `/link [runs]`: Avvia il farming dei link sulla Stanza dello Spirito e del Tempo (default: fino a esaurimento stamina).
-- `/stop`: Interrompe l'attività da remoto.
+1. **Dalla Console Interattiva CLI:**
+   ```text
+   dokkan-farmer> discord setup
+   ```
+2. **Oppure da Terminale / Riga di Comando:**
+   ```bash
+   # Con Python:
+   python main.py --discord
+
+   # Con l'eseguibile standalone (Windows):
+   .\dokkan-eza-link.exe --discord
+
+   # Con l'eseguibile standalone (macOS / Linux):
+   ./dokkan-eza-link --discord
+   ```
+   Se il bot non è ancora configurato, il wizard guidato si avvierà automaticamente chiedendoti di incollare:
+   - **Bot Token**: il token ottenuto dal Discord Developer Portal
+   - **ID Canale**: l'ID del canale testuale in cui inviare aggiornamenti e screenshot
+   - **ID Utente (opzionale)**: il tuo ID utente Discord per riservare i comandi solo a te
+
+   Il bot validerà e salverà le impostazioni in modo sicuro e persistente.
+
+> 📖 Per la guida dettagliata passo-passo su come creare l'applicazione su Discord Developer Portal e ottenere il Token in 2 minuti, consulta la [Guida Setup Discord](DISCORD_SETUP.it.md).
+
+### 🚀 Avvio del Bot Discord:
+
+Una volta configurato, puoi avviare la modalità Discord in qualsiasi momento:
+- Dalla console CLI: digita `discord start`
+- Da terminale: esegui con il flag `--discord` (`dokkan-eza-link.exe --discord`)
+
+### 🎮 Comandi Slash Disponibili su Discord:
+- `/status`: Mostra un riepilogo dettagliato con dispositivo connesso, run completate, stato attuale e statistiche Zeni/Statue di Satan.
+- `/screenshot`: Cattura lo schermo dello smartphone/emulatore in tempo reale e invia l'immagine su Discord.
+- `/eza [target_level]`: Avvia la navigazione automatica e la scalata dell'EZA fino al livello scelto (default: 999).
+- `/link [runs]`: Avvia il farming dei link sulla Stanza dello Spirito e del Tempo.
+- `/stop`: Interrompe l'attività da remoto in sicurezza.
 - `/pause` / `/resume`: Mette in pausa o riprende l'automazione.
-- `/scrcpy [start/stop]`: Apre o chiude la finestra di mirroring sul PC.
+- `/scrcpy [start/stop]`: Apre o chiude la finestra video di mirroring sul PC.
 
 ---
 
