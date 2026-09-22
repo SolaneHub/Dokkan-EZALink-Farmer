@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dokkan-eza-link-farmer"
-version = "1.0.0"
+version = "1.0.1"
 description = "Specialized endgame automation for DBZ Dokkan Battle - Extreme Z-Battle (EZA 999 Zeni) & Chamber of Spirit and Time Link Leveling"
 readme = "README.md"
 requires-python = ">=3.10"
