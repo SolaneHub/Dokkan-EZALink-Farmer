@@ -14,6 +14,7 @@ cli:
   current_language: "Current language: {lang}"
   language_changed: "Language successfully set to: {lang}"
   invalid_language: "Unsupported language '{lang}'. Available languages: {available}"
+  available_prefix: "Available: {available}"
 
   help:
     title: "Available Commands"
@@ -101,8 +102,25 @@ cli:
     target_level_prompt: "Enter target level (default: {default}):"
     downloading_banner: "Downloading banner image for '{name}'..."
     banner_downloaded: "✓ Banner ready ({path})"
+    banner_unavailable: "⚠️ Banner download unavailable, will attempt in-game search."
     selected_summary: "🎯 Selected: {name} (Target Lv: {level})"
     canceled: "Operation cancelled."
+
+  link:
+    boost_on: "Boost: ON"
+    boost_off: "Boost: OFF"
+    boost_config: "Boost: From config"
+    runs_unlimited: "Until stamina depleted (Unlimited)"
+    status_open: "🟢 [OPEN]"
+    status_rotating: "🟡 [ROTATING]"
+    event_info: "⚡ [Link Level] Event: {name} {status}"
+    summary_info: "Scheduled runs: {runs} | Difficulty: SUPER (40 STA) | {boost} | Auto-Team (Released + Level Up Possible)"
+    event_not_found_fallback: "⚠️ Chamber of Spirit and Time event not found in DokkanDB. Starting with default parameters ({runs}, {boost})..."
+
+  discord:
+    starting: "Starting Discord bot (press CTRL+C to return to console)..."
+    stopped: "\nDiscord Bot stopped."
+    usage: "Usage: discord setup  or  discord start"
 
 tasks:
   task_already_running: "A task is already running! Stop the current task first."
@@ -134,6 +152,7 @@ tasks:
     post_stage_advance: "Post-stage advance (cycle {cycles}): tapping center & OK..."
 
   eza:
+    started: "🔥 Extreme Z-Battle (EZA) farm started up to level {level}!"
     navigating_to_events: "Navigating to Events screen..."
     scrolling_to_bottom: "Scrolling to bottom of EZA list..."
     scroll_finished: "Reached bottom of EZA list."
@@ -234,6 +253,7 @@ tasks:
     team_card_inserted: "🃏 Inserted card {idx}/6 at coords ({x}, {y})."
     team_rebuild_complete: "✅ Team successfully rebuilt with 'Released' and 'Level Up Possible' cards!"
     setting_display_order_released: "Setting Display Order to 'Released'..."
+    released_already_selected: "✅ Display Order 'Released' is already selected."
     attempt_again_clicked: "🔄 'Attempt Again' detected at ({x}, {y}): restarting stage directly via team management..."
 
 discord:
@@ -261,3 +281,20 @@ discord:
   scrcpy_stopped: "🖥️ scrcpy window closed."
   missing_token_warning: "[Discord] Error: No token specified in config/settings.yaml under discord.token!"
   missing_token_hint: "[Discord] Insert your bot token in config/settings.yaml to use Discord integration."
+  link_runs_unlimited: "unlimited (until stamina depleted)"
+  prompt_configure_now: "\nDo you want to configure the Discord bot now? [Y/n]: "
+  setup:
+    title: "🤖 DISCORD BOT CONFIGURATION / SETUP WIZARD"
+    requirements: "To connect the bot to Discord you need:"
+    req_token: "1. The Bot Token (from https://discord.com/developers/applications)"
+    req_channel: "2. The Discord Channel ID for alerts and screenshots"
+    guide: "Detailed step-by-step guide: {doc_path}"
+    val_none: "none"
+    val_all: "all"
+    prompt_token: "Enter Bot Token [{masked}]: "
+    token_empty: "❌ Token not entered. Configuration cancelled."
+    prompt_channel: "Enter Discord Channel ID [{current}]: "
+    channel_invalid: "⚠️ Invalid channel ID, set to 0."
+    prompt_user: "Enter your Discord User ID (optional, current: {current}): "
+    saved: "✓ Credentials successfully saved to config/settings.yaml!"
+    cancelled: "Operation cancelled."
