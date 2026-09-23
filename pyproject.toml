@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dokkan-eza-link-farmer"
-version = "1.0.1"
+version = "1.0.2"
 description = "Specialized endgame automation for DBZ Dokkan Battle - Extreme Z-Battle (EZA 999 Zeni) & Chamber of Spirit and Time Link Leveling"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -43,6 +43,7 @@ dev = [
 ]
 
 [project.scripts]
+Launch-Dokkan-EZALink = "main:main"
 dokkan-eza-link = "main:main"
 dokkan-farmer = "main:main"
 
@@ -76,3 +77,15 @@ select = [
 ignore = [
     "E501", # Line too long (handled by formatter)
 ]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core", "tasks", "interfaces", "tools"]
+combine-as-imports = true
+
+[tool.pyright]
+include = ["core", "tasks", "interfaces", "tools", "main.py"]
+exclude = ["**/__pycache__", "build", "dist", ".venv"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.10"
+typeCheckingMode = "standard"
