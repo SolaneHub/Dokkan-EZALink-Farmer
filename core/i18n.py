@@ -1,11 +1,13 @@
 import os
+from typing import Any
+
 import yaml
-from typing import Dict, Any, List, Optional
+
 from core.system_tools import get_resource_path
 
 DEFAULT_LANGUAGE = "en"
 _current_language = DEFAULT_LANGUAGE
-_catalogs: Dict[str, Dict[str, Any]] = {}
+_catalogs: dict[str, dict[str, Any]] = {}
 _loaded = False
 
 
@@ -13,7 +15,7 @@ def _load_all_locales():
     """Loads all translation catalogs from the locales directory."""
     global _catalogs, _loaded
     _catalogs.clear()
-    
+
     locales_dir = get_resource_path("locales")
     if not os.path.isdir(locales_dir):
         # Fallback to local locales directory
@@ -27,7 +29,7 @@ def _load_all_locales():
                 lang_code = os.path.splitext(entry)[0].lower()
                 filepath = os.path.join(locales_dir, entry)
                 try:
-                    with open(filepath, "r", encoding="utf-8") as f:
+                    with open(filepath, encoding="utf-8") as f:
                         data = yaml.safe_load(f) or {}
                         _catalogs[lang_code] = data
                 except Exception:
@@ -36,7 +38,7 @@ def _load_all_locales():
     _loaded = True
 
 
-def get_available_languages() -> List[str]:
+def get_available_languages() -> list[str]:
     """Returns list of loaded language codes."""
     if not _loaded:
         _load_all_locales()
@@ -46,7 +48,7 @@ def get_available_languages() -> List[str]:
     return langs
 
 
-def set_language(lang_code: Optional[str]) -> bool:
+def set_language(lang_code: str | None) -> bool:
     """
     Sets active language code. Defaults to 'en' if code is empty or unsupported.
     """
@@ -62,7 +64,7 @@ def set_language(lang_code: Optional[str]) -> bool:
     if clean in _catalogs:
         _current_language = clean
         return True
-    
+
     _current_language = DEFAULT_LANGUAGE
     return False
 
@@ -72,7 +74,7 @@ def get_language() -> str:
     return _current_language
 
 
-def _lookup_key(catalog: Dict[str, Any], key: str) -> Optional[str]:
+def _lookup_key(catalog: dict[str, Any], key: str) -> str | None:
     """Navigates dot-separated key inside a nested dictionary."""
     parts = key.split(".")
     curr = catalog

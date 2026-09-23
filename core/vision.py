@@ -1,7 +1,9 @@
 import os
+from typing import Any
+
 import cv2
 import numpy as np
-from typing import Optional, Tuple, List, Dict, Any
+
 from core.system_tools import get_resource_path
 
 
@@ -11,8 +13,8 @@ class Vision:
     def __init__(self, template_dir: str = "templates/glb", default_threshold: float = 0.78):
         self.template_dir = template_dir if os.path.isabs(template_dir) else get_resource_path(template_dir)
         self.default_threshold = default_threshold
-        self._template_cache: Dict[str, Optional[np.ndarray]] = {}
-        self._template_map: Dict[str, str] = {}
+        self._template_cache: dict[str, np.ndarray | None] = {}
+        self._template_map: dict[str, str] = {}
         os.makedirs(self.template_dir, exist_ok=True)
         self.refresh_template_index()
 
@@ -40,9 +42,9 @@ class Vision:
                     self._template_map[rel_path] = full_path
                     self._template_map[rel_without_ext] = full_path
 
-    def list_templates_by_category(self) -> Dict[str, List[str]]:
+    def list_templates_by_category(self) -> dict[str, list[str]]:
         """Returns a dict of subfolder categories and their template filenames."""
-        categories: Dict[str, List[str]] = {}
+        categories: dict[str, list[str]] = {}
         for root, _, files in os.walk(self.template_dir):
             cat = os.path.relpath(root, self.template_dir).replace("\\", "/")
             if cat == ".":
@@ -52,7 +54,7 @@ class Vision:
                 categories[cat] = img_files
         return categories
 
-    def load_template(self, template_name: str) -> Optional[np.ndarray]:
+    def load_template(self, template_name: str) -> np.ndarray | None:
         """Loads and caches a template image from disk, supporting nested category subfolders."""
         # Check cache first
         if template_name in self._template_cache:
@@ -96,13 +98,15 @@ class Vision:
         self,
         screen: np.ndarray,
         template_name: str,
-        threshold: Optional[float] = None,
-        scales: List[float] = [0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15]
-    ) -> Optional[Tuple[int, int, float]]:
+        threshold: float | None = None,
+        scales: list[float] | None = None,
+    ) -> tuple[int, int, float] | None:
         """
         Locates a template on the screen using multi-scale template matching.
         Returns: (center_x, center_y, max_val) or None
         """
+        if scales is None:
+            scales = [0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15]
         template = self.load_template(template_name)
         if template is None:
             return None
@@ -157,12 +161,8 @@ class Vision:
         return None
 
     def find_all_templates(
-        self,
-        screen: np.ndarray,
-        template_name: str,
-        threshold: float = 0.78,
-        min_distance: int = 80
-    ) -> List[Tuple[int, int, float]]:
+        self, screen: np.ndarray, template_name: str, threshold: float = 0.78, min_distance: int = 80
+    ) -> list[tuple[int, int, float]]:
         """
         Finds all occurrences of a template on screen, filtered by non-maximum suppression.
         Returns: list of (center_x, center_y, confidence)
@@ -180,7 +180,7 @@ class Vision:
         loc = np.where(res >= threshold)
 
         candidates = []
-        for pt in zip(*loc[::-1]):
+        for pt in zip(*loc[::-1], strict=False):
             candidates.append((pt[0] + t_w // 2, pt[1] + t_h // 2, float(res[pt[1], pt[0]])))
 
         if not candidates:
@@ -189,14 +189,14 @@ class Vision:
         # Sort candidates descending by confidence
         candidates.sort(key=lambda c: c[2], reverse=True)
 
-        filtered: List[Tuple[int, int, float]] = []
+        filtered: list[tuple[int, int, float]] = []
         for c in candidates:
             if not any(abs(c[0] - f[0]) < min_distance and abs(c[1] - f[1]) < min_distance for f in filtered):
                 filtered.append(c)
 
         return filtered
 
-    def find_ok_button(self, screen: np.ndarray, threshold: float = 0.80) -> Optional[Tuple[int, int, float]]:
+    def find_ok_button(self, screen: np.ndarray, threshold: float = 0.80) -> tuple[int, int, float] | None:
         """
         Finds OK button. If a modal dialog OK button is present (between 40% and 75% Y),
         returns that modal OK button with priority to dismiss the dialog.
@@ -211,7 +211,7 @@ class Vision:
         loc = np.where(res >= threshold)
 
         candidates = []
-        for pt in zip(*loc[::-1]):
+        for pt in zip(*loc[::-1], strict=False):
             candidates.append((pt[0], pt[1], float(res[pt[1], pt[0]])))
 
         if not candidates:
@@ -247,7 +247,7 @@ class Vision:
         best = matches[0]
         return (int(best[0]), int(best[1]), float(best[2]))
 
-    def find_attempt_again_button(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+    def find_attempt_again_button(self, screen: np.ndarray) -> tuple[int, int] | None:
         """
         Detects the 'Attempt Again' button on the stage results / clear screen.
         Checks:
@@ -275,11 +275,8 @@ class Vision:
         return None
 
     def find_any_template(
-        self,
-        screen: np.ndarray,
-        template_names: List[str],
-        threshold: Optional[float] = None
-    ) -> Optional[Tuple[str, int, int, float]]:
+        self, screen: np.ndarray, template_names: list[str], threshold: float | None = None
+    ) -> tuple[str, int, int, float] | None:
         """Tests multiple templates and returns the first match found with (name, x, y, conf)."""
         for name in template_names:
             match = self.find_template(screen, name, threshold)
@@ -288,18 +285,14 @@ class Vision:
         return None
 
     def save_template_crop(
-        self,
-        screen: np.ndarray,
-        box: Tuple[int, int, int, int],
-        name: str,
-        category: Optional[str] = None
+        self, screen: np.ndarray, box: tuple[int, int, int, int], name: str, category: str | None = None
     ) -> str:
         """
         Saves a cropped region as a template file for future matching.
         box: (x, y, width, height)
         """
         x, y, w, h = box
-        crop = screen[y:y+h, x:x+w]
+        crop = screen[y : y + h, x : x + w]
         if not name.endswith(".png"):
             name += ".png"
 
@@ -319,10 +312,7 @@ class Vision:
         return path
 
     @staticmethod
-    def get_dominant_color_in_rect(
-        screen: np.ndarray,
-        x1: int, y1: int, x2: int, y2: int
-    ) -> Tuple[int, int, int]:
+    def get_dominant_color_in_rect(screen: np.ndarray, x1: int, y1: int, x2: int, y2: int) -> tuple[int, int, int]:
         """Returns average BGR color in a given rectangular area."""
         roi = screen[y1:y2, x1:x2]
         if roi.size == 0:
@@ -342,15 +332,12 @@ class Vision:
         # Legacy UI: [0.15, 0.29, 0.43, 0.57, 0.71, 0.85]
         slot_centers_modern = [0.123, 0.256, 0.393, 0.530, 0.667, 0.804]
         slot_centers_legacy = [0.15, 0.29, 0.43, 0.57, 0.71, 0.85]
-        
+
         if slot_idx < 0 or slot_idx >= len(slot_centers_modern):
             return False
 
         # Try both modern vertical center (~0.43) and legacy (~0.48)
-        candidate_coords = [
-            (slot_centers_modern[slot_idx], 0.429),
-            (slot_centers_legacy[slot_idx], 0.480)
-        ]
+        candidate_coords = [(slot_centers_modern[slot_idx], 0.429), (slot_centers_legacy[slot_idx], 0.480)]
 
         for rx, ry in candidate_coords:
             cx = int(w * rx)
@@ -387,12 +374,8 @@ class Vision:
         return False
 
     def find_banner_on_screen(
-        self,
-        screen: np.ndarray,
-        banner_img: np.ndarray,
-        threshold: float = 0.72,
-        scales: Optional[List[float]] = None
-    ) -> Optional[Tuple[int, int, float]]:
+        self, screen: np.ndarray, banner_img: np.ndarray, threshold: float = 0.72, scales: list[float] | None = None
+    ) -> tuple[int, int, float] | None:
         """
         Locates a DokkanDB banner on the game screen using multi-scale template matching.
         Crops the inner graphic region (10% to 88% width) including artwork for maximum recognition.
@@ -411,7 +394,7 @@ class Vision:
         s_h, s_w = screen.shape[:2]
 
         # Crop inner portion (both logo and character artwork, omitting outer bezels)
-        crop = banner_bgr[int(bh * 0.10):int(bh * 0.90), int(bw * 0.10):int(bw * 0.88)]
+        crop = banner_bgr[int(bh * 0.10) : int(bh * 0.90), int(bw * 0.10) : int(bw * 0.88)]
         ch, cw = crop.shape[:2]
 
         if scales is None:
@@ -455,7 +438,7 @@ class Vision:
             or self.find_template(screen, "header_link_skill_level", threshold=0.80) is not None
         )
 
-    def get_link_level_filter_status(self, screen: np.ndarray) -> Dict[str, Any]:
+    def get_link_level_filter_status(self, screen: np.ndarray) -> dict[str, Any]:
         """
         Inspects the Filter / Sort modal (specifically the Link Skill Level section at the bottom)
         and detects the state and click coordinates of:
@@ -466,10 +449,10 @@ class Vision:
         """
         h, w = screen.shape[:2]
         header_link = self.find_template(screen, "header_link_skill_level", threshold=0.80)
-        has_link_section = (header_link is not None)
+        has_link_section = header_link is not None
         default_btn_y = int(header_link[1] + 95) if header_link else int(h * 0.63)
 
-        res: Dict[str, Any] = {
+        res: dict[str, Any] = {
             "is_open": self.is_filter_dialog_open(screen),
             "has_link_section": has_link_section,
             "level_up_possible": {"selected": False, "coords": (int(w * 0.27), default_btn_y)},
@@ -511,12 +494,12 @@ class Vision:
 
         return res
 
-    def get_team_slots_in_box(self, screen: np.ndarray) -> List[int]:
+    def get_team_slots_in_box(self, screen: np.ndarray) -> list[int]:
         """
         Scans the character box screen for active team slot badges (1 to 6).
         Returns a list of integer slot numbers (1..6) that are currently visible on cards in the box.
         """
-        found_slots: List[int] = []
+        found_slots: list[int] = []
         for slot in range(1, 7):
             tmpl = f"badge_team_slot_{slot}"
             m = self.find_template(screen, tmpl, threshold=0.85)
@@ -524,10 +507,7 @@ class Vision:
                 found_slots.append(slot)
         return found_slots
 
-    def find_first_unselected_card(
-        self,
-        screen: np.ndarray
-    ) -> Tuple[int, int]:
+    def find_first_unselected_card(self, screen: np.ndarray) -> tuple[int, int]:
         """
         Locates the first available card coordinate in the Character Box grid (Rows 1-4, Cols 1-5)
         that does not have an active team slot badge.
@@ -538,7 +518,7 @@ class Vision:
         rows = [0.215, 0.323, 0.431, 0.539]
 
         # Find all active team slot badges and their locations
-        badge_locations: List[Tuple[int, int]] = []
+        badge_locations: list[tuple[int, int]] = []
         for slot in range(1, 7):
             tmpl = f"badge_team_slot_{slot}"
             m = self.find_template(screen, tmpl, threshold=0.85)
@@ -561,28 +541,28 @@ class Vision:
         # Fallback to Row 1, Col 1 coordinates
         return (int(w * cols[0]), int(h * rows[0]))
 
-    def is_boost_off(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+    def is_boost_off(self, screen: np.ndarray) -> tuple[int, int] | None:
         """Returns (x, y) coordinates of the BOOST OFF button if boost is currently disabled, else None."""
         m = self.find_template(screen, "button_boost_off", threshold=0.80)
         if m:
             return (m[0], m[1])
         return None
 
-    def find_stage_saiyan_training(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+    def find_stage_saiyan_training(self, screen: np.ndarray) -> tuple[int, int] | None:
         """Finds '1. Saiyan Training' stage header on event stage select screen."""
         m = self.find_template(screen, "stage_saiyan_training", threshold=0.80)
         if m:
             return (m[0], m[1])
         return None
 
-    def find_deck_remove_all(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+    def find_deck_remove_all(self, screen: np.ndarray) -> tuple[int, int] | None:
         """Finds the 'Remove All' button on the team deck in Team Formation."""
         m = self.find_template(screen, "button_deck_remove_all", threshold=0.80)
         if m:
             return (m[0], m[1])
         return None
 
-    def find_yellow_sort_button(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+    def find_yellow_sort_button(self, screen: np.ndarray) -> tuple[int, int] | None:
         """
         Locates the yellow/gold Display Order & Filter button in the bottom right of the Character Box / Team Formation screen.
         First tries template matching for 'tag_sort_released'.
@@ -602,7 +582,7 @@ class Vision:
         """Checks if 'Released' is selected in the Display Order filter dialog."""
         return self.find_template(screen, "btn_released_selected", threshold=0.80) is not None
 
-    def get_top_box_card_coords(self, screen: np.ndarray, count: int = 6) -> List[Tuple[int, int]]:
+    def get_top_box_card_coords(self, screen: np.ndarray, count: int = 6) -> list[tuple[int, int]]:
         """
         Calculates coordinates for the top cards in the character box,
         ordered strictly top-to-bottom and left-to-right (Row 1 Cols 1..5, Row 2 Cols 1..5, etc.).
@@ -618,7 +598,7 @@ class Vision:
             # Tall 20:9 display with top padding (e.g. 1080x2400 on modern phones)
             rows = [0.215, 0.323, 0.431, 0.539]
 
-        coords: List[Tuple[int, int]] = []
+        coords: list[tuple[int, int]] = []
         for ry in rows:
             for rx in cols:
                 coords.append((int(w * rx), int(h * ry)))
@@ -626,22 +606,22 @@ class Vision:
                     return coords
         return coords
 
-    def find_auto_map_off(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+    def find_auto_map_off(self, screen: np.ndarray) -> tuple[int, int] | None:
         """Returns (x, y) coordinates of the Auto Map button if it is currently OFF (grey), else None."""
         m = self.find_template(screen, "btn_auto_map_off", threshold=0.82)
         return (m[0], m[1]) if m else None
 
-    def find_auto_battle_off(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+    def find_auto_battle_off(self, screen: np.ndarray) -> tuple[int, int] | None:
         """Returns (x, y) coordinates of the Auto Battle button if it is currently OFF (grey), else None."""
         m = self.find_template(screen, "btn_auto_battle_off", threshold=0.82)
         return (m[0], m[1]) if m else None
 
-    def find_auto_map_on(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+    def find_auto_map_on(self, screen: np.ndarray) -> tuple[int, int] | None:
         """Returns (x, y) coordinates of the Auto Map button if it is currently ON (green), else None."""
         m = self.find_template(screen, "btn_auto_map_on", threshold=0.82)
         return (m[0], m[1]) if m else None
 
-    def find_auto_battle_on(self, screen: np.ndarray) -> Optional[Tuple[int, int]]:
+    def find_auto_battle_on(self, screen: np.ndarray) -> tuple[int, int] | None:
         """Returns (x, y) coordinates of the Auto Battle button if it is currently ON (green), else None."""
         m = self.find_template(screen, "btn_auto_battle_on", threshold=0.82)
         return (m[0], m[1]) if m else None
@@ -654,4 +634,3 @@ class Vision:
             or self.find_auto_battle_off(screen) is not None
             or self.find_auto_battle_on(screen) is not None
         )
-

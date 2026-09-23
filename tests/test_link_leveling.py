@@ -1,22 +1,20 @@
 import os
 import sys
 import unittest
-import cv2
+
 import numpy as np
-from typing import Tuple
 
 # Add project root to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from core.dokkandb_client import DokkanDBClient
-from core.vision import Vision
-from core.game_state import StateDetector, GameState
-from tasks.link_level_farm import LinkLevelFarmTask
 from core.adb_client import ADBClient
+from core.dokkandb_client import DokkanDBClient
+from core.game_state import GameState, StateDetector
+from core.vision import Vision
+from tasks.link_level_farm import LinkLevelFarmTask
 
 
 class TestLinkLeveling(unittest.TestCase):
-
     def setUp(self):
         self.dokkandb = DokkanDBClient()
         self.vision = Vision("templates/glb")
@@ -26,7 +24,7 @@ class TestLinkLeveling(unittest.TestCase):
         """Helper to create a blank canvas simulating an Android screen."""
         return np.zeros((height, width, 3), dtype=np.uint8)
 
-    def _paste_template(self, canvas: np.ndarray, template_name: str, x: int, y: int) -> Tuple[int, int]:
+    def _paste_template(self, canvas: np.ndarray, template_name: str, x: int, y: int) -> tuple[int, int]:
         """Pastes a template image centered at (x, y) into the canvas."""
         tmpl = self.vision.load_template(template_name)
         self.assertIsNotNone(tmpl, f"Template '{template_name}' must exist to be pasted.")
@@ -35,7 +33,7 @@ class TestLinkLeveling(unittest.TestCase):
         y1 = max(0, y - th // 2)
         x2 = min(canvas.shape[1], x1 + tw)
         y2 = min(canvas.shape[0], y1 + th)
-        canvas[y1:y2, x1:x2] = tmpl[0:y2 - y1, 0:x2 - x1]
+        canvas[y1:y2, x1:x2] = tmpl[0 : y2 - y1, 0 : x2 - x1]
         return (x, y)
 
     def test_dokkandb_chamber_of_spirit_and_time(self):
@@ -80,16 +78,10 @@ class TestLinkLeveling(unittest.TestCase):
                 "protected_slots": [],
                 "box_first_slot_coords": [0.18, 0.28],
                 "box_confirm_coords": [0.81, 0.80],
-                "preferred_difficulty": "super"
+                "preferred_difficulty": "super",
             }
         }
-        task = LinkLevelFarmTask(
-            adb=ADBClient(),
-            vision=self.vision,
-            config=config,
-            runs=10,
-            dokkandb=self.dokkandb
-        )
+        task = LinkLevelFarmTask(adb=ADBClient(), vision=self.vision, config=config, runs=10, dokkandb=self.dokkandb)
         self.assertEqual(task.runs_target, 10)
         self.assertEqual(task.protected_slots, [])
         self.assertEqual(task.box_confirm_coords, [0.81, 0.80])
@@ -101,18 +93,26 @@ class TestLinkLeveling(unittest.TestCase):
     def test_link_level_optional_and_unlimited_runs(self):
         config = {"link_leveling": {}}
         # None passed (default) -> runs_target should be None (run until stamina empty)
-        task_none = LinkLevelFarmTask(adb=ADBClient(), vision=self.vision, config=config, runs=None, dokkandb=self.dokkandb)
+        task_none = LinkLevelFarmTask(
+            adb=ADBClient(), vision=self.vision, config=config, runs=None, dokkandb=self.dokkandb
+        )
         self.assertIsNone(task_none.runs_target)
 
         # 0 or negative passed -> runs_target should be None
-        task_zero = LinkLevelFarmTask(adb=ADBClient(), vision=self.vision, config=config, runs=0, dokkandb=self.dokkandb)
+        task_zero = LinkLevelFarmTask(
+            adb=ADBClient(), vision=self.vision, config=config, runs=0, dokkandb=self.dokkandb
+        )
         self.assertIsNone(task_zero.runs_target)
 
-        task_neg = LinkLevelFarmTask(adb=ADBClient(), vision=self.vision, config=config, runs=-1, dokkandb=self.dokkandb)
+        task_neg = LinkLevelFarmTask(
+            adb=ADBClient(), vision=self.vision, config=config, runs=-1, dokkandb=self.dokkandb
+        )
         self.assertIsNone(task_neg.runs_target)
 
         # Explicit positive number passed -> runs_target set
-        task_explicit = LinkLevelFarmTask(adb=ADBClient(), vision=self.vision, config=config, runs=5, dokkandb=self.dokkandb)
+        task_explicit = LinkLevelFarmTask(
+            adb=ADBClient(), vision=self.vision, config=config, runs=5, dokkandb=self.dokkandb
+        )
         self.assertEqual(task_explicit.runs_target, 5)
 
     def test_filter_templates_load(self):
@@ -126,7 +126,7 @@ class TestLinkLeveling(unittest.TestCase):
             "button_remove_all",
             "button_auto_formation",
             "button_confirm_formation",
-            "header_team_formation"
+            "header_team_formation",
         ]
         for tmpl in templates_to_test:
             img = self.vision.load_template(tmpl)
@@ -224,7 +224,7 @@ class TestLinkLeveling(unittest.TestCase):
         self._paste_template(filter_canvas, "btn_released_selected", 300, 600)
         self.assertTrue(
             self.vision.is_filter_released_selected(filter_canvas),
-            "Released filter button should be detected as selected"
+            "Released filter button should be detected as selected",
         )
 
     def test_get_top_box_card_coords(self):

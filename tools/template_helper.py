@@ -5,9 +5,10 @@ Usage:
   python tools/template_helper.py --crop <x> <y> <width> <height> <template_name>
 """
 
-import sys
-import os
 import argparse
+import os
+import sys
+
 import cv2
 
 # Add parent dir to sys.path
@@ -21,8 +22,16 @@ def main():
     parser = argparse.ArgumentParser(description="Template capture helper for Dokkan Battle")
     parser.add_argument("--screenshot", action="store_true", help="Capture and save current phone screenshot to file")
     parser.add_argument("--out", type=str, default="screen_sample.png", help="Output filename for captured screenshot")
-    parser.add_argument("--crop", nargs=5, metavar=("X", "Y", "W", "H", "NAME"), help="Crop a bounding box region and save as template")
-    parser.add_argument("--category", type=str, default=None, choices=["buttons", "eza", "popups", "system", "tabs"], help="Target category subfolder for cropped template")
+    parser.add_argument(
+        "--crop", nargs=5, metavar=("X", "Y", "W", "H", "NAME"), help="Crop a bounding box region and save as template"
+    )
+    parser.add_argument(
+        "--category",
+        type=str,
+        default=None,
+        choices=["buttons", "eza", "popups", "system", "tabs"],
+        help="Target category subfolder for cropped template",
+    )
     parser.add_argument("--list", action="store_true", help="List all categorized templates currently available")
     parser.add_argument("--device", type=str, default=None, help="Target specific Android device serial")
 

@@ -1,11 +1,14 @@
-import time
 import threading
+import time
+from collections.abc import Callable
+from typing import Any
+
 import numpy as np
-from typing import Callable, Optional, Dict, Any
+
 from core.adb_client import ADBClient
-from core.vision import Vision
 from core.game_state import GameState, StateDetector
 from core.i18n import t
+from core.vision import Vision
 
 
 class BaseTask:
@@ -15,9 +18,9 @@ class BaseTask:
         self,
         adb: ADBClient,
         vision: Vision,
-        config: Dict[str, Any],
-        on_status: Optional[Callable[[str], None]] = None,
-        on_run_complete: Optional[Callable[[int, int], None]] = None
+        config: dict[str, Any],
+        on_status: Callable[[str], None] | None = None,
+        on_run_complete: Callable[[int, int], None] | None = None,
     ):
         self.adb = adb
         self.vision = vision
@@ -60,6 +63,10 @@ class BaseTask:
         """Returns True if the task has been asked to stop."""
         return self._stop_event.is_set()
 
+    def run(self):
+        """Main task loop to be overridden by subclasses."""
+        raise NotImplementedError
+
     def wait_check(self, seconds: float):
         """Waits for specified duration while periodically checking stop and pause events."""
         start = time.time()
@@ -69,7 +76,7 @@ class BaseTask:
             self._pause_event.wait()
             time.sleep(0.1)
 
-    def handle_friend_select(self, screen_w: int, screen_h: int, meta: Optional[Dict[str, Any]] = None):
+    def handle_friend_select(self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None):
         """
         Selects a friend supporter by tapping the 'Refresh' button,
         which automatically assigns a friend in Dokkan.
@@ -87,11 +94,11 @@ class BaseTask:
             self.log(t("tasks.base.friend_auto_assign", x=tap_x, y=tap_y))
             self.adb.tap(tap_x, tap_y, delay_after=2.0)
 
-    def tap_friend_first(self, screen_w: int, screen_h: int, meta: Optional[Dict[str, Any]] = None):
+    def tap_friend_first(self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None):
         """Backwards-compatible alias for handle_friend_select."""
         self.handle_friend_select(screen_w, screen_h, meta)
 
-    def tap_start_team(self, screen_w: int, screen_h: int, meta: Dict[str, Any]):
+    def tap_start_team(self, screen_w: int, screen_h: int, meta: dict[str, Any]):
         """Taps the START button on the team preview screen."""
         if "start_button" in meta:
             x, y = meta["start_button"]
@@ -102,11 +109,7 @@ class BaseTask:
         self.adb.tap(x, y, delay_after=2.0)
 
     def dismiss_results_and_popups(
-        self,
-        screen_w: int,
-        screen_h: int,
-        meta: Dict[str, Any],
-        prefer_again: bool = False
+        self, screen_w: int, screen_h: int, meta: dict[str, Any], prefer_again: bool = False
     ):
         """
         Taps to dismiss result screens, rank up, rewards, or OK popups.
@@ -148,7 +151,7 @@ class BaseTask:
             self.adb.tap(ok_x, int(screen_h * 0.50), delay_after=0.4)
             self.adb.tap(ok_x, ok_y, delay_after=1.2)
 
-    def handle_stamina_refill(self, screen_w: int, screen_h: int, meta: Dict[str, Any]) -> bool:
+    def handle_stamina_refill(self, screen_w: int, screen_h: int, meta: dict[str, Any]) -> bool:
         """Handles stamina empty prompt based on settings. Returns True if handled, False to abort."""
         mode = self.config.get("farming", {}).get("stamina_refill_mode", "none")
         if mode == "none":
@@ -192,7 +195,7 @@ class BaseTask:
 
         return False
 
-    def handle_battle(self, screen_w: int, screen_h: int, meta: Dict[str, Any]):
+    def handle_battle(self, screen_w: int, screen_h: int, meta: dict[str, Any]):
         """Ensures Auto-Battle and Auto-Map are enabled, advances dialogue/animations, or attacks manually."""
         if "back_green_button" in meta:
             # If a character details sheet was opened, tap the green 3-arrows button at bottom left to close it
@@ -212,7 +215,7 @@ class BaseTask:
             # Tap the upper middle sky area to clear Dokkan mode target or dialogue safely without clicking characters
             self.adb.tap(int(screen_w * 0.50), int(screen_h * 0.35), delay_after=0.8)
 
-    def handle_map(self, screen_w: int, screen_h: int, meta: Dict[str, Any]):
+    def handle_map(self, screen_w: int, screen_h: int, meta: dict[str, Any]):
         """Ensures Auto-Map and Auto-Battle are enabled, or advances manually if auto controls are not present."""
         screen = self.adb.screencap()
         if self.ensure_stage_auto_controls(screen, screen_w, screen_h):
@@ -237,7 +240,7 @@ class BaseTask:
         """
         self.log(t("tasks.nav.navigating_to_zbattle"))
 
-        for step in range(1, max_steps + 1):
+        for _step in range(1, max_steps + 1):
             if self._stop_event.is_set():
                 return False
 
@@ -295,7 +298,13 @@ class BaseTask:
                 self.dismiss_results_and_popups(w, h, meta)
 
             elif "dont_send_button" in meta:
-                self.log(t("tasks.base.friend_request_rejected", x=meta["dont_send_button"][0], y=meta["dont_send_button"][1]))
+                self.log(
+                    t(
+                        "tasks.base.friend_request_rejected",
+                        x=meta["dont_send_button"][0],
+                        y=meta["dont_send_button"][1],
+                    )
+                )
                 self.adb.tap(*meta["dont_send_button"], delay_after=1.5)
 
             elif "close_button" in meta:
@@ -322,4 +331,3 @@ class BaseTask:
 
         self.log(t("tasks.nav.nav_failed"))
         return False
-

@@ -1,9 +1,9 @@
 import unittest
-from core.i18n import t, set_language, get_language, get_available_languages
+
+from core.i18n import get_available_languages, get_language, set_language, t
 
 
 class TestI18n(unittest.TestCase):
-
     def setUp(self):
         # Reset to default language before each test
         set_language("en")

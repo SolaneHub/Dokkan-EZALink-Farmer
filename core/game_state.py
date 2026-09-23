@@ -1,6 +1,8 @@
 import enum
-from typing import Optional, Tuple, Dict, Any
+from typing import Any
+
 import numpy as np
+
 from core.vision import Vision
 
 
@@ -35,13 +37,13 @@ class StateDetector:
     def __init__(self, vision: Vision):
         self.vision = vision
 
-    def detect(self, screen: np.ndarray) -> Tuple[GameState, Dict[str, Any]]:
+    def detect(self, screen: np.ndarray) -> tuple[GameState, dict[str, Any]]:
         """
         Analyzes the screen and returns (GameState, action_metadata).
         action_metadata contains coordinates of relevant clickable elements (e.g. 'start_button', 'ok_button').
         """
         h, w = screen.shape[:2]
-        meta: Dict[str, Any] = {"screen_width": w, "screen_height": h}
+        meta: dict[str, Any] = {"screen_width": w, "screen_height": h}
 
         # 1. Check for popups first: OK button / Cancel / Close
         # Dokkan popups have distinct OK / CANCEL buttons
@@ -72,9 +74,8 @@ class StateDetector:
             return (GameState.FRIEND_REQUEST, meta)
 
         # 3. Stamina Empty Popup
-        stamina_empty_match = (
-            self.vision.find_template(screen, "popup_stamina_empty")
-            or self.vision.find_template(screen, "header_restore_sta")
+        stamina_empty_match = self.vision.find_template(screen, "popup_stamina_empty") or self.vision.find_template(
+            screen, "header_restore_sta"
         )
         meat_match = self.vision.find_template(screen, "button_use_meat")
         if stamina_empty_match or meat_match:
@@ -88,9 +89,8 @@ class StateDetector:
             return (GameState.GAME_OVER, meta)
 
         # 4b. Filter / Sort Modal (Display Order / Filter Select dialog)
-        filter_modal_match = (
-            self.vision.find_template(screen, "button_remove_all")
-            or self.vision.find_template(screen, "header_link_skill_level")
+        filter_modal_match = self.vision.find_template(screen, "button_remove_all") or self.vision.find_template(
+            screen, "header_link_skill_level"
         )
         if filter_modal_match:
             if "ok_button" in meta:
@@ -98,7 +98,9 @@ class StateDetector:
             return (GameState.FILTER_MODAL, meta)
 
         # 5. Results Screen or Modal OK / Close Dialog
-        results_match = self.vision.find_template(screen, "header_clear") or self.vision.find_template(screen, "header_rewards")
+        results_match = self.vision.find_template(screen, "header_clear") or self.vision.find_template(
+            screen, "header_rewards"
+        )
         if results_match or ok_match or close_match:
             return (GameState.RESULTS_SCREEN, meta)
 
@@ -143,13 +145,17 @@ class StateDetector:
             return (GameState.TEAM_EDIT, meta)
 
         # 6c. Character Box / Character Selection List
-        box_match = self.vision.find_template(screen, "header_character_list") or self.vision.find_template(screen, "button_filter")
+        box_match = self.vision.find_template(screen, "header_character_list") or self.vision.find_template(
+            screen, "button_filter"
+        )
         if box_match:
             return (GameState.CHARACTER_BOX, meta)
 
         # 7. Friend Selection Screen
         friend_header = self.vision.find_template(screen, "header_select_friend")
-        refresh_match = self.vision.find_template(screen, "button_friend_refresh", threshold=0.90) or self.vision.find_template(screen, "button_friend_auto")
+        refresh_match = self.vision.find_template(
+            screen, "button_friend_refresh", threshold=0.90
+        ) or self.vision.find_template(screen, "button_friend_auto")
         if friend_header or refresh_match:
             if refresh_match:
                 meta["friend_refresh_button"] = (refresh_match[0], refresh_match[1])
@@ -163,7 +169,9 @@ class StateDetector:
             or self.vision.find_template(screen, "battle_auto_off")
         )
         item_button = self.vision.find_template(screen, "button_item", threshold=0.75)
-        speed_toggle = self.vision.find_template(screen, "battle_speed_2x") or self.vision.find_template(screen, "battle_speed_1x")
+        speed_toggle = self.vision.find_template(screen, "battle_speed_2x") or self.vision.find_template(
+            screen, "battle_speed_1x"
+        )
         if battle_menu or auto_battle or item_button or speed_toggle:
             if auto_battle:
                 meta["auto_button"] = (auto_battle[0], auto_battle[1])
@@ -237,7 +245,11 @@ class StateDetector:
             return (GameState.TITLE_SCREEN, meta)
 
         # 13. Home Screen
-        home_match = self.vision.find_template(screen, "nav_start_quest") or self.vision.find_template(screen, "nav_start") or self.vision.find_template(screen, "nav_events")
+        home_match = (
+            self.vision.find_template(screen, "nav_start_quest")
+            or self.vision.find_template(screen, "nav_start")
+            or self.vision.find_template(screen, "nav_events")
+        )
         if home_match:
             meta["start_button"] = (home_match[0], home_match[1])
             return (GameState.HOME_SCREEN, meta)

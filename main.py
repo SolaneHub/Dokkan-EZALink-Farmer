@@ -10,7 +10,7 @@ if sys.platform == "win32":
         pass
 
 from core.bot_engine import BotEngine
-from core.i18n import set_language, get_available_languages
+from core.i18n import set_language
 from interfaces.cli import TerminalCLI
 from interfaces.discord_bot import run_discord_bot
 
@@ -19,14 +19,38 @@ def main():
     parser = argparse.ArgumentParser(
         description="Dokkan-EZALink-Farmer: Automated EZA Climbing & Link Level Grinder (CLI & Discord)"
     )
-    parser.add_argument("--lang", "-l", type=str, choices=["en", "it"], default=None, help="Set interface language ('en' for English, 'it' for Italian)")
+    parser.add_argument(
+        "--lang",
+        "-l",
+        type=str,
+        choices=["en", "it"],
+        default=None,
+        help="Set interface language ('en' for English, 'it' for Italian)",
+    )
     parser.add_argument("--discord", action="store_true", help="Launch Discord Bot interface")
     parser.add_argument("--scrcpy", action="store_true", help="Launch scrcpy zero-latency screen mirroring")
-    parser.add_argument("--doctor", action="store_true", help="Run full environment diagnostics (scrcpy, adb, OS, devices)")
+    parser.add_argument(
+        "--doctor", action="store_true", help="Run full environment diagnostics (scrcpy, adb, OS, devices)"
+    )
     parser.add_argument("--devices", action="store_true", help="List connected Android devices and exit")
-    parser.add_argument("--eza", type=int, nargs="?", const=999, help="Directly start EZA continuous climbing up to specified level (default: 999)")
-    parser.add_argument("--link", type=int, nargs="?", const=-1, default=None, help="Directly start Link Level farming (optional: N runs, default: until stamina depleted)")
-    parser.add_argument("--boost", dest="boost", action="store_true", default=None, help="Enable Boost for Link Level farming")
+    parser.add_argument(
+        "--eza",
+        type=int,
+        nargs="?",
+        const=999,
+        help="Directly start EZA continuous climbing up to specified level (default: 999)",
+    )
+    parser.add_argument(
+        "--link",
+        type=int,
+        nargs="?",
+        const=-1,
+        default=None,
+        help="Directly start Link Level farming (optional: N runs, default: until stamina depleted)",
+    )
+    parser.add_argument(
+        "--boost", dest="boost", action="store_true", default=None, help="Enable Boost for Link Level farming"
+    )
     parser.add_argument("--no-boost", dest="boost", action="store_false", help="Disable Boost for Link Level farming")
     parser.add_argument("--config", type=str, default="config/settings.yaml", help="Path to YAML configuration file")
 

@@ -1,9 +1,9 @@
-import os
-import sys
 import glob
+import os
 import shutil
 import subprocess
-from typing import Optional, Dict, Any, List, Tuple
+import sys
+from typing import Any
 
 
 def get_resource_path(relative_path: str) -> str:
@@ -51,11 +51,11 @@ class ToolLocator:
     Operates agnostically on Windows, macOS, and Linux without hardcoded user paths.
     """
 
-    _cached_adb: Optional[str] = None
-    _cached_scrcpy: Optional[str] = None
+    _cached_adb: str | None = None
+    _cached_scrcpy: str | None = None
 
     @classmethod
-    def find_scrcpy(cls, configured_path: Optional[str] = None) -> Optional[str]:
+    def find_scrcpy(cls, configured_path: str | None = None) -> str | None:
         """Discovers scrcpy executable using multi-tier resolution."""
         if cls._cached_scrcpy and os.path.isfile(cls._cached_scrcpy):
             return cls._cached_scrcpy
@@ -71,7 +71,7 @@ class ToolLocator:
         return path
 
     @classmethod
-    def find_adb(cls, configured_path: Optional[str] = None) -> Optional[str]:
+    def find_adb(cls, configured_path: str | None = None) -> str | None:
         """Discovers adb executable using multi-tier resolution."""
         if cls._cached_adb and os.path.isfile(cls._cached_adb):
             return cls._cached_adb
@@ -87,7 +87,7 @@ class ToolLocator:
         return path
 
     @classmethod
-    def _check_adjacent(cls, base_file: str, target_name: str) -> Optional[str]:
+    def _check_adjacent(cls, base_file: str, target_name: str) -> str | None:
         folder = os.path.dirname(base_file)
         exe_name = f"{target_name}.exe" if sys.platform == "win32" else target_name
         candidate = os.path.join(folder, exe_name)
@@ -96,7 +96,7 @@ class ToolLocator:
         return None
 
     @classmethod
-    def _resolve(cls, tool_name: str, configured_path: Optional[str]) -> Tuple[Optional[str], str]:
+    def _resolve(cls, tool_name: str, configured_path: str | None) -> tuple[str | None, str]:
         """
         Executes the hierarchical discovery sequence:
         Tier 1: Explicit config
@@ -122,7 +122,7 @@ class ToolLocator:
         # Tier 2: Dedicated Environment Variables
         env_vars = {
             "scrcpy": ["SCRCPY_PATH", "SCRCPY_DIR", "SCRCPY_HOME", "SCRCPY_BIN"],
-            "adb": ["ADB_PATH", "ANDROID_HOME", "ANDROID_SDK_ROOT"]
+            "adb": ["ADB_PATH", "ANDROID_HOME", "ANDROID_SDK_ROOT"],
         }.get(tool_name, [])
 
         for var in env_vars:
@@ -155,9 +155,9 @@ class ToolLocator:
         if sys.platform == "darwin":
             mac_paths = [
                 f"/opt/homebrew/bin/{tool_name}",  # Apple Silicon Homebrew
-                f"/usr/local/bin/{tool_name}",    # Intel Mac Homebrew
+                f"/usr/local/bin/{tool_name}",  # Intel Mac Homebrew
                 os.path.expanduser(f"~/Library/Android/sdk/platform-tools/{tool_name}"),  # Android Studio macOS
-                f"/opt/local/bin/{tool_name}",     # MacPorts
+                f"/opt/local/bin/{tool_name}",  # MacPorts
                 f"/Applications/scrcpy.app/Contents/MacOS/{tool_name}",
                 os.path.expanduser(f"~/Applications/{tool_name}"),
             ]
@@ -212,17 +212,22 @@ class ToolLocator:
         return (None, "Not found")
 
     @classmethod
-    def _scan_windows_registry_path(cls, exe_name: str) -> Optional[str]:
+    def _scan_windows_registry_path(cls, exe_name: str) -> str | None:
         """Reads User and Machine PATH directly from Windows Registry."""
         try:
-            import winreg
+            import winreg  # type: ignore
+
+            hkey_cu = getattr(winreg, "HKEY_CURRENT_USER", None)
+            hkey_lm = getattr(winreg, "HKEY_LOCAL_MACHINE", None)
+            if not hkey_cu or not hkey_lm:
+                return None
             for root_key, sub_key in [
-                (winreg.HKEY_CURRENT_USER, r"Environment"),
-                (winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+                (hkey_cu, r"Environment"),
+                (hkey_lm, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
             ]:
                 try:
-                    with winreg.OpenKey(root_key, sub_key) as key:
-                        raw_path, _ = winreg.QueryValueEx(key, "Path")
+                    with winreg.OpenKey(root_key, sub_key) as key:  # type: ignore
+                        raw_path, _ = winreg.QueryValueEx(key, "Path")  # type: ignore
                         for folder in raw_path.split(";"):
                             folder = folder.strip().strip('"')
                             if not folder:
@@ -237,7 +242,7 @@ class ToolLocator:
         return None
 
     @classmethod
-    def _scan_dynamic_globs(cls, tool_name: str, exe_name: str) -> Optional[str]:
+    def _scan_dynamic_globs(cls, tool_name: str, exe_name: str) -> str | None:
         """
         Dynamically searches user folders for extracted scrcpy or platform-tools releases
         (e.g., Downloads/scrcpy-win64-v4.0, Desktop/scrcpy, etc.).
@@ -274,7 +279,7 @@ class ToolLocator:
                 patterns.append(os.path.join(root, "scrcpy*", exe_name))
                 patterns.append(os.path.join(root, "scrcpy*", "**", exe_name))
 
-        matches: List[str] = []
+        matches: list[str] = []
         for pat in patterns:
             try:
                 for hit in glob.glob(pat, recursive=True):
@@ -291,35 +296,25 @@ class ToolLocator:
         return os.path.abspath(matches[0])
 
     @classmethod
-    def get_tool_version(cls, tool_path: str) -> Optional[str]:
+    def get_tool_version(cls, tool_path: str) -> str | None:
         """Extracts version string from tool executable."""
         if not tool_path or not os.path.isfile(tool_path):
             return None
         try:
-            res = subprocess.run(
-                [tool_path, "--version"],
-                capture_output=True,
-                text=True,
-                timeout=4
-            )
+            res = subprocess.run([tool_path, "--version"], capture_output=True, text=True, timeout=4)
             out = res.stdout.strip() or res.stderr.strip()
             first_line = out.splitlines()[0] if out else "Unknown"
             return first_line
         except Exception:
             try:
-                res = subprocess.run(
-                    [tool_path, "version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=4
-                )
+                res = subprocess.run([tool_path, "version"], capture_output=True, text=True, timeout=4)
                 out = res.stdout.strip()
                 return out.splitlines()[0] if out else "Available"
             except Exception:
                 return "Available"
 
     @classmethod
-    def diagnose_system(cls, configured_adb: Optional[str] = None, configured_scrcpy: Optional[str] = None) -> Dict[str, Any]:
+    def diagnose_system(cls, configured_adb: str | None = None, configured_scrcpy: str | None = None) -> dict[str, Any]:
         """Produces a comprehensive system diagnostics report for the doctor command."""
         scrcpy_path = cls.find_scrcpy(configured_scrcpy)
         adb_path = cls.find_adb(configured_adb)
@@ -327,11 +322,7 @@ class ToolLocator:
         scrcpy_ver = cls.get_tool_version(scrcpy_path) if scrcpy_path else None
         adb_ver = cls.get_tool_version(adb_path) if adb_path else None
 
-        os_name = {
-            "darwin": "macOS",
-            "win32": "Windows",
-            "linux": "Linux"
-        }.get(sys.platform, sys.platform)
+        os_name = {"darwin": "macOS", "win32": "Windows", "linux": "Linux"}.get(sys.platform, sys.platform)
 
         # Installation guidance per platform
         install_help = {
@@ -339,20 +330,20 @@ class ToolLocator:
                 "scrcpy": "brew install scrcpy",
                 "adb": "brew install android-platform-tools",
                 "all": "brew install scrcpy android-platform-tools",
-                "note": "On Mac, make sure 'Android File Transfer' is closed if ADB does not detect the phone."
+                "note": "On Mac, make sure 'Android File Transfer' is closed if ADB does not detect the phone.",
             },
             "Windows": {
                 "scrcpy": "winget install Genymobile.scrcpy",
                 "adb": "Included automatically in scrcpy package or: winget install Google.PlatformTools",
                 "all": "winget install Genymobile.scrcpy",
-                "note": "Alternatively, download and extract the ZIP from: https://github.com/Genymobile/scrcpy/releases"
+                "note": "Alternatively, download and extract the ZIP from: https://github.com/Genymobile/scrcpy/releases",
             },
             "Linux": {
                 "scrcpy": "sudo apt install scrcpy",
                 "adb": "sudo apt install adb",
                 "all": "sudo apt install scrcpy adb",
-                "note": "Ensure your user belongs to the 'plugdev' group."
-            }
+                "note": "Ensure your user belongs to the 'plugdev' group.",
+            },
         }.get(os_name, {})
 
         return {

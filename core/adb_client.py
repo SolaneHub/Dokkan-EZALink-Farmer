@@ -2,10 +2,9 @@ import os
 import shutil
 import subprocess
 import time
-from typing import List, Optional, Tuple
+
 import cv2
 import numpy as np
-
 
 from core.system_tools import ToolLocator
 
@@ -35,37 +34,31 @@ class ADBClient:
         which = shutil.which(name)
         return which if which else name
 
-    def __init__(self, serial: Optional[str] = None, adb_path: str = "adb"):
+    def __init__(self, serial: str | None = None, adb_path: str = "adb"):
         self.adb_path = self.resolve_executable(adb_path)
         self.serial = serial
-        self._screen_size: Optional[Tuple[int, int]] = None
-        self._scrcpy_proc: Optional[subprocess.Popen] = None
+        self._screen_size: tuple[int, int] | None = None
+        self._scrcpy_proc: subprocess.Popen | None = None
 
-    def _build_cmd(self, args: List[str]) -> List[str]:
+    def _build_cmd(self, args: list[str]) -> list[str]:
         cmd = [self.adb_path]
         if self.serial:
             cmd.extend(["-s", self.serial])
         cmd.extend(args)
         return cmd
 
-    def run_cmd(self, args: List[str], timeout: int = 15) -> str:
+    def run_cmd(self, args: list[str], timeout: int = 15) -> str:
         """Executes an adb command and returns stdout."""
         cmd = self._build_cmd(args)
         try:
-            res = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=True
-            )
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True)
             return res.stdout.strip()
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"ADB command failed ({' '.join(cmd)}): {e.stderr.strip()}")
-        except subprocess.TimeoutExpired:
-            raise TimeoutError(f"ADB command timed out ({' '.join(cmd)}) after {timeout}s")
+            raise RuntimeError(f"ADB command failed ({' '.join(cmd)}): {e.stderr.strip()}") from e
+        except subprocess.TimeoutExpired as e:
+            raise TimeoutError(f"ADB command timed out ({' '.join(cmd)}) after {timeout}s") from e
 
-    def list_devices(self) -> List[dict]:
+    def list_devices(self) -> list[dict]:
         """Lists connected devices with their serial, model, and status."""
         out = self.run_cmd(["devices", "-l"])
         devices = []
@@ -84,19 +77,20 @@ class ADBClient:
         return devices
 
     COMMON_EMULATOR_PORTS = [
-        5555,   # BlueStacks, LDPlayer, default ADB over TCP
-        5554,   # Android Studio AVD
-        7555,   # MuMu Player 6/X
+        5555,  # BlueStacks, LDPlayer, default ADB over TCP
+        5554,  # Android Studio AVD
+        7555,  # MuMu Player 6/X
         16384,  # MuMu Player 12
         62001,  # NoxPlayer
         21503,  # MEmu Play
-        5556,   # Multi-instance emulator 2
-        5558,   # Multi-instance emulator 3
+        5556,  # Multi-instance emulator 2
+        5558,  # Multi-instance emulator 3
     ]
 
-    def probe_and_connect_emulators(self) -> List[str]:
+    def probe_and_connect_emulators(self) -> list[str]:
         """Probes standard emulator loopback ports on localhost and connects if open."""
         import socket
+
         connected = []
         for port in self.COMMON_EMULATOR_PORTS:
             try:
@@ -122,14 +116,18 @@ class ADBClient:
 
         if not authorized:
             if any(d["status"] == "unauthorized" for d in devices):
-                raise RuntimeError("Device found but unauthorized. Please check your phone display and allow USB debugging!")
-            raise RuntimeError("No Android device or emulator detected. Connect via USB or start your emulator with ADB enabled.")
-        
+                raise RuntimeError(
+                    "Device found but unauthorized. Please check your phone display and allow USB debugging!"
+                )
+            raise RuntimeError(
+                "No Android device or emulator detected. Connect via USB or start your emulator with ADB enabled."
+            )
+
         self.serial = authorized[0]["serial"]
         self.get_screen_size(force_refresh=True)
         return self.serial
 
-    def get_screen_size(self, force_refresh: bool = False) -> Tuple[int, int]:
+    def get_screen_size(self, force_refresh: bool = False) -> tuple[int, int]:
         """Returns (width, height) of the device screen."""
         if self._screen_size and not force_refresh:
             return self._screen_size
@@ -155,7 +153,9 @@ class ADBClient:
 
     def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300, delay_after: float = 0.5):
         """Simulates a swipe gesture."""
-        self.run_cmd(["shell", "input", "swipe", str(int(x1)), str(int(y1)), str(int(x2)), str(int(y2)), str(duration_ms)])
+        self.run_cmd(
+            ["shell", "input", "swipe", str(int(x1)), str(int(y1)), str(int(x2)), str(int(y2)), str(duration_ms)]
+        )
         if delay_after > 0:
             time.sleep(delay_after)
 
@@ -173,7 +173,7 @@ class ADBClient:
         proc = subprocess.run(cmd, capture_output=True)
         if proc.returncode != 0 or not proc.stdout:
             raise RuntimeError(f"Screen capture failed: {proc.stderr.decode('utf-8', errors='ignore')}")
-        
+
         # Decode raw PNG bytes to OpenCV image
         img_array = np.frombuffer(proc.stdout, dtype=np.uint8)
         img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
@@ -190,10 +190,10 @@ class ADBClient:
         """Launches the app using monkey or intent."""
         self.run_cmd(["shell", "monkey", "-p", package_name, "-c", "android.intent.category.LAUNCHER", "1"])
 
-    def start_scrcpy(self, scrcpy_path: str = "scrcpy", extra_args: Optional[List[str]] = None) -> bool:
+    def start_scrcpy(self, scrcpy_path: str = "scrcpy", extra_args: list[str] | None = None) -> bool:
         """Starts a scrcpy mirror window in background."""
         if self._scrcpy_proc and self._scrcpy_proc.poll() is None:
-            return True # Already running
+            return True  # Already running
 
         resolved = self.resolve_executable(scrcpy_path)
         cmd = [resolved]
@@ -204,11 +204,7 @@ class ADBClient:
             cmd.extend(extra_args)
 
         try:
-            self._scrcpy_proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
+            self._scrcpy_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return True
         except FileNotFoundError:
             return False

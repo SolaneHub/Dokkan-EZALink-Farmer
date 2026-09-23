@@ -1,16 +1,19 @@
 import os
-import yaml
+import sys
 import threading
-from typing import Dict, Any, Optional, Callable, List
-import numpy as np
+from collections.abc import Callable
+from typing import Any
+
 import cv2
+import numpy as np
+import yaml
 
 from core.adb_client import ADBClient
-from core.vision import Vision
-from core.game_state import StateDetector, GameState
-from core.system_tools import get_config_path, ToolLocator
-from core.i18n import t, set_language
 from core.dokkandb_client import DokkanDBClient
+from core.game_state import GameState, StateDetector
+from core.i18n import set_language, t
+from core.system_tools import ToolLocator, get_config_path
+from core.vision import Vision
 from tasks.base_task import BaseTask
 from tasks.eza_farm import EZAFarmTask
 from tasks.link_level_farm import LinkLevelFarmTask
@@ -22,38 +25,38 @@ class BotEngine:
     def __init__(self, config_path: str = "config/settings.yaml"):
         self.config_path = get_config_path(config_path)
         self.config = self.load_config()
-        
+
         # Initialize UI language from configuration
         set_language(self.config.get("language", "en"))
 
         self.adb = ADBClient(
             serial=self.config.get("device", {}).get("serial") or None,
-            adb_path=self.config.get("device", {}).get("adb_path", "adb")
+            adb_path=self.config.get("device", {}).get("adb_path", "adb"),
         )
         self.vision = Vision(
             template_dir=self.config.get("vision", {}).get("template_dir", "templates/glb"),
-            default_threshold=self.config.get("vision", {}).get("confidence_threshold", 0.78)
+            default_threshold=self.config.get("vision", {}).get("confidence_threshold", 0.78),
         )
         self.detector = StateDetector(self.vision)
         self.dokkandb = DokkanDBClient()
-        self.current_task: Optional[BaseTask] = None
-        self._task_thread: Optional[threading.Thread] = None
+        self.current_task: BaseTask | None = None
+        self._task_thread: threading.Thread | None = None
 
-        self.log_callbacks: List[Callable[[str], None]] = []
-        self.run_callbacks: List[Callable[[int, int], None]] = []
+        self.log_callbacks: list[Callable[[str], None]] = []
+        self.run_callbacks: list[Callable[[int, int], None]] = []
 
-    def load_config(self) -> Dict[str, Any]:
+    def load_config(self) -> dict[str, Any]:
         """Loads configuration from YAML file."""
         if os.path.exists(self.config_path):
-            with open(self.config_path, "r", encoding="utf-8") as f:
+            with open(self.config_path, encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
         return {}
 
     def save_config(self):
         """Saves current configuration to YAML file, ensuring directory exists."""
         target_path = self.config_path
-        # If frozen in PyInstaller and config_path points inside read-only _MEIPASS, write next to executable
-        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS") and sys._MEIPASS in target_path:
+        meipass = getattr(sys, "_MEIPASS", None)
+        if getattr(sys, "frozen", False) and meipass and str(meipass) in target_path:
             exe_dir = os.path.dirname(sys.executable)
             target_path = os.path.join(exe_dir, "config", "settings.yaml")
             self.config_path = target_path
@@ -86,7 +89,7 @@ class BotEngine:
             except Exception:
                 pass
 
-    def connect(self, serial: Optional[str] = None) -> str:
+    def connect(self, serial: str | None = None) -> str:
         """Connects to a specific Android device or auto-detects first available."""
         if serial:
             self.adb.serial = serial
@@ -97,11 +100,11 @@ class BotEngine:
         self.emit_log(t("tasks.device_connected", serial=active_serial, res=str(self.adb.get_screen_size())))
         return active_serial
 
-    def list_devices(self) -> List[dict]:
+    def list_devices(self) -> list[dict]:
         """Queries ADB for connected devices."""
         return self.adb.list_devices()
 
-    def diagnose_environment(self) -> Dict[str, Any]:
+    def diagnose_environment(self) -> dict[str, Any]:
         """Runs complete system check for Python, ADB, scrcpy, and connected devices."""
         configured_adb = self.config.get("device", {}).get("adb_path")
         configured_scrcpy = self.config.get("device", {}).get("scrcpy_path")
@@ -144,12 +147,7 @@ class BotEngine:
         state, _ = self.detector.detect(screen)
         return state
 
-
-    def start_eza_farm(
-        self,
-        target_level: int = 999,
-        target_eza: Optional[Dict[str, Any]] = None
-    ) -> bool:
+    def start_eza_farm(self, target_level: int = 999, target_eza: dict[str, Any] | None = None) -> bool:
         """Starts EZA continuous battle climbing task."""
         if self.is_task_running():
             self.emit_log(t("tasks.task_already_running"))
@@ -162,16 +160,13 @@ class BotEngine:
             target_level=target_level,
             target_eza=target_eza,
             on_status=self.emit_log,
-            on_run_complete=self.emit_run
+            on_run_complete=self.emit_run,
         )
         self._start_task_thread()
         return True
 
     def start_link_level_farm(
-        self,
-        runs: Optional[int] = None,
-        target_event: Optional[Dict[str, Any]] = None,
-        use_boost: Optional[bool] = None
+        self, runs: int | None = None, target_event: dict[str, Any] | None = None, use_boost: bool | None = None
     ) -> bool:
         """Starts Link Level farming with DokkanDB event integration and auto-swap."""
         if self.is_task_running():
@@ -187,7 +182,7 @@ class BotEngine:
             dokkandb=self.dokkandb,
             use_boost=use_boost,
             on_status=self.emit_log,
-            on_run_complete=self.emit_run
+            on_run_complete=self.emit_run,
         )
         self._start_task_thread()
         return True
@@ -216,7 +211,7 @@ class BotEngine:
         """Returns True if a task is currently executing."""
         return self.current_task is not None and self.current_task.is_running
 
-    def get_status_summary(self) -> Dict[str, Any]:
+    def get_status_summary(self) -> dict[str, Any]:
         """Provides status dictionary for UI and Discord reporting."""
         running = self.is_task_running()
         return {
@@ -225,10 +220,11 @@ class BotEngine:
             "task_type": type(self.current_task).__name__ if running else t("cli.status.none"),
             "runs_completed": self.current_task.runs_completed if self.current_task else 0,
             "runs_target": getattr(self.current_task, "runs_target", None) if self.current_task else 0,
-            "current_state": self.current_task.current_state.value if self.current_task else "IDLE"
+            "current_state": self.current_task.current_state.value if self.current_task else "IDLE",
         }
 
     def _start_task_thread(self):
         """Spawns daemon thread for running task loop."""
-        self._task_thread = threading.Thread(target=self.current_task.run, daemon=True)
-        self._task_thread.start()
+        if self.current_task is not None:
+            self._task_thread = threading.Thread(target=self.current_task.run, daemon=True)
+            self._task_thread.start()

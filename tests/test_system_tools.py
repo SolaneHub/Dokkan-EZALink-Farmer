@@ -1,10 +1,10 @@
 import os
 import unittest
-from core.system_tools import get_resource_path, get_config_path, ToolLocator
+
+from core.system_tools import ToolLocator, get_config_path, get_resource_path
 
 
 class TestSystemTools(unittest.TestCase):
-
     def test_get_resource_path(self):
         # In development mode, get_resource_path should resolve from project root
         res_path = get_resource_path("templates")

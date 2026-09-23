@@ -1,12 +1,13 @@
-import os
-import time
 import json
 import logging
-from typing import Optional, List, Dict, Any
+import os
+import time
 from datetime import datetime, timezone
-import requests
+from typing import Any
+
 import cv2
 import numpy as np
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +24,10 @@ class DokkanDBClient:
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://dokkandb.com/",
         "Origin": "https://dokkandb.com",
-        "Accept": "application/json, image/*, */*"
+        "Accept": "application/json, image/*, */*",
     }
 
-    def __init__(self, cache_dir: Optional[str] = None, cache_ttl_seconds: int = 43200):
+    def __init__(self, cache_dir: str | None = None, cache_ttl_seconds: int = 43200):
         if cache_dir is None:
             # Default to user home directory to keep application/distribution directory completely clean
             cache_dir = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache")
@@ -45,23 +46,20 @@ class DokkanDBClient:
         return f"{base}/{endpoint}"
 
     def get_zbattles(
-        self,
-        region: str = "glb",
-        active_only: bool = False,
-        force_refresh: bool = False
-    ) -> List[Dict[str, Any]]:
+        self, region: str = "glb", active_only: bool = False, force_refresh: bool = False
+    ) -> list[dict[str, Any]]:
         """
         Retrieves all Extreme Z-Battles from DokkanDB.
         Uses local cache if available and not expired.
         """
         cache_file = os.path.join(self.cache_dir, f"dokkandb_zbattles_{region.lower()}.json")
 
-        data: Optional[List[Dict[str, Any]]] = None
+        data: list[dict[str, Any]] | None = None
         if not force_refresh and os.path.exists(cache_file):
             try:
                 mtime = os.path.getmtime(cache_file)
                 if (time.time() - mtime) < self.cache_ttl_seconds:
-                    with open(cache_file, "r", encoding="utf-8") as f:
+                    with open(cache_file, encoding="utf-8") as f:
                         data = json.load(f)
             except Exception as e:
                 logger.warning(f"Failed reading DokkanDB cache: {e}")
@@ -79,12 +77,12 @@ class DokkanDBClient:
                 logger.error(f"Error fetching Z-Battles from DokkanDB ({url}): {e}")
                 if os.path.exists(cache_file):
                     try:
-                        with open(cache_file, "r", encoding="utf-8") as f:
+                        with open(cache_file, encoding="utf-8") as f:
                             data = json.load(f)
                     except Exception:
                         pass
-                if data is None:
-                    return []
+        if not data:
+            return []
 
         now = datetime.now(timezone.utc)
         results = []
@@ -123,20 +121,17 @@ class DokkanDBClient:
         return results
 
     def get_events(
-        self,
-        category: Optional[int] = None,
-        region: str = "glb",
-        force_refresh: bool = False
-    ) -> List[Dict[str, Any]]:
+        self, category: int | None = None, region: str = "glb", force_refresh: bool = False
+    ) -> list[dict[str, Any]]:
         """Retrieves general events (Story, Growth, Challenge, etc.) from DokkanDB."""
         cache_file = os.path.join(self.cache_dir, f"dokkandb_events_{region.lower()}.json")
 
-        data: Optional[List[Dict[str, Any]]] = None
+        data: list[dict[str, Any]] | None = None
         if not force_refresh and os.path.exists(cache_file):
             try:
                 mtime = os.path.getmtime(cache_file)
                 if (time.time() - mtime) < self.cache_ttl_seconds:
-                    with open(cache_file, "r", encoding="utf-8") as f:
+                    with open(cache_file, encoding="utf-8") as f:
                         data = json.load(f)
             except Exception:
                 pass
@@ -154,18 +149,18 @@ class DokkanDBClient:
                 logger.error(f"Error fetching events from DokkanDB: {e}")
                 if os.path.exists(cache_file):
                     try:
-                        with open(cache_file, "r", encoding="utf-8") as f:
+                        with open(cache_file, encoding="utf-8") as f:
                             data = json.load(f)
                     except Exception:
                         pass
-                if data is None:
-                    return []
+        if not data:
+            return []
 
         if category is not None:
             return [e for e in data if e.get("category") == category]
         return data
 
-    def download_banner(self, event: Dict[str, Any], prefer_button: bool = True) -> Optional[str]:
+    def download_banner(self, event: dict[str, Any], prefer_button: bool = True) -> str | None:
         """
         Downloads and caches the banner image for an event.
         Returns the absolute local path to the saved PNG image.
@@ -192,10 +187,7 @@ class DokkanDBClient:
             if os.path.exists(local_path) and os.path.getsize(local_path) > 1000:
                 return local_path
 
-            urls_to_try = [
-                f"{self.ASSETS_MIRROR_URL}/{clean_rel}",
-                f"{self.ASSETS_FALLBACK_URL}/{clean_rel}"
-            ]
+            urls_to_try = [f"{self.ASSETS_MIRROR_URL}/{clean_rel}", f"{self.ASSETS_FALLBACK_URL}/{clean_rel}"]
 
             for u in urls_to_try:
                 try:
@@ -210,11 +202,7 @@ class DokkanDBClient:
 
         return None
 
-    def get_link_level_events(
-        self,
-        region: str = "glb",
-        active_only: bool = False
-    ) -> List[Dict[str, Any]]:
+    def get_link_level_events(self, region: str = "glb", active_only: bool = False) -> list[dict[str, Any]]:
         """
         Retrieves known Link Level farming events from DokkanDB:
         - Ultimate Leveling Up! Chamber of Spirit and Time (Stanza dello Spirito e del Tempo)
@@ -229,7 +217,7 @@ class DokkanDBClient:
             "chamber of spirit and time",
             "turtle school's intensive training",
             "grand elder guru's guidance",
-            "god-level intensive training"
+            "god-level intensive training",
         ]
 
         results = []
@@ -275,7 +263,7 @@ class DokkanDBClient:
         results.sort(key=lambda x: (not x.get("is_currently_open", False), -int(x.get("id", 0))))
         return results
 
-    def get_chamber_of_spirit_and_time(self, region: str = "glb") -> Optional[Dict[str, Any]]:
+    def get_chamber_of_spirit_and_time(self, region: str = "glb") -> dict[str, Any] | None:
         """
         Finds the 'Chamber of Spirit and Time' (Stanza dello Spirito e del Tempo) event.
         Prioritizes the currently active version.
@@ -294,7 +282,7 @@ class DokkanDBClient:
         # Fallback to the latest event (highest ID)
         return spirit_events[0]
 
-    def load_banner_template(self, banner_path: str) -> Optional[np.ndarray]:
+    def load_banner_template(self, banner_path: str) -> np.ndarray | None:
         """Loads a banner image from disk as a BGR numpy array."""
         if not os.path.exists(banner_path):
             return None

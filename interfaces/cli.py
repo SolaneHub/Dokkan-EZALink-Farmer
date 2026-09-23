@@ -1,7 +1,7 @@
 import os
 import sys
 import time
-from typing import Any, Optional
+from typing import Any
 
 if sys.platform == "win32":
     try:
@@ -11,13 +11,13 @@ if sys.platform == "win32":
         pass
 
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
-from rich.text import Text
 from rich.prompt import Prompt
+from rich.table import Table
+from rich.text import Text
 
 from core.bot_engine import BotEngine
-from core.i18n import t, set_language, get_language, get_available_languages
+from core.i18n import get_available_languages, get_language, set_language, t
 
 
 class TerminalCLI:
@@ -45,7 +45,7 @@ class TerminalCLI:
         banner = Text()
         banner.append(f"{t('cli.banner_title')}\n", style="bold red")
         banner.append(f"{t('cli.banner_subtitle')}\n", style="yellow")
-        banner.append(t('cli.banner_help_hint'), style="dim")
+        banner.append(t("cli.banner_help_hint"), style="dim")
         self.console.print(Panel(banner, border_style="red", expand=False))
 
     def print_help(self):
@@ -77,36 +77,52 @@ class TerminalCLI:
     def print_doctor(self):
         """Renders comprehensive environment diagnostics."""
         report = self.engine.diagnose_environment()
-        table = Table(title=t("cli.doctor.title", os=report['os']), border_style="green")
+        table = Table(title=t("cli.doctor.title", os=report["os"]), border_style="green")
         table.add_column(t("cli.doctor.col_component"), style="bold")
         table.add_column(t("cli.doctor.col_status"), style="white")
         table.add_column(t("cli.doctor.col_details"), style="dim")
 
         # Python
-        python_mode = t("cli.doctor.standalone_mode") if report['is_frozen'] else t("cli.doctor.dev_mode")
-        table.add_row(t("cli.doctor.prop_python"), f"[green]{t('cli.doctor.status_ok')}[/]", f"v{report['python_version']} ({python_mode})")
+        python_mode = t("cli.doctor.standalone_mode") if report["is_frozen"] else t("cli.doctor.dev_mode")
+        table.add_row(
+            t("cli.doctor.prop_python"),
+            f"[green]{t('cli.doctor.status_ok')}[/]",
+            f"v{report['python_version']} ({python_mode})",
+        )
 
         # ADB
         if report["adb"]["found"]:
             adb_str = f"[green]{t('cli.doctor.status_found')}[/] ({report['adb']['version']})"
             table.add_row(t("cli.doctor.prop_adb"), adb_str, report["adb"]["path"])
         else:
-            table.add_row(t("cli.doctor.prop_adb"), f"[red]{t('cli.doctor.status_missing')}[/]", t("cli.doctor.adb_missing_desc"))
+            table.add_row(
+                t("cli.doctor.prop_adb"), f"[red]{t('cli.doctor.status_missing')}[/]", t("cli.doctor.adb_missing_desc")
+            )
 
         # scrcpy
         if report["scrcpy"]["found"]:
             scrcpy_str = f"[green]{t('cli.doctor.status_found')}[/] ({report['scrcpy']['version']})"
             table.add_row(t("cli.doctor.prop_scrcpy"), scrcpy_str, report["scrcpy"]["path"])
         else:
-            table.add_row(t("cli.doctor.prop_scrcpy"), f"[yellow]{t('cli.doctor.status_not_found')}[/]", t("cli.doctor.scrcpy_missing_desc"))
+            table.add_row(
+                t("cli.doctor.prop_scrcpy"),
+                f"[yellow]{t('cli.doctor.status_not_found')}[/]",
+                t("cli.doctor.scrcpy_missing_desc"),
+            )
 
         # Devices
         devs = report.get("devices", [])
         if devs:
             dev_str = ", ".join(f"{d['serial']} ({d['model']})" for d in devs)
-            table.add_row(t("cli.doctor.prop_devices"), f"[green]{t('cli.doctor.devices_connected', count=len(devs))}[/]", dev_str)
+            table.add_row(
+                t("cli.doctor.prop_devices"), f"[green]{t('cli.doctor.devices_connected', count=len(devs))}[/]", dev_str
+            )
         else:
-            table.add_row(t("cli.doctor.prop_devices"), f"[yellow]{t('cli.doctor.devices_none')}[/]", t("cli.doctor.devices_none_desc"))
+            table.add_row(
+                t("cli.doctor.prop_devices"),
+                f"[yellow]{t('cli.doctor.devices_none')}[/]",
+                t("cli.doctor.devices_none_desc"),
+            )
 
         self.console.print(table)
 
@@ -167,15 +183,13 @@ class TerminalCLI:
         # 3. Interactive prompt via questionary
         try:
             import questionary
+
             choices = [
                 questionary.Choice(title=t("cli.dokkandb.opt_select"), value="select"),
                 questionary.Choice(title=t("cli.dokkandb.opt_auto"), value="auto"),
                 questionary.Choice(title=t("cli.dokkandb.opt_cancel"), value="cancel"),
             ]
-            action = questionary.select(
-                t("cli.dokkandb.menu_title"),
-                choices=choices
-            ).ask()
+            action = questionary.select(t("cli.dokkandb.menu_title"), choices=choices).ask()
 
             if not action or action == "cancel":
                 self.console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/]")
@@ -183,8 +197,7 @@ class TerminalCLI:
 
             if action == "auto":
                 lvl_str = questionary.text(
-                    t("cli.dokkandb.target_level_prompt", default=default_lvl),
-                    default=str(default_lvl)
+                    t("cli.dokkandb.target_level_prompt", default=default_lvl), default=str(default_lvl)
                 ).ask()
                 target_lvl = int(lvl_str) if lvl_str and lvl_str.isdigit() else default_lvl
                 self.engine.start_eza_farm(target_level=target_lvl)
@@ -205,10 +218,7 @@ class TerminalCLI:
                     status_tag = "🟢 [OPEN]" if e.get("is_currently_open") else "🔑 [PORTAL]"
                     name = e.get("name", "Unknown EZA")
                     eid = e.get("id", "?")
-                    choices_eza.append(questionary.Choice(
-                        title=f"{status_tag} {name} (ID: {eid})",
-                        value=e
-                    ))
+                    choices_eza.append(questionary.Choice(title=f"{status_tag} {name} (ID: {eid})", value=e))
                 choices_eza.append(questionary.Choice(title=t("cli.dokkandb.opt_cancel"), value=None))
 
                 chosen = questionary.select(
@@ -216,7 +226,7 @@ class TerminalCLI:
                     choices=choices_eza,
                     use_search_filter=True,
                     use_arrow_keys=True,
-                    use_jk_keys=False
+                    use_jk_keys=False,
                 ).ask()
 
                 if not chosen:
@@ -224,8 +234,7 @@ class TerminalCLI:
                     return
 
                 lvl_str = questionary.text(
-                    t("cli.dokkandb.target_level_prompt", default=default_lvl),
-                    default=str(default_lvl)
+                    t("cli.dokkandb.target_level_prompt", default=default_lvl), default=str(default_lvl)
                 ).ask()
                 target_lvl = int(lvl_str) if lvl_str and lvl_str.isdigit() else default_lvl
 
@@ -234,11 +243,15 @@ class TerminalCLI:
                 banner_path = self.engine.dokkandb.download_banner(chosen)
                 if banner_path:
                     chosen["banner_local_path"] = banner_path
-                    self.console.print(f"[green]{t('cli.dokkandb.banner_downloaded', path=os.path.basename(banner_path))}[/green]")
+                    self.console.print(
+                        f"[green]{t('cli.dokkandb.banner_downloaded', path=os.path.basename(banner_path))}[/green]"
+                    )
                 else:
-                    self.console.print("[yellow]⚠️ Banner download unavailable, will attempt in-game search.[/yellow]")
+                    self.console.print(f"[yellow]{t('cli.dokkandb.banner_unavailable')}[/yellow]")
 
-                self.console.print(f"[bold green]{t('cli.dokkandb.selected_summary', name=chosen_name, level=target_lvl)}[/bold green]")
+                self.console.print(
+                    f"[bold green]{t('cli.dokkandb.selected_summary', name=chosen_name, level=target_lvl)}[/bold green]"
+                )
                 self.engine.start_eza_farm(target_level=target_lvl, target_eza=chosen)
 
         except (KeyboardInterrupt, EOFError):
@@ -248,7 +261,7 @@ class TerminalCLI:
 
     def handle_link_interactive(self, args: list):
         """Handles Link Leveling command focusing on Chamber of Spirit and Time."""
-        runs: Optional[int] = None
+        runs: int | None = None
         use_boost = None
         for arg in args:
             low = arg.lower()
@@ -263,16 +276,26 @@ class TerminalCLI:
 
         self.console.print(f"[cyan]{t('cli.dokkandb.fetching')}[/]")
         spirit = self.engine.dokkandb.get_chamber_of_spirit_and_time()
-        boost_label = "Boost: ATTIVO" if use_boost is True else "Boost: DISATTIVO" if use_boost is False else "Boost: Da config"
-        runs_display = f"{runs} runs" if runs is not None else "Finché c'è stamina (Illimitate)"
+        if use_boost is True:
+            boost_label = t("cli.link.boost_on")
+        elif use_boost is False:
+            boost_label = t("cli.link.boost_off")
+        else:
+            boost_label = t("cli.link.boost_config")
+
+        runs_display = f"{runs} runs" if runs is not None else t("cli.link.runs_unlimited")
         if spirit:
-            status_text = "🟢 [ATTIVO / OPEN]" if spirit.get("is_currently_open") else "🟡 [IN ROTAZIONE]"
+            status_text = (
+                t("cli.link.status_open") if spirit.get("is_currently_open") else t("cli.link.status_rotating")
+            )
             name = spirit.get("name", "Ultimate Leveling Up! Chamber of Spirit and Time")
-            self.console.print(f"[bold green]⚡ [Link Level] Evento: {name} {status_text}[/bold green]")
-            self.console.print(f"[dim]Runs programmate: {runs_display} | Difficoltà: SUPER (40 STA) | {boost_label} | Auto-Team (Released + Level Up Possible)[/dim]")
+            self.console.print(f"[bold green]{t('cli.link.event_info', name=name, status=status_text)}[/bold green]")
+            self.console.print(f"[dim]{t('cli.link.summary_info', runs=runs_display, boost=boost_label)}[/dim]")
             self.engine.start_link_level_farm(runs=runs, target_event=spirit, use_boost=use_boost)
         else:
-            self.console.print(f"[yellow]⚠️ Evento Spirito del Tempo non trovato in DokkanDB. Avvio con parametri predefiniti ({runs_display}, {boost_label})...[/yellow]")
+            self.console.print(
+                f"[yellow]{t('cli.link.event_not_found_fallback', runs=runs_display, boost=boost_label)}[/yellow]"
+            )
             self.engine.start_link_level_farm(runs=runs, use_boost=use_boost)
 
     def run(self):
@@ -311,7 +334,9 @@ class TerminalCLI:
                     if not args:
                         current = get_language()
                         avail = ", ".join(get_available_languages())
-                        self.console.print(f"[cyan]{t('cli.current_language', lang=current)}[/] (Available: {avail})")
+                        self.console.print(
+                            f"[cyan]{t('cli.current_language', lang=current)}[/] ({t('cli.available_prefix', available=avail)})"
+                        )
                     else:
                         target_lang = args[0].lower()
                         if target_lang in get_available_languages():
@@ -321,7 +346,9 @@ class TerminalCLI:
                             self.console.print(f"[bold green]{t('cli.language_changed', lang=target_lang)}[/]")
                         else:
                             avail_str = ", ".join(get_available_languages())
-                            self.console.print(f"[bold red]{t('cli.invalid_language', lang=target_lang, available=avail_str)}[/]")
+                            self.console.print(
+                                f"[bold red]{t('cli.invalid_language', lang=target_lang, available=avail_str)}[/]"
+                            )
 
                 elif cmd == "devices":
                     devices = self.engine.list_devices()
@@ -358,7 +385,9 @@ class TerminalCLI:
                 elif cmd in ("inspect", "state"):
                     try:
                         state = self.engine.inspect_current_state()
-                        self.console.print(f"[bold green]{t('cli.inspect.state_format', state=f'[bold yellow]{state.value}[/bold yellow]')}[/]")
+                        self.console.print(
+                            f"[bold green]{t('cli.inspect.state_format', state=f'[bold yellow]{state.value}[/bold yellow]')}[/]"
+                        )
                     except Exception as e:
                         self.console.print(f"[red]{t('cli.inspect.error', error=str(e))}[/]")
 
@@ -377,18 +406,19 @@ class TerminalCLI:
                     self.handle_link_interactive(args)
 
                 elif cmd == "discord":
-                    from interfaces.discord_bot import setup_discord_interactive, run_discord_bot
+                    from interfaces.discord_bot import run_discord_bot, setup_discord_interactive
+
                     sub = args[0].lower() if args else "setup"
                     if sub in ("setup", "config", "init"):
                         setup_discord_interactive(self.engine)
                     elif sub in ("start", "run"):
-                        self.console.print("[cyan]Avvio del bot Discord in corso (premi CTRL+C per tornare alla console)...[/cyan]")
+                        self.console.print(f"[cyan]{t('cli.discord.starting')}[/cyan]")
                         try:
                             run_discord_bot(self.engine)
                         except KeyboardInterrupt:
-                            self.console.print("[yellow]\nBot Discord arrestato.[/yellow]")
+                            self.console.print(f"[yellow]{t('cli.discord.stopped')}[/yellow]")
                     else:
-                        self.console.print("[yellow]Uso: discord setup  oppure  discord start[/yellow]")
+                        self.console.print(f"[yellow]{t('cli.discord.usage')}[/yellow]")
 
                 elif cmd == "stop":
                     self.engine.stop_task()

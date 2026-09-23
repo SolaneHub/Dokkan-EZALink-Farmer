@@ -1,12 +1,14 @@
-import time
+from collections.abc import Callable
+from typing import Any
+
 import cv2
 import numpy as np
-from typing import Dict, Any, Optional, Callable, List
+
 from core.adb_client import ADBClient
-from core.vision import Vision
-from core.game_state import GameState
 from core.dokkandb_client import DokkanDBClient
+from core.game_state import GameState
 from core.i18n import t
+from core.vision import Vision
 from tasks.base_task import BaseTask
 
 
@@ -30,16 +32,16 @@ class LinkLevelFarmTask(BaseTask):
         self,
         adb: ADBClient,
         vision: Vision,
-        config: Dict[str, Any],
-        runs: Optional[int] = None,
-        target_event: Optional[Dict[str, Any]] = None,
-        dokkandb: Optional[DokkanDBClient] = None,
-        use_boost: Optional[bool] = None,
-        on_status: Optional[Callable[[str], None]] = None,
-        on_run_complete: Optional[Callable[[int, int], None]] = None
+        config: dict[str, Any],
+        runs: int | None = None,
+        target_event: dict[str, Any] | None = None,
+        dokkandb: DokkanDBClient | None = None,
+        use_boost: bool | None = None,
+        on_status: Callable[[str], None] | None = None,
+        on_run_complete: Callable[[int, int], None] | None = None,
     ):
         super().__init__(adb, vision, config, on_status, on_run_complete)
-        self.runs_target: Optional[int] = runs if (runs is not None and runs > 0) else None
+        self.runs_target: int | None = runs if (runs is not None and runs > 0) else None
         self.dokkandb = dokkandb or DokkanDBClient()
         self.target_event = target_event
 
@@ -47,13 +49,13 @@ class LinkLevelFarmTask(BaseTask):
         if not self.target_event:
             self.target_event = self.dokkandb.get_chamber_of_spirit_and_time()
 
-        self._target_banner_img: Optional[np.ndarray] = None
+        self._target_banner_img: np.ndarray | None = None
         if self.target_event and self.target_event.get("banner_local_path"):
             self._target_banner_img = cv2.imread(self.target_event["banner_local_path"], cv2.IMREAD_UNCHANGED)
 
         ll_cfg = self.config.get("link_leveling", {})
         self.auto_swap = ll_cfg.get("auto_swap_maxed_units", True)
-        self.protected_slots: List[int] = ll_cfg.get("protected_slots", [])
+        self.protected_slots: list[int] = ll_cfg.get("protected_slots", [])
         self.preferred_difficulty: str = ll_cfg.get("preferred_difficulty", "super").lower()
         self.target_stage: str = ll_cfg.get("target_stage", "saiyan_training").lower()
         self.use_boost: bool = use_boost if use_boost is not None else bool(ll_cfg.get("use_boost", False))
@@ -63,7 +65,7 @@ class LinkLevelFarmTask(BaseTask):
 
         # Modern UI box & team formation coordinates
         self.box_card_coords = ll_cfg.get("box_first_slot_coords", [0.18, 0.28])
-        self.box_confirm_coords = ll_cfg.get("box_confirm_coords", [0.88, 0.88]) # Red Confirm button
+        self.box_confirm_coords = ll_cfg.get("box_confirm_coords", [0.88, 0.88])  # Red Confirm button
 
         # State tracking
         self.event_banner_selected = False
@@ -72,7 +74,7 @@ class LinkLevelFarmTask(BaseTask):
         self._needs_team_link_check = True
         self._team_prepared_for_run = False
 
-    def navigate_to_event_banner(self, screen: np.ndarray, w: int, h: int, meta: Dict[str, Any]) -> bool:
+    def navigate_to_event_banner(self, screen: np.ndarray, w: int, h: int, meta: dict[str, Any]) -> bool:
         """
         Navigates to the event banner in the Event List (Bonus tab):
         1. Switches to Bonus tab if on Event Select screen.
@@ -87,7 +89,7 @@ class LinkLevelFarmTask(BaseTask):
             self.event_banner_selected = True
             return True
 
-        target_name = self.target_event.get("name", "Chamber of Spirit and Time")
+        target_name = (self.target_event.get("name") if self.target_event else None) or "Chamber of Spirit and Time"
         self.log(t("tasks.link.searching_banner", name=target_name))
 
         # Ensure Bonus tab is active (Category 4 events are in Bonus tab)
@@ -102,7 +104,7 @@ class LinkLevelFarmTask(BaseTask):
         max_scrolls = 8
         prev_screen = None
 
-        for attempt in range(max_scrolls):
+        for _attempt in range(max_scrolls):
             if self._stop_event.is_set():
                 return False
 
@@ -131,7 +133,7 @@ class LinkLevelFarmTask(BaseTask):
 
         return False
 
-    def handle_boost_toggle(self, screen: np.ndarray, w: int, h: int, meta: Dict[str, Any]):
+    def handle_boost_toggle(self, screen: np.ndarray, w: int, h: int, meta: dict[str, Any]):
         """
         Controls the Boost feature according to self.use_boost flag:
         - If self.use_boost is True and Boost is OFF (button_boost_off detected), taps Boost to turn it ON.
@@ -154,7 +156,7 @@ class LinkLevelFarmTask(BaseTask):
             else:
                 self.log(t("tasks.link.boost_already_off"))
 
-    def handle_stage_selection(self, screen: np.ndarray, w: int, h: int, meta: Dict[str, Any]):
+    def handle_stage_selection(self, screen: np.ndarray, w: int, h: int, meta: dict[str, Any]):
         """
         Handles stage difficulty selection (SUPER) and stage selection (Saiyan Training)
         with integrated Boost flag verification.
@@ -199,7 +201,7 @@ class LinkLevelFarmTask(BaseTask):
         self.log(t("tasks.link.select_stage_card"))
         self.adb.tap(int(w * 0.50), int(h * 0.55), delay_after=2.0)
 
-    def open_box_filter(self, screen_w: int, screen_h: int, meta: Optional[Dict[str, Any]] = None) -> bool:
+    def open_box_filter(self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None) -> bool:
         """Opens the Character Box Filter / Sort modal from Team Formation screen via the yellow button in bottom right."""
         curr = self.adb.screencap()
         st, cur_meta = self.detector.detect(curr)
@@ -239,10 +241,7 @@ class LinkLevelFarmTask(BaseTask):
         return self.vision.is_filter_dialog_open(screen)
 
     def set_box_link_filter(
-        self,
-        mode: str = "level_up_possible",
-        screen_w: Optional[int] = None,
-        screen_h: Optional[int] = None
+        self, mode: str = "level_up_possible", screen_w: int | None = None, screen_h: int | None = None
     ) -> bool:
         """
         Configures the Display Order and Link Skill Level filter in the Filter / Sort modal:
@@ -254,8 +253,10 @@ class LinkLevelFarmTask(BaseTask):
         """
         curr_screen = self.adb.screencap()
         h, w = curr_screen.shape[:2]
-        screen_w = screen_w or w
-        screen_h = screen_h or h
+        if screen_w is None:
+            screen_w = int(w)
+        if screen_h is None:
+            screen_h = int(h)
 
         # 1. Ensure Filter Modal is open
         if not self.vision.is_filter_dialog_open(curr_screen):
@@ -272,14 +273,12 @@ class LinkLevelFarmTask(BaseTask):
             self.adb.tap(rel_x, rel_y, delay_after=0.8)
             curr_screen = self.adb.screencap()
         else:
-            self.log("✅ Display Order 'Released' is already selected.")
+            self.log(t("tasks.link.released_already_selected"))
 
         # 3. Scroll down to Link Skill Level section
         self.log(t("tasks.link.scrolling_to_link_filter"))
         self.adb.swipe(
-            int(screen_w * 0.50), int(screen_h * 0.68),
-            int(screen_w * 0.50), int(screen_h * 0.22),
-            duration_ms=300
+            int(screen_w * 0.50), int(screen_h * 0.68), int(screen_w * 0.50), int(screen_h * 0.22), duration_ms=300
         )
         self.wait_check(1.0)
 
@@ -288,9 +287,7 @@ class LinkLevelFarmTask(BaseTask):
         status = self.vision.get_link_level_filter_status(scrolled_screen)
         if not status.get("has_link_section", False):
             self.adb.swipe(
-                int(screen_w * 0.50), int(screen_h * 0.68),
-                int(screen_w * 0.50), int(screen_h * 0.30),
-                duration_ms=250
+                int(screen_w * 0.50), int(screen_h * 0.68), int(screen_w * 0.50), int(screen_h * 0.30), duration_ms=250
             )
             self.wait_check(1.0)
             scrolled_screen = self.adb.screencap()
@@ -322,7 +319,7 @@ class LinkLevelFarmTask(BaseTask):
         self.box_filter_initialized = True
         return True
 
-    def check_team_links_via_filter(self, screen_w: int, screen_h: int) -> Dict[int, bool]:
+    def check_team_links_via_filter(self, screen_w: int, screen_h: int) -> dict[int, bool]:
         """
         Directly determines link max status for the entire team (slots 1 to 6)
         using Dokkan's built-in 'All at Max Level' filter.
@@ -337,7 +334,7 @@ class LinkLevelFarmTask(BaseTask):
         box_screen = self.adb.screencap()
         maxed_slots = self.vision.get_team_slots_in_box(box_screen)
 
-        status: Dict[int, bool] = {}
+        status: dict[int, bool] = {}
         for slot in range(1, 7):
             is_max = slot in maxed_slots
             status[slot] = is_max
@@ -350,12 +347,7 @@ class LinkLevelFarmTask(BaseTask):
         self.set_box_link_filter("level_up_possible", screen_w, screen_h)
         return status
 
-    def rebuild_team_from_box(
-        self,
-        screen_w: int,
-        screen_h: int,
-        meta: Optional[Dict[str, Any]] = None
-    ) -> bool:
+    def rebuild_team_from_box(self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None) -> bool:
         """
         Implements pre-stage team management before starting the stage:
         1. Opens Team Formation from the pre-battle screen (TEAM_CONFIRM).
@@ -452,12 +444,7 @@ class LinkLevelFarmTask(BaseTask):
         self._team_prepared_for_run = True
         return True
 
-    def check_and_swap_team_via_filter(
-        self,
-        screen_w: int,
-        screen_h: int,
-        meta: Optional[Dict[str, Any]] = None
-    ) -> bool:
+    def check_and_swap_team_via_filter(self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None) -> bool:
         """
         Authoritative team link verification and automatic swap routine:
         1. Navigates to TEAM_EDIT from TEAM_CONFIRM if needed.
@@ -537,13 +524,13 @@ class LinkLevelFarmTask(BaseTask):
 
         return swapped_any
 
-    def swap_maxed_unit(self, slot_idx: int, screen_w: int, screen_h: int, meta: Dict[str, Any]):
+    def swap_maxed_unit(self, slot_idx: int, screen_w: int, screen_h: int, meta: dict[str, Any]):
         """Legacy helper kept for backward compatibility."""
         human_slot = slot_idx + 1
         self.log(t("tasks.link.unit_maxed_swap", slot=human_slot))
         self.check_and_swap_team_via_filter(screen_w, screen_h, meta)
 
-    def check_and_swap_team_if_needed(self, screen: Any, screen_w: int, screen_h: int, meta: Dict[str, Any]) -> bool:
+    def check_and_swap_team_if_needed(self, screen: Any, screen_w: int, screen_h: int, meta: dict[str, Any]) -> bool:
         """
         Inspects all swappable slots (0 to 5) for MAX link level badges using the in-game filter.
         If a maxed slot is found, performs swap and returns True.
@@ -556,7 +543,11 @@ class LinkLevelFarmTask(BaseTask):
         """Main Link Level farm loop."""
         self.is_running = True
         self.runs_completed = 0
-        event_name = self.target_event.get("name", "Chamber of Spirit and Time") if self.target_event else "Chamber of Spirit and Time"
+        event_name = (
+            self.target_event.get("name", "Chamber of Spirit and Time")
+            if self.target_event
+            else "Chamber of Spirit and Time"
+        )
         runs_display = str(self.runs_target) if self.runs_target is not None else "∞"
         self.log(t("tasks.link.started", runs=runs_display, event=event_name))
         if self.auto_swap:
@@ -732,7 +723,9 @@ class LinkLevelFarmTask(BaseTask):
                         self.stop()
                         break
 
-                prefer_again = self.use_attempt_again and (self.runs_target is None or self.runs_completed < self.runs_target)
+                prefer_again = self.use_attempt_again and (
+                    self.runs_target is None or self.runs_completed < self.runs_target
+                )
                 self.dismiss_results_and_popups(w, h, meta, prefer_again=prefer_again)
                 self.wait_check(1.2)
 

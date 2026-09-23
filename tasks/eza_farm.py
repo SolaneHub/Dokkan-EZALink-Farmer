@@ -1,10 +1,13 @@
+from collections.abc import Callable
+from typing import Any
+
 import cv2
 import numpy as np
-from typing import Dict, Any, Optional, Callable
+
 from core.adb_client import ADBClient
-from core.vision import Vision
 from core.game_state import GameState
 from core.i18n import t
+from core.vision import Vision
 from tasks.base_task import BaseTask
 
 
@@ -25,18 +28,18 @@ class EZAFarmTask(BaseTask):
         self,
         adb: ADBClient,
         vision: Vision,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         target_level: int = 999,
-        target_eza: Optional[Dict[str, Any]] = None,
-        on_status: Optional[Callable[[str], None]] = None,
-        on_run_complete: Optional[Callable[[int, int], None]] = None
+        target_eza: dict[str, Any] | None = None,
+        on_status: Callable[[str], None] | None = None,
+        on_run_complete: Callable[[int, int], None] | None = None,
     ):
         super().__init__(adb, vision, config, on_status, on_run_complete)
         self.target_level = target_level
         self.target_eza = target_eza
         self.target_eza_selected = False
         self.platinum_statues_earned = 0
-        self._target_banner_img: Optional[np.ndarray] = None
+        self._target_banner_img: np.ndarray | None = None
         if self.target_eza and self.target_eza.get("banner_local_path"):
             self._target_banner_img = cv2.imread(self.target_eza["banner_local_path"], cv2.IMREAD_UNCHANGED)
 
@@ -45,14 +48,21 @@ class EZAFarmTask(BaseTask):
         self.runs_completed += 1
         self.platinum_statues_earned += 1
         est_zeni = self.platinum_statues_earned * 1.5
-        self.log(t("tasks.eza.victory", runs=self.runs_completed, statues=self.platinum_statues_earned, zeni=f"{est_zeni:.1f}"))
+        self.log(
+            t(
+                "tasks.eza.victory",
+                runs=self.runs_completed,
+                statues=self.platinum_statues_earned,
+                zeni=f"{est_zeni:.1f}",
+            )
+        )
         self.on_run_complete(self.runs_completed, self.target_level)
 
     def scroll_to_bottom(self, max_flings: int = 15):
         """Fling-scrolls rapidly until reaching the very bottom of the Z-Battle list."""
         self.log(t("tasks.eza.scrolling_to_bottom"))
         prev_screen = None
-        for i in range(max_flings):
+        for _ in range(max_flings):
             if self._stop_event.is_set():
                 break
 
@@ -73,7 +83,14 @@ class EZAFarmTask(BaseTask):
             if prev_screen is not None:
                 r_y1, r_y2 = int(h * 0.25), int(h * 0.75)
                 r_x1, r_x2 = int(w * 0.05), int(w * 0.95)
-                diff = float(np.mean(np.abs(prev_screen[r_y1:r_y2, r_x1:r_x2].astype(float) - curr_screen[r_y1:r_y2, r_x1:r_x2].astype(float))))
+                diff = float(
+                    np.mean(
+                        np.abs(
+                            prev_screen[r_y1:r_y2, r_x1:r_x2].astype(float)
+                            - curr_screen[r_y1:r_y2, r_x1:r_x2].astype(float)
+                        )
+                    )
+                )
                 if diff < 8.0:
                     self.log(t("tasks.eza.scroll_finished"))
                     break
@@ -92,7 +109,7 @@ class EZAFarmTask(BaseTask):
             return False
 
         max_scroll_ups = 10
-        for attempt in range(max_scroll_ups):
+        for _attempt in range(max_scroll_ups):
             if self._stop_event.is_set():
                 return False
 
@@ -110,9 +127,9 @@ class EZAFarmTask(BaseTask):
             badges.sort(key=lambda b: b[1], reverse=True)
             self.log(t("tasks.eza.scanning_banners", count=len(badges)))
 
-            for idx, (cx, cy, conf) in enumerate(badges):
+            for idx, (cx, cy, _conf) in enumerate(badges):
                 # Crop number area to the right of 'NEXT >> Lv.'
-                num_crop = screen[max(0, cy - 50):min(h, cy + 50), max(0, cx + 20):min(w, cx + 240)]
+                num_crop = screen[max(0, cy - 50) : min(h, cy + 50), max(0, cx + 20) : min(w, cx + 240)]
                 is_999 = False
                 if num_crop.shape[0] >= template_999.shape[0] and num_crop.shape[1] >= template_999.shape[1]:
                     res_num = cv2.matchTemplate(num_crop, template_999, cv2.TM_CCOEFF_NORMED)
@@ -147,11 +164,11 @@ class EZAFarmTask(BaseTask):
         if self._target_banner_img is None:
             return False
 
-        target_name = self.target_eza.get("name", "Target EZA")
+        target_name = (self.target_eza.get("name") if self.target_eza else None) or "Target EZA"
         self.log(t("tasks.eza.searching_target", name=target_name))
 
         prev_screen = None
-        for attempt in range(max_scrolls):
+        for _attempt in range(max_scrolls):
             if self._stop_event.is_set():
                 return False
 
@@ -173,7 +190,13 @@ class EZAFarmTask(BaseTask):
             if prev_screen is not None:
                 r_y1, r_y2 = int(h * 0.25), int(h * 0.75)
                 r_x1, r_x2 = int(w * 0.05), int(w * 0.95)
-                diff = float(np.mean(np.abs(prev_screen[r_y1:r_y2, r_x1:r_x2].astype(float) - screen[r_y1:r_y2, r_x1:r_x2].astype(float))))
+                diff = float(
+                    np.mean(
+                        np.abs(
+                            prev_screen[r_y1:r_y2, r_x1:r_x2].astype(float) - screen[r_y1:r_y2, r_x1:r_x2].astype(float)
+                        )
+                    )
+                )
                 if diff < 6.0:
                     self.log(t("tasks.eza.target_banner_not_found", name=target_name))
                     return False
@@ -191,7 +214,7 @@ class EZAFarmTask(BaseTask):
         self.is_running = True
         self.runs_completed = 0
         self.platinum_statues_earned = 0
-        self.log(f"🔥 Extreme Z-Battle (EZA) farm started up to level {self.target_level}!")
+        self.log(t("tasks.eza.started", level=self.target_level))
 
         unknown_counter = 0
         in_battle = False

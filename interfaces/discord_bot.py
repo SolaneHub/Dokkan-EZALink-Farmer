@@ -1,15 +1,14 @@
-import os
-import io
-import time
 import asyncio
+import io
+from typing import Any
+
 import cv2
 import discord
 from discord import app_commands
 from discord.ext import commands
-from typing import Any, Optional
 
 from core.bot_engine import BotEngine
-from core.i18n import t
+from core.i18n import get_language, t
 
 
 class DiscordBotClient(commands.Bot):
@@ -19,8 +18,8 @@ class DiscordBotClient(commands.Bot):
         intents = discord.Intents.default()
         super().__init__(command_prefix="!", intents=intents)
         self.engine = engine
-        self._main_channel: Optional[discord.TextChannel] = None
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._main_channel: discord.abc.Messageable | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     async def setup_hook(self):
         self._loop = asyncio.get_running_loop()
@@ -42,23 +41,33 @@ class DiscordBotClient(commands.Bot):
     def _on_bot_log(self, msg: str):
         if self._main_channel and self._loop:
             # Relay notification if message indicates a significant state change
-            keywords = ["complet", "Stamina", "Game Over", "Error", "Errore", "Start", "Inizio", "trovat", "found", "victory"]
+            keywords = [
+                "complet",
+                "Stamina",
+                "Game Over",
+                "Error",
+                "Errore",
+                "Start",
+                "Inizio",
+                "trovat",
+                "found",
+                "victory",
+            ]
             if any(k.lower() in msg.lower() for k in keywords):
-                asyncio.run_coroutine_threadsafe(
-                    self._main_channel.send(f"🤖 **[Dokkan-EZALink]** {msg}"),
-                    self._loop
-                )
+                asyncio.run_coroutine_threadsafe(self._main_channel.send(f"🤖 **[Dokkan-EZALink]** {msg}"), self._loop)
 
     def _on_bot_run(self, curr: int, tot: Any):
         if self._main_channel and self._loop:
             tot_str = str(tot) if tot and tot > 0 else "∞"
             asyncio.run_coroutine_threadsafe(
-                self._main_channel.send(f"📊 **Progress:** `{curr}/{tot_str}` runs completed."),
-                self._loop
+                self._main_channel.send(f"📊 **Progress:** `{curr}/{tot_str}` runs completed."), self._loop
             )
 
     async def on_ready(self):
-        print(f"[Discord] Bot logged in as {self.user.name} (ID: {self.user.id})")
+        if self.user:
+            print(f"[Discord] Bot logged in as {self.user.name} (ID: {self.user.id})")
+        else:
+            print("[Discord] Bot logged in")
         try:
             await self.change_presence(
                 activity=discord.Activity(type=discord.ActivityType.playing, name="EZA 999 & Link Leveling")
@@ -67,8 +76,9 @@ class DiscordBotClient(commands.Bot):
             pass
         target_channel_id = self.engine.config.get("discord", {}).get("channel_id")
         if target_channel_id:
-            self._main_channel = self.get_channel(target_channel_id)
-            if self._main_channel:
+            channel = self.get_channel(target_channel_id)
+            if isinstance(channel, discord.abc.Messageable):
+                self._main_channel = channel
                 await self._main_channel.send(t("discord.bot_ready"))
 
     async def _register_slash_commands(self):
@@ -81,14 +91,22 @@ class DiscordBotClient(commands.Bot):
             info = self.engine.get_status_summary()
             embed = discord.Embed(
                 title=t("discord.status_title"),
-                color=discord.Color.gold() if info["task_running"] else discord.Color.blue()
+                color=discord.Color.gold() if info["task_running"] else discord.Color.blue(),
             )
-            embed.add_field(name=t("discord.field_device"), value=str(info["device_serial"] or t("discord.val_none")), inline=True)
-            embed.add_field(name=t("discord.field_running"), value=t("discord.val_yes") if info["task_running"] else t("discord.val_no"), inline=True)
+            embed.add_field(
+                name=t("discord.field_device"), value=str(info["device_serial"] or t("discord.val_none")), inline=True
+            )
+            embed.add_field(
+                name=t("discord.field_running"),
+                value=t("discord.val_yes") if info["task_running"] else t("discord.val_no"),
+                inline=True,
+            )
             embed.add_field(name=t("discord.field_task"), value=str(info["task_type"]), inline=True)
             runs_target_val = info.get("runs_target")
             target_display = str(runs_target_val) if runs_target_val is not None and runs_target_val > 0 else "∞"
-            embed.add_field(name=t("discord.field_progress"), value=f"{info['runs_completed']} / {target_display}", inline=True)
+            embed.add_field(
+                name=t("discord.field_progress"), value=f"{info['runs_completed']} / {target_display}", inline=True
+            )
             embed.add_field(name=t("discord.field_screen"), value=str(info["current_state"]), inline=True)
 
             await interaction.response.send_message(embed=embed)
@@ -110,12 +128,13 @@ class DiscordBotClient(commands.Bot):
 
         @self.tree.command(name="eza", description="Starts continuous automated climbing in Extreme Z-Battle")
         @app_commands.describe(target_level="Target level to reach (default: 999)")
-        async def cmd_eza(interaction: discord.Interaction, target_level: Optional[int] = 999):
+        async def cmd_eza(interaction: discord.Interaction, target_level: int | None = 999):
             if not self._is_user_allowed(interaction.user.id):
                 await interaction.response.send_message(t("discord.not_authorized"), ephemeral=True)
                 return
 
-            self._main_channel = interaction.channel
+            if isinstance(interaction.channel, discord.abc.Messageable):
+                self._main_channel = interaction.channel
             ok = self.engine.start_eza_farm(target_level=target_level or 999)
             if ok:
                 await interaction.response.send_message(t("discord.eza_started", level=target_level or 999))
@@ -124,16 +143,17 @@ class DiscordBotClient(commands.Bot):
 
         @self.tree.command(name="link", description="Starts Link Level farming (Chamber of Spirit and Time)")
         @app_commands.describe(runs="Number of runs (optional: leave empty to farm until stamina runs out)")
-        async def cmd_link(interaction: discord.Interaction, runs: Optional[int] = None):
+        async def cmd_link(interaction: discord.Interaction, runs: int | None = None):
             if not self._is_user_allowed(interaction.user.id):
                 await interaction.response.send_message(t("discord.not_authorized"), ephemeral=True)
                 return
 
-            self._main_channel = interaction.channel
+            if isinstance(interaction.channel, discord.abc.Messageable):
+                self._main_channel = interaction.channel
             actual_runs = runs if (runs is not None and runs > 0) else None
             ok = self.engine.start_link_level_farm(runs=actual_runs)
             if ok:
-                runs_label = str(actual_runs) if actual_runs is not None else "illimitate (fino a esaurimento stamina)"
+                runs_label = str(actual_runs) if actual_runs is not None else t("discord.link_runs_unlimited")
                 await interaction.response.send_message(t("discord.link_started", runs=runs_label))
             else:
                 await interaction.response.send_message(t("discord.task_conflict"))
@@ -167,10 +187,9 @@ class DiscordBotClient(commands.Bot):
 
         @self.tree.command(name="scrcpy", description="Starts or stops scrcpy screen mirroring on host computer")
         @app_commands.describe(action="start or stop")
-        @app_commands.choices(action=[
-            app_commands.Choice(name="start", value="start"),
-            app_commands.Choice(name="stop", value="stop")
-        ])
+        @app_commands.choices(
+            action=[app_commands.Choice(name="start", value="start"), app_commands.Choice(name="stop", value="stop")]
+        )
         async def cmd_scrcpy(interaction: discord.Interaction, action: app_commands.Choice[str]):
             if not self._is_user_allowed(interaction.user.id):
                 await interaction.response.send_message(t("discord.not_authorized"), ephemeral=True)
@@ -187,42 +206,48 @@ class DiscordBotClient(commands.Bot):
 
 def setup_discord_interactive(engine: BotEngine) -> bool:
     """Interactively guides the user through setting up Discord bot credentials and saves them to settings.yaml."""
+    lang = get_language()
+    doc_path = "docs/DISCORD_SETUP.it.md" if lang == "it" else "docs/DISCORD_SETUP.md"
+    none_val = t("discord.setup.val_none")
+    all_val = t("discord.setup.val_all")
+
     print("=" * 65)
-    print("🤖 CONFIGURAZIONE DISCORD BOT / DISCORD SETUP WIZARD")
+    print(t("discord.setup.title"))
     print("=" * 65)
-    print("Per collegare il bot a Discord ti servono:")
-    print("1. Il Bot Token (da https://discord.com/developers/applications)")
-    print("2. L'ID del canale Discord per notifiche e screenshot")
-    print("Guida dettagliata passo-passo: docs/DISCORD_SETUP.it.md")
+    print(t("discord.setup.requirements"))
+    print(t("discord.setup.req_token"))
+    print(t("discord.setup.req_channel"))
+    print(t("discord.setup.guide", doc_path=doc_path))
     print("-" * 65)
 
     current_discord = engine.config.get("discord", {})
     current_token = current_discord.get("token", "")
-    masked_token = f"...{current_token[-6:]}" if len(current_token) > 6 else "(nessuno)"
+    masked_token = f"...{current_token[-6:]}" if len(current_token) > 6 else f"({none_val})"
 
     try:
-        token = input(f"Inserisci Bot Token [{masked_token}]: ").strip()
+        token = input(t("discord.setup.prompt_token", masked=masked_token)).strip()
         if not token and current_token:
             token = current_token
 
         if not token or token.startswith("YOUR_DISCORD"):
-            print("❌ Token non inserito. Configurazione annullata.")
+            print(t("discord.setup.token_empty"))
             return False
 
         current_channel = str(current_discord.get("channel_id", "") or "")
-        channel_input = input(f"Inserisci ID Canale Discord [{current_channel or 'nessuno'}]: ").strip()
+        channel_placeholder = current_channel if current_channel else none_val
+        channel_input = input(t("discord.setup.prompt_channel", current=channel_placeholder)).strip()
         if not channel_input and current_channel:
             channel_input = current_channel
 
         try:
             channel_id = int(channel_input) if channel_input else 0
         except ValueError:
-            print("⚠️ ID canale non valido, impostato a 0.")
+            print(t("discord.setup.channel_invalid"))
             channel_id = 0
 
         current_users = current_discord.get("allowed_user_ids", [])
-        current_users_str = ", ".join(str(u) for u in current_users) if current_users else "tutti"
-        user_input = input(f"Inserisci il tuo ID Utente Discord (opzionale, attuale: {current_users_str}): ").strip()
+        current_users_str = ", ".join(str(u) for u in current_users) if current_users else all_val
+        user_input = input(t("discord.setup.prompt_user", current=current_users_str)).strip()
         allowed_user_ids = current_users
         if user_input:
             try:
@@ -238,11 +263,11 @@ def setup_discord_interactive(engine: BotEngine) -> bool:
         engine.config["discord"]["allowed_user_ids"] = allowed_user_ids
         engine.save_config()
 
-        print("✓ Credenziali salvate con successo in config/settings.yaml!")
+        print(t("discord.setup.saved"))
         print("=" * 65)
         return True
     except (KeyboardInterrupt, EOFError):
-        print("\nOperazione annullata.")
+        print(f"\n{t('discord.setup.cancelled')}")
         return False
 
 
@@ -253,7 +278,7 @@ def run_discord_bot(engine: BotEngine):
         print(t("discord.missing_token_warning"))
         print(t("discord.missing_token_hint"))
         try:
-            choice = input("\nVuoi configurare il bot Discord adesso? [S/n]: ").strip().lower()
+            choice = input(t("discord.prompt_configure_now")).strip().lower()
             if choice not in ("n", "no"):
                 ok = setup_discord_interactive(engine)
                 if not ok:
