@@ -13,25 +13,27 @@
 
 ---
 
-## 💻 1. Avvio dell'Eseguibile Standalone (Cartella `dist/`)
+## 💻 1. Avvio del Bot (Launcher 1-Click & Standalone)
 
-Il bot è compilato come binario terminale puro (console). Non richiede l'installazione di Python né di librerie esterne.
-
-Puoi avviare il bot direttamente con un **doppio clic** (senza aprire il terminale):
-* **Su Windows:** Doppio clic su `Launch-Dokkan-EZALink.bat` (oppure su `dokkan-eza-link.exe`).
-* **Su macOS:** Doppio clic su `Launch-Dokkan-EZALink.command` (apre automaticamente il Terminale ed esegue il bot).
+Puoi avviare il bot direttamente con un **doppio clic** (senza aprire manualmente il terminale):
+* **Su Windows:** Doppio clic su `Launch-Dokkan-EZALink.bat`.
+* **Su macOS:** Doppio clic su `Launch-Dokkan-EZALink.command` (apre automaticamente il Terminale ed esegue il binario standalone; rimuove in automatico la quarantena di Gatekeeper).
 * **Su Linux:** Doppio clic su `Launch-Dokkan-EZALink.sh` (oppure `./Launch-Dokkan-EZALink.sh` da terminale).
+
+> 💡 **Nota macOS:** Se esegui il binario direttamente da terminale invece di usare `.command`, rimuovi l'attributo di quarantena scaricato dal browser con: `xattr -dr com.apple.quarantine .`
 
 ---
 
-In alternativa, puoi aprirlo da qualsiasi riga di comando (PowerShell, CMD, bash, zsh):
+In alternativa, puoi aprirlo da qualsiasi riga di comando:
 
 ```bash
-# Windows:
-.\dokkan-eza-link.exe
+# Windows (PowerShell / CMD):
+.\Launch-Dokkan-EZALink.bat
+# oppure con Python:
+python main.py
 
 # macOS / Linux:
-./dokkan-eza-link
+./Launch-Dokkan-EZALink
 ```
 
 ---
@@ -54,20 +56,20 @@ Puoi passare argomenti diretti all'eseguibile per eseguire compiti specifici sen
 
 ### Esempi Rapidi:
 ```bash
-# Diagnostica di sistema in inglese (default)
-./dokkan-eza-link --doctor
+# Esegui la diagnosi preliminare dell'ambiente (ADB, Scrcpy, risoluzioni):
+./Launch-Dokkan-EZALink --doctor
 
-# Diagnostica di sistema in italiano
-./dokkan-eza-link --lang it --doctor
+# Esegui la diagnosi forzando l'interfaccia in italiano:
+./Launch-Dokkan-EZALink --lang it --doctor
 
-# Avvia direttamente la scalata EZA fino a 999 (Farming Zeni)
-./dokkan-eza-link --eza
+# Avvia direttamente la scalata continua dell'EZA senza conferme:
+./Launch-Dokkan-EZALink --eza
 
-# Esegui 30 run della Stanza dello Spirito e del Tempo per i Link
-./dokkan-eza-link --link 30
+# Esegui 30 run della Stanza dello Spirito e del Tempo per i Link:
+./Launch-Dokkan-EZALink --link 30
 
-# Apri il mirroring a schermo del telefono con scrcpy
-./dokkan-eza-link --scrcpy
+# Apri la finestra video di mirroring dello smartphone sul computer:
+./Launch-Dokkan-EZALink --scrcpy
 ```
 
 ---
@@ -117,11 +119,11 @@ Non è necessario modificare manualmente i file YAML! Puoi configurare il bot in
    # Con Python:
    python main.py --discord
 
-   # Con l'eseguibile standalone (Windows):
-   .\dokkan-eza-link.exe --discord
+   # Con il launcher (Windows):
+   .\Launch-Dokkan-EZALink.bat --discord
 
    # Con l'eseguibile standalone (macOS / Linux):
-   ./dokkan-eza-link --discord
+   ./Launch-Dokkan-EZALink --discord
    ```
    Se il bot non è ancora configurato, il wizard guidato si avvierà automaticamente chiedendoti di incollare:
    - **Bot Token**: il token ottenuto dal Discord Developer Portal
@@ -136,7 +138,7 @@ Non è necessario modificare manualmente i file YAML! Puoi configurare il bot in
 
 Una volta configurato, puoi avviare la modalità Discord in qualsiasi momento:
 - Dalla console CLI: digita `discord start`
-- Da terminale: esegui con il flag `--discord` (`dokkan-eza-link.exe --discord`)
+- Da terminale: esegui con il flag `--discord` (`.\Launch-Dokkan-EZALink.bat --discord` su Windows o `./Launch-Dokkan-EZALink --discord` su macOS/Linux)
 
 ### 🎮 Comandi Slash Disponibili su Discord:
 - `/status`: Mostra un riepilogo dettagliato con dispositivo connesso, run completate, stato attuale e statistiche Zeni/Statue di Satan.
@@ -151,7 +153,7 @@ Una volta configurato, puoi avviare la modalità Discord in qualsiasi momento:
 
 ## 🛠️ 5. Compilazione dell'Eseguibile Standalone (`scripts/build_dist.py`)
 
-Se modifichi il codice sorgente e desideri ricompilare il pacchetto `dist/dokkan-eza-link`:
+Se modifichi il codice sorgente e desideri ricompilare il pacchetto `dist/Launch-Dokkan-EZALink`:
 
 ```bash
 # Compilazione in cartella distribuibile (--onedir)

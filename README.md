@@ -60,62 +60,83 @@ A laser-focused, lightweight computer-vision automation tool designed exclusivel
 
 ## 🚀 Quick Start
 
-### Option A: Standalone Executable (Recommended, No Python Required)
-Download the pre-compiled package for your operating system from the [**Releases**](https://github.com/) page:
-- **Windows:** Download `dokkan-eza-link-windows-x64.zip`, extract, and double-click `Launch-Dokkan-EZALink.bat` (or `dokkan-eza-link.exe`).
-- **macOS:** Download `dokkan-eza-link-macos.zip`, extract, and double-click `Launch-Dokkan-EZALink.command` (opens Terminal automatically).
+#### Option A: Standalone Releases (Recommended, No Python Required)
+Download the pre-compiled package for your operating system from the [**Releases**](https://github.com/SolaneHub/Dokkan-EZALink-Farmer/releases) page:
+- **Windows:** Download `dokkan-eza-link-windows.zip`, extract, and double-click `Launch-Dokkan-EZALink.bat`.
+- **macOS:** Download `dokkan-eza-link-macos.zip`, extract, and double-click `Launch-Dokkan-EZALink.command`.
 - **Linux:** Download `dokkan-eza-link-linux-x64.zip`, extract, and double-click `Launch-Dokkan-EZALink.sh`.
 
 ### Option B: Running from Python Source
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-repo/Dokkan-EZALink-Farmer.git
+   git clone https://github.com/SolaneHub/Dokkan-EZALink-Farmer.git
    cd Dokkan-EZALink-Farmer
    ```
-
-2. **Create a virtual environment & install dependencies:**
+2. **Install dependencies:**
    ```bash
-   python -m venv venv
-   # On Windows:
-   .\venv\Scripts\activate
-   # On macOS/Linux:
-   source venv/bin/activate
-
    pip install -r requirements.txt
    ```
-
-3. **Verify your environment:**
+3. **Verify environment setup:**
    ```bash
    python main.py --doctor
    ```
 
 ---
 
-## ⚡ Command Line Usage
+## ⚡ Direct Command-Line Launchers
 
-You can start tasks directly from your terminal:
+You don't need to stay inside the interactive console. Pass flags directly for quick actions:
 
 ```bash
-# Verify environment (scrcpy, adb, OS, connected phones/emulators)
+# System Diagnostics
 python main.py --doctor
 
-# Set interface to Italian and run doctor check
-python main.py --lang it --doctor
-
-# Start automated EZA climbing up to Lv. 999 (Zeni farming)
+# Immediate EZA Auto-Climb up to Lv. 999
 python main.py --eza
 
-# Start Link Level farming on Chamber of Spirit and Time (runs until stamina empty)
-python main.py --link
+# Automatic Link-Leveling for 30 runs
+python main.py --link 30
 
-# Farm 10 runs of Chamber of Spirit and Time with Boost active
+# Automatic Link-Leveling with stamina boost active
 python main.py --link 10 --boost
 
-# Open real-time scrcpy screen mirroring (for physical phones)
+# Mirror phone screen via scrcpy
 python main.py --scrcpy
 ```
 
-*(If using the standalone binary, replace `python main.py` with `.\dokkan-eza-link.exe` on Windows or `./dokkan-eza-link` on macOS/Linux).*
+*(If using the pre-compiled distribution, replace `python main.py` with `.\Launch-Dokkan-EZALink.bat` on Windows, or `./Launch-Dokkan-EZALink` on macOS/Linux).*
+
+---
+
+## 🤖 Remote Discord Automation (Zero-Config Setup)
+
+Control your farming sessions remotely from your smartphone or PC via Discord!
+
+### ⚡ Guided Setup Wizard:
+Simply run:
+```bash
+dokkan-farmer> discord setup
+```
+Or launch Discord mode directly from the terminal:
+```bash
+python main.py --discord
+# or with standalone executable / launcher:
+.\Launch-Dokkan-EZALink.bat --discord   # Windows
+./Launch-Dokkan-EZALink --discord       # macOS / Linux
+```
+If no token is configured, the bot will prompt you to paste your **Bot Token** and **Channel ID** and save it directly to [`config/settings.yaml`](config/settings.yaml).
+
+For a complete guide on creating your Discord bot application and getting your token in 2 minutes, see [**Discord Setup Guide**](docs/DISCORD_SETUP.md).
+
+---
+
+## 🛠️ Building Standalone Binaries
+
+To compile your own standalone executable locally:
+```bash
+python scripts/build_dist.py
+```
+Pre-compiled builds are also generated automatically on **GitHub Releases** via GitHub Actions for Windows, macOS, and Linux.
 
 ---
 
@@ -150,8 +171,9 @@ dokkan-farmer> discord setup
 Or launch Discord mode directly from the terminal:
 ```bash
 python main.py --discord
-# or with standalone executable:
-.\dokkan-eza-link.exe --discord
+# or with standalone launcher:
+.\Launch-Dokkan-EZALink.bat --discord   # Windows
+./Launch-Dokkan-EZALink --discord       # macOS / Linux
 ```
 If no token is configured, the bot will prompt you to paste your **Bot Token** and **Channel ID** and save it directly to [`config/settings.yaml`](config/settings.yaml).
 
@@ -170,13 +192,13 @@ If no token is configured, the bot will prompt you to paste your **Bot Token** a
 
 ---
 
-## 🛠️ Building Standalone Binaries
+## 🛠️ Building Standalone Binaries (macOS & Linux)
 
-To compile your own standalone executables locally:
+To compile your own standalone executable locally:
 ```bash
 python scripts/build_dist.py
 ```
-Pre-compiled builds are also generated automatically on **GitHub Releases** via GitHub Actions for Windows, macOS, and Linux.
+Pre-compiled builds are generated automatically on **GitHub Releases** via GitHub Actions for macOS and Linux.
 
 ---
 

@@ -13,25 +13,27 @@
 
 ---
 
-## 💻 1. Launching the Standalone Executable (`dist/` Folder)
-
-The bot is bundled as a pure terminal (console) executable. It does not require Python or any external packages to be installed on the target machine.
+## 💻 1. Launching the Bot (1-Click Launchers & Standalone)
 
 You can launch the bot immediately with a simple **double-click** (no terminal commands needed):
-* **On Windows:** Double-click `Launch-Dokkan-EZALink.bat` (or `dokkan-eza-link.exe`).
-* **On macOS:** Double-click `Launch-Dokkan-EZALink.command` (automatically opens Terminal and runs the bot).
+* **On Windows:** Double-click `Launch-Dokkan-EZALink.bat`.
+* **On macOS:** Double-click `Launch-Dokkan-EZALink.command` (automatically opens Terminal, removes browser quarantine, and runs standalone binary).
 * **On Linux:** Double-click `Launch-Dokkan-EZALink.sh` (or run `./Launch-Dokkan-EZALink.sh`).
+
+> 💡 **macOS Note:** If executing the binary directly from terminal rather than using `.command`, remove browser download quarantine with: `xattr -dr com.apple.quarantine .`
 
 ---
 
 Alternatively, you can run it from any shell / terminal (PowerShell, CMD, bash, zsh):
 
 ```bash
-# Windows:
-.\dokkan-eza-link.exe
+# Windows (PowerShell / CMD):
+.\Launch-Dokkan-EZALink.bat
+# or with Python directly:
+python main.py
 
 # macOS / Linux:
-./dokkan-eza-link
+./Launch-Dokkan-EZALink
 ```
 
 ---
@@ -54,20 +56,20 @@ You can pass arguments directly to the executable to perform specific tasks with
 
 ### Quick Examples:
 ```bash
-# System diagnostic check in English (default)
-./dokkan-eza-link --doctor
+# Run system doctor in English (default):
+./Launch-Dokkan-EZALink --doctor
 
-# System diagnostic check in Italian
-./dokkan-eza-link --lang it --doctor
+# Run system doctor in Italian:
+./Launch-Dokkan-EZALink --lang it --doctor
 
-# Start EZA automated climb up to level 999
-./dokkan-eza-link --eza
+# Start automatic EZA climbing directly:
+./Launch-Dokkan-EZALink --eza
 
-# Run 30 Link Level farming iterations on Chamber of Spirit and Time
-./dokkan-eza-link --link 30
+# Farm 30 runs of Chamber of Spirit and Time:
+./Launch-Dokkan-EZALink --link 30
 
-# Launch scrcpy screen mirror
-./dokkan-eza-link --scrcpy
+# Launch phone screen mirroring window:
+./Launch-Dokkan-EZALink --scrcpy
 ```
 
 ---
@@ -117,11 +119,8 @@ You do NOT need to edit YAML files manually! You can set up your Discord bot in 
    # With Python:
    python main.py --discord
 
-   # With standalone executable (Windows):
-   .\dokkan-eza-link.exe --discord
-
    # With standalone executable (macOS / Linux):
-   ./dokkan-eza-link --discord
+   ./Launch-Dokkan-EZALink --discord
    ```
    If not yet configured, the setup wizard will launch automatically and prompt you to input:
    - **Bot Token**: Your bot token copied from the Discord Developer Portal
@@ -136,7 +135,7 @@ You do NOT need to edit YAML files manually! You can set up your Discord bot in 
 
 Once configured, run the Discord bot anytime:
 - From the interactive console: type `discord start`
-- From the command line: pass the `--discord` flag (`dokkan-eza-link.exe --discord`)
+- From the command line: pass the `--discord` flag (`.\Launch-Dokkan-EZALink.bat --discord` on Windows or `./Launch-Dokkan-EZALink --discord` on macOS/Linux)
 
 ### 🎮 Available Discord Slash Commands:
 - `/status`: Displays an embed card with connected device, completed runs, active state, and Zeni / Platinum Statue statistics.
@@ -149,9 +148,9 @@ Once configured, run the Discord bot anytime:
 
 ---
 
-## 🛠️ 5. Compiling the Standalone Binary (`scripts/build_dist.py`)
+## 🛠️ 5. Compiling Standalone Executables (`scripts/build_dist.py`)
 
-If you modify the source code and wish to recompile the `dist/dokkan-eza-link` distribution:
+If you modify the source code and wish to recompile the `dist/Launch-Dokkan-EZALink` distribution:
 
 ```bash
 # Compile standalone distribution directory (--onedir)

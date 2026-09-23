@@ -2,7 +2,7 @@
 
 This guide explains how to create, configure, and connect your own Discord bot to **Dokkan-EZALink-Farmer** in under 2 minutes.
 
-Works seamlessly whether you run the bot from Python source (`python main.py`) or use the standalone executable (`dokkan-eza-link.exe` / macOS / Linux).
+Works seamlessly whether you run the bot from Python source (`python main.py`) or use the launcher (`Launch-Dokkan-EZALink.bat` / `Launch-Dokkan-EZALink`).
 
 ---
 
@@ -69,8 +69,9 @@ dokkan-farmer> discord setup
 Or launch directly from terminal with:
 ```bash
 python main.py --discord
-# or with standalone executable:
-.\dokkan-eza-link.exe --discord
+# or with launcher / standalone binary:
+.\Launch-Dokkan-EZALink.bat --discord
+# or: ./Launch-Dokkan-EZALink --discord (macOS/Linux)
 ```
 The wizard will prompt you for your Token, Channel ID, and optional User ID, saving everything automatically!
 
