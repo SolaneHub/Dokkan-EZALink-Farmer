@@ -23,8 +23,8 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact_name: dokkan-eza-link-windows-x64
-            asset_filename: dokkan-eza-link-windows-x64.zip
+            artifact_name: dokkan-eza-link-windows
+            asset_filename: dokkan-eza-link-windows.zip
           - os: macos-latest
             artifact_name: dokkan-eza-link-macos
             asset_filename: dokkan-eza-link-macos.zip
@@ -56,14 +56,14 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/dokkan-eza-link -DestinationPath dokkan-eza-link-windows-x64.zip
+          Compress-Archive -Path dist/Launch-Dokkan-EZALink -DestinationPath dokkan-eza-link-windows.zip
 
       - name: Package Artifacts (macOS / Linux)
         if: matrix.os != 'windows-latest'
         run: |
-          chmod +x dist/dokkan-eza-link/dokkan-eza-link dist/dokkan-eza-link/Launch-Dokkan-EZALink.* 2>/dev/null || true
+          chmod +x dist/Launch-Dokkan-EZALink/Launch-Dokkan-EZALink dist/Launch-Dokkan-EZALink/Launch-Dokkan-EZALink.* 2>/dev/null || true
           cd dist
-          zip -r ../${{ matrix.asset_filename }} dokkan-eza-link
+          zip -r ../${{ matrix.asset_filename }} Launch-Dokkan-EZALink
           cd ..
 
       - name: Upload Build Artifact
@@ -83,7 +83,7 @@ jobs:
       - name: Download Windows Artifact
         uses: actions/download-artifact@v4
         with:
-          name: dokkan-eza-link-windows-x64
+          name: dokkan-eza-link-windows
 
       - name: Download macOS Artifact
         uses: actions/download-artifact@v4
@@ -109,14 +109,14 @@ jobs:
           # Extract release notes dynamically from CHANGELOG.md for this specific version
           python scripts/extract_release_notes.py "$TAG" --output release_notes.md
 
-          # Create or update GitHub Release with compiled binaries
+          # Create or update GitHub Release with compiled binaries and packages
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists, uploading/overwriting assets and updating notes..."
-            gh release upload "$TAG" dokkan-eza-link-windows-x64.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip --clobber
-            gh release edit "$TAG" --notes-file release_notes.md
+            gh release upload "$TAG" dokkan-eza-link-windows.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip --clobber
+            gh release edit "$TAG" --title "$TAG" --notes-file release_notes.md
           else
             echo "Creating new release $TAG..."
-            gh release create "$TAG" dokkan-eza-link-windows-x64.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip \
-              --title "Dokkan-EZALink-Farmer $TAG" \
+            gh release create "$TAG" dokkan-eza-link-windows.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip \
+              --title "$TAG" \
               --notes-file release_notes.md
           fi

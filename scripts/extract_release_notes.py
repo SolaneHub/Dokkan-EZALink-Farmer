@@ -4,11 +4,9 @@ Extracts release notes for a specific version tag from CHANGELOG.md
 and formats them for GitHub Releases.
 """
 
-import sys
-import re
 import argparse
+import re
 from pathlib import Path
-
 
 DEFAULT_TEMPLATE = """# ⚡ Dokkan-EZALink-Farmer {tag}
 
@@ -18,7 +16,7 @@ DEFAULT_TEMPLATE = """# ⚡ Dokkan-EZALink-Farmer {tag}
 
 ### 📥 Downloads & Assets
 Download the package for your operating system from the **Assets** section below:
-- **Windows (x64):** `dokkan-eza-link-windows-x64.zip`
+- **Windows:** `dokkan-eza-link-windows.zip`
 - **macOS:** `dokkan-eza-link-macos.zip`
 - **Linux (x64):** `dokkan-eza-link-linux-x64.zip`
 
@@ -35,7 +33,7 @@ Release {tag}. For a detailed list of all historical changes and updates, please
 
 ### 📥 Downloads & Assets
 Download the package for your operating system from the **Assets** section below:
-- **Windows (x64):** `dokkan-eza-link-windows-x64.zip`
+- **Windows:** `dokkan-eza-link-windows.zip`
 - **macOS:** `dokkan-eza-link-macos.zip`
 - **Linux (x64):** `dokkan-eza-link-linux-x64.zip`
 
@@ -58,7 +56,9 @@ def extract_notes(changelog_path: Path, tag: str) -> str:
 
     # Pattern matching: ## [v1.0.1] or ## [1.0.1] or ## v1.0.1 or ## 1.0.1
     # followed by anything until next ## [ or ## v or EOF
-    header_pattern = re.compile(r"^##\s+\[?(" + "|".join(map(re.escape, possible_versions)) + r")\]?.*$", re.MULTILINE | re.IGNORECASE)
+    header_pattern = re.compile(
+        r"^##\s+\[?(" + "|".join(map(re.escape, possible_versions)) + r")\]?.*$", re.MULTILINE | re.IGNORECASE
+    )
     match = header_pattern.search(text)
 
     if not match:
@@ -71,7 +71,7 @@ def extract_notes(changelog_path: Path, tag: str) -> str:
     next_match = next_header_pattern.search(text, pos=start_pos)
 
     if next_match:
-        content = text[start_pos:next_match.start()].strip()
+        content = text[start_pos : next_match.start()].strip()
     else:
         content = text[start_pos:].strip()
 
@@ -88,7 +88,9 @@ def main():
     parser = argparse.ArgumentParser(description="Extract release notes from CHANGELOG.md for a given tag.")
     parser.add_argument("tag", help="Release tag (e.g., v1.0.1)")
     parser.add_argument("--changelog", default="CHANGELOG.md", help="Path to CHANGELOG.md (default: CHANGELOG.md)")
-    parser.add_argument("--output", "-o", default="release_notes.md", help="Output file path (default: release_notes.md)")
+    parser.add_argument(
+        "--output", "-o", default="release_notes.md", help="Output file path (default: release_notes.md)"
+    )
 
     args = parser.parse_args()
 
