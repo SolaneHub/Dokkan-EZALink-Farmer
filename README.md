@@ -74,11 +74,12 @@ Download the pre-compiled package for your operating system from the [**Releases
    ```
 2. **Install dependencies:**
    ```bash
-   pip install -r requirements.txt
+   uv sync
    ```
+   *(Alternatively with pip: `pip install -e .`)*
 3. **Verify environment setup:**
    ```bash
-   python main.py --doctor
+   uv run dokkan-farmer --doctor
    ```
 
 ---
@@ -89,22 +90,22 @@ You don't need to stay inside the interactive console. Pass flags directly for q
 
 ```bash
 # System Diagnostics
-python main.py --doctor
+uv run dokkan-farmer --doctor
 
 # Immediate EZA Auto-Climb up to Lv. 999
-python main.py --eza
+uv run dokkan-farmer --eza
 
 # Automatic Link-Leveling for 30 runs
-python main.py --link 30
+uv run dokkan-farmer --link 30
 
 # Automatic Link-Leveling with stamina boost active
-python main.py --link 10 --boost
+uv run dokkan-farmer --link 10 --boost
 
 # Mirror phone screen via scrcpy
-python main.py --scrcpy
+uv run dokkan-farmer --scrcpy
 ```
 
-*(If using the pre-compiled distribution, replace `python main.py` with `.\Launch-Dokkan-EZALink.bat` on Windows, or `./Launch-Dokkan-EZALink` on macOS/Linux).*
+*(If using the pre-compiled distribution, replace `uv run dokkan-farmer` with `.\Launch-Dokkan-EZALink.bat` on Windows, or `./Launch-Dokkan-EZALink` on macOS/Linux).*
 
 ---
 

@@ -1,46 +1,27 @@
 # =====================================================================
-# Git Ignore - Dokkan Battle Automation Bot
+# Git Ignore - Modern Python & Dokkan Battle Automation Bot
 # =====================================================================
 
-# Virtual Environments
-venv/
+# Virtual Environment (uv / PEP 668)
 .venv/
-env/
-ENV/
-env.bak/
-venv.bak/
 
-# Byte-compiled / optimized / cache files
+# Byte-compiled / cache files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 
-# Testing & Coverage
+# Testing & Linters Cache
 .pytest_cache/
-.coverage
-.coverage.*
-nosetests.xml
-coverage.xml
-htmlcov/
-.tox/
-.nox/
-
-# Linters, Type Checkers & Tooling
-.mypy_cache/
 .ruff_cache/
-.dmypy.json
-dmypy.json
+.coverage
 
-# Build & Packaging Artifacts
+# Build & Standalone Distribution Artifacts
 build/
 dist/
-*.egg-info/
-*.egg
-.eggs/
 *.spec
 
-# IDE & Editor Settings
+# IDE & Editor Settings (preserving project configurations)
 .idea/
 .vscode/*
 !.vscode/settings.json
@@ -54,10 +35,10 @@ dist/
 Thumbs.db
 ehthumbs.db
 
-# Logs & Runtime Dumps
+# Logs & Temporary Outputs
 *.log
 
-# Cache & Temporary Screenshots
+# Temporary Cache & Screenshots (preserve template/asset fixtures)
 cache/
 *.png
 !templates/**/*.png

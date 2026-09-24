@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import io
 from typing import Any
 
@@ -68,12 +69,10 @@ class DiscordBotClient(commands.Bot):
             print(f"[Discord] Bot logged in as {self.user.name} (ID: {self.user.id})")
         else:
             print("[Discord] Bot logged in")
-        try:
+        with contextlib.suppress(Exception):
             await self.change_presence(
                 activity=discord.Activity(type=discord.ActivityType.playing, name="EZA 999 & Link Leveling")
             )
-        except Exception:
-            pass
         target_channel_id = self.engine.config.get("discord", {}).get("channel_id")
         if target_channel_id:
             channel = self.get_channel(target_channel_id)
@@ -250,10 +249,8 @@ def setup_discord_interactive(engine: BotEngine) -> bool:
         user_input = input(t("discord.setup.prompt_user", current=current_users_str)).strip()
         allowed_user_ids = current_users
         if user_input:
-            try:
+            with contextlib.suppress(ValueError):
                 allowed_user_ids = [int(user_input)]
-            except ValueError:
-                pass
 
         if "discord" not in engine.config:
             engine.config["discord"] = {}

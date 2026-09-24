@@ -385,10 +385,7 @@ class Vision:
             return None
 
         # Clean 4-channel BGRA to 3-channel BGR if needed
-        if len(banner_img.shape) == 3 and banner_img.shape[2] == 4:
-            banner_bgr = banner_img[:, :, :3]
-        else:
-            banner_bgr = banner_img
+        banner_bgr = banner_img[:, :, :3] if len(banner_img.shape) == 3 and banner_img.shape[2] == 4 else banner_img
 
         bh, bw = banner_bgr.shape[:2]
         s_h, s_w = screen.shape[:2]
@@ -591,12 +588,8 @@ class Vision:
         h, w = screen.shape[:2]
         cols = [0.10, 0.30, 0.50, 0.70, 0.90]
         aspect = h / float(w)
-        if aspect < 1.85:
-            # Standard 16:9 display (e.g. 1080x1920 on emulator)
-            rows = [0.172, 0.284, 0.396, 0.508, 0.620]
-        else:
-            # Tall 20:9 display with top padding (e.g. 1080x2400 on modern phones)
-            rows = [0.215, 0.323, 0.431, 0.539]
+        # Standard 16:9 display (e.g. 1080x1920) vs tall 20:9 display with top padding (e.g. 1080x2400)
+        rows = [0.172, 0.284, 0.396, 0.508, 0.620] if aspect < 1.85 else [0.215, 0.323, 0.431, 0.539]
 
         coords: list[tuple[int, int]] = []
         for ry in rows:

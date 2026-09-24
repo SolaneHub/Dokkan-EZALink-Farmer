@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -36,21 +38,25 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
-          cache: "pip"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
 
       - name: Install Dependencies
+        run: uv sync --frozen
+
+      - name: Quality Gate (Ruff Lint, Format Check & Pyright)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pyright
 
       - name: Build Standalone Distribution
-        run: |
-          python scripts/build_dist.py
+        run: uv run python scripts/build_dist.py
 
       - name: Package Artifacts (Windows)
         if: matrix.os == 'windows-latest'
@@ -73,12 +79,25 @@ jobs:
           path: ${{ matrix.asset_filename }}
 
   release:
-    name: Create GitHub Release
+    name: Create GitHub Release & Supply Chain Security
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
 
       - name: Download Windows Artifact
         uses: actions/download-artifact@v4
@@ -95,6 +114,31 @@ jobs:
         with:
           name: dokkan-eza-link-linux-x64
 
+      - name: Generate Cryptographic Checksums (SHA256SUMS.txt)
+        run: |
+          sha256sum dokkan-eza-link-windows.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip > SHA256SUMS.txt
+          echo "Generated SHA256SUMS.txt:"
+          cat SHA256SUMS.txt
+
+      - name: Attest Build Provenance (Sigstore)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dokkan-eza-link-windows.zip
+            dokkan-eza-link-macos.zip
+            dokkan-eza-link-linux-x64.zip
+            SHA256SUMS.txt
+
+      - name: Generate Release Notes with Checksums & Verification
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.version }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "Target Release Tag: $TAG"
+          uv run python scripts/extract_release_notes.py "$TAG" --checksums SHA256SUMS.txt --output release_notes.md
+
       - name: Publish Release to GitHub
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -104,19 +148,29 @@ jobs:
           else
             TAG="${GITHUB_REF#refs/tags/}"
           fi
-          echo "Target Release Tag: $TAG"
 
-          # Extract release notes dynamically from CHANGELOG.md for this specific version
-          python scripts/extract_release_notes.py "$TAG" --output release_notes.md
-
-          # Create or update GitHub Release with compiled binaries and packages
+          # Create or update GitHub Release with compiled binaries, checksums and release notes
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists, uploading/overwriting assets and updating notes..."
-            gh release upload "$TAG" dokkan-eza-link-windows.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip --clobber
+            gh release upload "$TAG" dokkan-eza-link-windows.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip SHA256SUMS.txt --clobber
             gh release edit "$TAG" --title "$TAG" --notes-file release_notes.md
           else
             echo "Creating new release $TAG..."
-            gh release create "$TAG" dokkan-eza-link-windows.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip \
+            gh release create "$TAG" dokkan-eza-link-windows.zip dokkan-eza-link-macos.zip dokkan-eza-link-linux-x64.zip SHA256SUMS.txt \
               --title "$TAG" \
               --notes-file release_notes.md
           fi
+
+      - name: VirusTotal Antivirus Scan
+        if: env.VT_API_KEY != ''
+        uses: crazy-max/ghaction-virustotal@v5
+        with:
+          vt_api_key: ${{ secrets.VT_API_KEY }}
+          files: |
+            dokkan-eza-link-windows.zip
+            dokkan-eza-link-macos.zip
+            dokkan-eza-link-linux-x64.zip
+          update_release_body: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}

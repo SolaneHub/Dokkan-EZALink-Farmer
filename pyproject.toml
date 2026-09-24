@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "dokkan-eza-link-farmer"
-version = "1.0.2"
+version = "1.0.3"
 description = "Specialized endgame automation for DBZ Dokkan Battle - Extreme Z-Battle (EZA 999 Zeni) & Chamber of Spirit and Time Link Leveling"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -35,24 +35,30 @@ dependencies = [
     "questionary>=2.1.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=7.4.0",
     "ruff>=0.1.0",
+    "pyright>=1.1.0",
     "pyinstaller>=6.0.0",
 ]
+
+[tool.uv]
+default-groups = ["dev"]
 
 [project.scripts]
 Launch-Dokkan-EZALink = "main:main"
 dokkan-eza-link = "main:main"
 dokkan-farmer = "main:main"
 
-[tool.setuptools]
-py-modules = ["main"]
+[tool.hatch.build.targets.wheel]
+packages = ["core", "tasks", "interfaces", "tools"]
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["core*", "tasks*", "interfaces*", "tools*"]
+[tool.hatch.build.targets.wheel.force-include]
+"main.py" = "main.py"
+"config" = "config"
+"locales" = "locales"
+"templates" = "templates"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -73,6 +79,8 @@ select = [
     "I",    # isort
     "UP",   # pyupgrade
     "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "ARG",  # flake8-unused-arguments
 ]
 ignore = [
     "E501", # Line too long (handled by formatter)
@@ -82,10 +90,16 @@ ignore = [
 known-first-party = ["core", "tasks", "interfaces", "tools"]
 combine-as-imports = true
 
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true
+
 [tool.pyright]
 include = ["core", "tasks", "interfaces", "tools", "main.py"]
 exclude = ["**/__pycache__", "build", "dist", ".venv"]
 venvPath = "."
 venv = ".venv"
-pythonVersion = "3.10"
+pythonVersion = "3.11"
 typeCheckingMode = "standard"

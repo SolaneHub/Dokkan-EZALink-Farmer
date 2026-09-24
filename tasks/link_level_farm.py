@@ -74,7 +74,7 @@ class LinkLevelFarmTask(BaseTask):
         self._needs_team_link_check = True
         self._team_prepared_for_run = False
 
-    def navigate_to_event_banner(self, screen: np.ndarray, w: int, h: int, meta: dict[str, Any]) -> bool:
+    def navigate_to_event_banner(self, _screen: np.ndarray, w: int, h: int, meta: dict[str, Any]) -> bool:
         """
         Navigates to the event banner in the Event List (Bonus tab):
         1. Switches to Bonus tab if on Event Select screen.
@@ -530,7 +530,7 @@ class LinkLevelFarmTask(BaseTask):
         self.log(t("tasks.link.unit_maxed_swap", slot=human_slot))
         self.check_and_swap_team_via_filter(screen_w, screen_h, meta)
 
-    def check_and_swap_team_if_needed(self, screen: Any, screen_w: int, screen_h: int, meta: dict[str, Any]) -> bool:
+    def check_and_swap_team_if_needed(self, _screen: Any, screen_w: int, screen_h: int, meta: dict[str, Any]) -> bool:
         """
         Inspects all swappable slots (0 to 5) for MAX link level badges using the in-game filter.
         If a maxed slot is found, performs swap and returns True.

@@ -11,17 +11,16 @@ Usage:
 """
 
 import argparse
+import contextlib
 import os
 import shutil
 import subprocess
 import sys
 
 if sys.platform == "win32":
-    try:
+    with contextlib.suppress(Exception):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
 
 
 def copy_docs(root_dir: str, target_dir: str):
@@ -54,8 +53,10 @@ def build(onefile: bool = False):
 
         print(f"✓ PyInstaller found: v{PyInstaller.__version__}")
     except ImportError:
-        print("✗ PyInstaller not found. Installing now...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
+        print(
+            "✗ PyInstaller not found. Please install dependencies with 'uv sync' or execute via 'uv run python scripts/build_dist.py'"
+        )
+        sys.exit(1)
 
     # 2. Paths configuration
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -135,7 +136,7 @@ def build(onefile: bool = False):
         launcher_mac = os.path.join(target_output_dir, "Launch-Dokkan-EZALink.command")
         with open(launcher_mac, "w", encoding="utf-8", newline="\n") as f:
             f.write(
-                '#!/bin/bash\n'
+                "#!/bin/bash\n"
                 'DIR="$(cd "$(dirname "$0")" && pwd)"\n'
                 'cd "$DIR"\n'
                 'xattr -dr com.apple.quarantine "$DIR" 2>/dev/null || true\n'
@@ -143,21 +144,17 @@ def build(onefile: bool = False):
                 '    ./Launch-Dokkan-EZALink "$@"\n'
                 'elif [ -f "./dokkan-eza-link" ]; then\n'
                 '    ./dokkan-eza-link "$@"\n'
-                'fi\n'
+                "fi\n"
             )
-        try:
+        with contextlib.suppress(Exception):
             os.chmod(launcher_mac, 0o755)
-        except Exception:
-            pass
         print("✓ Created 1-click launcher: Launch-Dokkan-EZALink.command (macOS)")
     else:
         launcher_linux = os.path.join(target_output_dir, "Launch-Dokkan-EZALink.sh")
         with open(launcher_linux, "w", encoding="utf-8", newline="\n") as f:
             f.write('#!/bin/bash\nDIR="$(cd "$(dirname "$0")" && pwd)"\ncd "$DIR"\n./Launch-Dokkan-EZALink\n')
-        try:
+        with contextlib.suppress(Exception):
             os.chmod(launcher_linux, 0o755)
-        except Exception:
-            pass
         print("✓ Created 1-click launcher: Launch-Dokkan-EZALink.sh (Linux)")
 
     bin_name = "Launch-Dokkan-EZALink.exe" if sys.platform == "win32" else "Launch-Dokkan-EZALink"

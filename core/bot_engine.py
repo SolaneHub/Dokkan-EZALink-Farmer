@@ -1,3 +1,4 @@
+import contextlib
 import os
 import sys
 import threading
@@ -76,18 +77,14 @@ class BotEngine:
     def emit_log(self, msg: str):
         """Dispatches log message to all registered listeners."""
         for cb in self.log_callbacks:
-            try:
+            with contextlib.suppress(Exception):
                 cb(msg)
-            except Exception:
-                pass
 
     def emit_run(self, curr: int, tot: int):
         """Dispatches run progress to all registered listeners."""
         for cb in self.run_callbacks:
-            try:
+            with contextlib.suppress(Exception):
                 cb(curr, tot)
-            except Exception:
-                pass
 
     def connect(self, serial: str | None = None) -> str:
         """Connects to a specific Android device or auto-detects first available."""

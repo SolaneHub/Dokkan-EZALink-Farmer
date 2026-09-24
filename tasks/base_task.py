@@ -26,8 +26,8 @@ class BaseTask:
         self.vision = vision
         self.config = config
         self.detector = StateDetector(vision)
-        self.on_status = on_status or (lambda msg: None)
-        self.on_run_complete = on_run_complete or (lambda curr, tot: None)
+        self.on_status = on_status or (lambda _msg: None)
+        self.on_run_complete = on_run_complete or (lambda _curr, _tot: None)
 
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
@@ -175,7 +175,7 @@ class BaseTask:
 
         return False
 
-    def ensure_stage_auto_controls(self, screen: np.ndarray, screen_w: int, screen_h: int) -> bool:
+    def ensure_stage_auto_controls(self, screen: np.ndarray) -> bool:
         """
         Always verifies that Auto Map and Auto Battle are active whenever they appear in stage.
         If either appears and is currently OFF (grey), taps it to activate.
@@ -203,7 +203,7 @@ class BaseTask:
             return
 
         screen = self.adb.screencap()
-        if self.ensure_stage_auto_controls(screen, screen_w, screen_h):
+        if self.ensure_stage_auto_controls(screen):
             return
 
         # If auto controls are not present (e.g. first time entering stage)
@@ -215,10 +215,10 @@ class BaseTask:
             # Tap the upper middle sky area to clear Dokkan mode target or dialogue safely without clicking characters
             self.adb.tap(int(screen_w * 0.50), int(screen_h * 0.35), delay_after=0.8)
 
-    def handle_map(self, screen_w: int, screen_h: int, meta: dict[str, Any]):
+    def handle_map(self, screen_w: int, screen_h: int, _meta: dict[str, Any]):
         """Ensures Auto-Map and Auto-Battle are enabled, or advances manually if auto controls are not present."""
         screen = self.adb.screencap()
-        if self.ensure_stage_auto_controls(screen, screen_w, screen_h):
+        if self.ensure_stage_auto_controls(screen):
             return
 
         # Advance along the map path: tap center dice button (~50% X, ~80% Y)
