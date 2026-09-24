@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -19,8 +20,10 @@ import sys
 
 if sys.platform == "win32":
     with contextlib.suppress(Exception):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        if isinstance(sys.stdout, io.TextIOWrapper):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if isinstance(sys.stderr, io.TextIOWrapper):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 def copy_docs(root_dir: str, target_dir: str):
