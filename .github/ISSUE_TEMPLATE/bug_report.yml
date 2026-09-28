@@ -1,0 +1,83 @@
+name: "🐛 Bug Report"
+description: "File an issue describing unexpected behavior, crashes, or OCR detection problems"
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an issue! Please check existing issues first to avoid duplicate reports.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system are you running Dokkan-EZALink-Farmer on?
+      options:
+        - Windows 11 (64-bit)
+        - Windows 10 (64-bit)
+        - macOS (Apple Silicon M1/M2/M3/M4)
+        - macOS (Intel)
+        - Linux (Ubuntu/Debian/Arch/Fedora)
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Execution Environment
+      description: How are you running the application?
+      options:
+        - Standalone Pre-Compiled Release (Launch-Dokkan-EZALink)
+        - Python Source via uv (uv run dokkan-farmer)
+        - Python Source via pip / virtualenv
+    validations:
+      required: true
+  - type: dropdown
+    id: device_type
+    attributes:
+      label: Target Device Type
+      description: What device or emulator is connected via ADB?
+      options:
+        - BlueStacks 5
+        - LDPlayer 9
+        - MuMu Player 12 / X
+        - NoxPlayer
+        - Physical Android Phone (USB)
+        - Physical Android Phone (Wireless ADB)
+        - Android Studio AVD / Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Application Version
+      description: Which version of Dokkan-EZALink-Farmer are you using? (e.g. v1.0.3)
+      placeholder: "v1.0.3"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description of the Problem
+      description: A clear and concise description of what the bug is.
+      placeholder: "When running the EZA farm task at level 35, the bot does not click the OK button..."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can maintainers reproduce the behavior?
+      placeholder: |
+        1. Connect device with 'uv run dokkan-farmer --doctor'
+        2. Launch with 'uv run dokkan-farmer --eza 50'
+        3. Observe freeze at result screen...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Terminal Logs / Doctor Diagnostics
+      description: Paste the output of `uv run dokkan-farmer --doctor` or error tracebacks here.
+      render: shell
+    validations:
+      required: false

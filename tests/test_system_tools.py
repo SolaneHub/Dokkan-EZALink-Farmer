@@ -1,21 +1,28 @@
 import os
 import unittest
 
-from core.system_tools import ToolLocator, get_config_path, get_resource_path
+from dokkan_eza_link_farmer.core.system_tools import ToolLocator, get_config_path, get_resource_path
 
 
 class TestSystemTools(unittest.TestCase):
     def test_get_resource_path(self):
         # In development mode, get_resource_path should resolve from project root
         res_path = get_resource_path("templates")
-        self.assertTrue(os.path.isdir(res_path), f"Resource path '{res_path}' should be an existing directory")
+        self.assertTrue(
+            os.path.isdir(res_path), f"Resource path '{res_path}' should be an existing directory"
+        )
 
         locales_path = get_resource_path("locales")
-        self.assertTrue(os.path.isdir(locales_path), f"Locales path '{locales_path}' should be an existing directory")
+        self.assertTrue(
+            os.path.isdir(locales_path),
+            f"Locales path '{locales_path}' should be an existing directory",
+        )
 
     def test_get_config_path(self):
         cfg_path = get_config_path("config/settings.yaml")
-        self.assertTrue(os.path.isfile(cfg_path), f"Config path '{cfg_path}' should resolve to an existing file")
+        self.assertTrue(
+            os.path.isfile(cfg_path), f"Config path '{cfg_path}' should resolve to an existing file"
+        )
 
     def test_diagnose_system_structure(self):
         diag = ToolLocator.diagnose_system()

@@ -3,8 +3,6 @@ from typing import Any
 
 import numpy as np
 
-from core.vision import Vision
-
 
 class GameState(enum.Enum):
     UNKNOWN = "UNKNOWN"
@@ -29,6 +27,9 @@ class GameState(enum.Enum):
     TEAM_EDIT = "TEAM_EDIT"
     CHARACTER_BOX = "CHARACTER_BOX"
     FILTER_MODAL = "FILTER_MODAL"
+
+
+from dokkan_eza_link_farmer.automation.vision import Vision  # noqa: E402
 
 
 class StateDetector:
@@ -74,9 +75,9 @@ class StateDetector:
             return (GameState.FRIEND_REQUEST, meta)
 
         # 3. Stamina Empty Popup
-        stamina_empty_match = self.vision.find_template(screen, "popup_stamina_empty") or self.vision.find_template(
-            screen, "header_restore_sta"
-        )
+        stamina_empty_match = self.vision.find_template(
+            screen, "popup_stamina_empty"
+        ) or self.vision.find_template(screen, "header_restore_sta")
         meat_match = self.vision.find_template(screen, "button_use_meat")
         if stamina_empty_match or meat_match:
             if meat_match:
@@ -89,18 +90,18 @@ class StateDetector:
             return (GameState.GAME_OVER, meta)
 
         # 4b. Filter / Sort Modal (Display Order / Filter Select dialog)
-        filter_modal_match = self.vision.find_template(screen, "button_remove_all") or self.vision.find_template(
-            screen, "header_link_skill_level"
-        )
+        filter_modal_match = self.vision.find_template(
+            screen, "button_remove_all"
+        ) or self.vision.find_template(screen, "header_link_skill_level")
         if filter_modal_match:
             if "ok_button" in meta:
                 meta["filter_ok_button"] = meta["ok_button"]
             return (GameState.FILTER_MODAL, meta)
 
         # 5. Results Screen or Modal OK / Close Dialog
-        results_match = self.vision.find_template(screen, "header_clear") or self.vision.find_template(
-            screen, "header_rewards"
-        )
+        results_match = self.vision.find_template(
+            screen, "header_clear"
+        ) or self.vision.find_template(screen, "header_rewards")
         if results_match or ok_match or close_match:
             return (GameState.RESULTS_SCREEN, meta)
 
@@ -145,9 +146,9 @@ class StateDetector:
             return (GameState.TEAM_EDIT, meta)
 
         # 6c. Character Box / Character Selection List
-        box_match = self.vision.find_template(screen, "header_character_list") or self.vision.find_template(
-            screen, "button_filter"
-        )
+        box_match = self.vision.find_template(
+            screen, "header_character_list"
+        ) or self.vision.find_template(screen, "button_filter")
         if box_match:
             return (GameState.CHARACTER_BOX, meta)
 
@@ -169,9 +170,9 @@ class StateDetector:
             or self.vision.find_template(screen, "battle_auto_off")
         )
         item_button = self.vision.find_template(screen, "button_item", threshold=0.75)
-        speed_toggle = self.vision.find_template(screen, "battle_speed_2x") or self.vision.find_template(
-            screen, "battle_speed_1x"
-        )
+        speed_toggle = self.vision.find_template(
+            screen, "battle_speed_2x"
+        ) or self.vision.find_template(screen, "battle_speed_1x")
         if battle_menu or auto_battle or item_button or speed_toggle:
             if auto_battle:
                 meta["auto_button"] = (auto_battle[0], auto_battle[1])
@@ -182,7 +183,9 @@ class StateDetector:
             return (GameState.BATTLE_SCREEN, meta)
 
         # 9. Map / Quest Board Screen (Dice buttons 1, 2, 3 or Auto Map button)
-        auto_map = self.vision.find_template(screen, "map_auto_on") or self.vision.find_template(screen, "map_auto_off")
+        auto_map = self.vision.find_template(screen, "map_auto_on") or self.vision.find_template(
+            screen, "map_auto_off"
+        )
         if auto_map:
             meta["auto_map_button"] = (auto_map[0], auto_map[1])
             return (GameState.MAP_SCREEN, meta)
@@ -261,7 +264,9 @@ class StateDetector:
         cleared_tag = self.vision.find_template(screen, "tag_cleared")
         saiyan_training = self.vision.find_template(screen, "stage_saiyan_training")
         boost_off = self.vision.find_template(screen, "button_boost_off")
-        stage_match = diff_super or diff_z_hard or diff_super2 or cleared_tag or saiyan_training or boost_off
+        stage_match = (
+            diff_super or diff_z_hard or diff_super2 or cleared_tag or saiyan_training or boost_off
+        )
         if stage_match:
             if diff_super:
                 meta["diff_super"] = (diff_super[0], diff_super[1])

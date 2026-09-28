@@ -43,4 +43,8 @@ cache/
 *.png
 !templates/**/*.png
 !assets/**/*.png
-!assets/**/*.svg
+!docs/**/*.*
+!src/dokkan_eza_link_farmer/assets/**/*.*
+
+# Internal Prompts & Guidelines
+GEMINI_MASTER_PROMPT.md

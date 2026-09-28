@@ -1,15 +1,19 @@
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import io
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import cv2
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from core.bot_engine import BotEngine
-from core.i18n import get_language, t
+if TYPE_CHECKING:
+    from dokkan_eza_link_farmer.core.bot_engine import BotEngine
+
+from dokkan_eza_link_farmer.core.i18n import get_language, t
 
 
 class DiscordBotClient(commands.Bot):
@@ -55,13 +59,16 @@ class DiscordBotClient(commands.Bot):
                 "victory",
             ]
             if any(k.lower() in msg.lower() for k in keywords):
-                asyncio.run_coroutine_threadsafe(self._main_channel.send(f"🤖 **[Dokkan-EZALink]** {msg}"), self._loop)
+                asyncio.run_coroutine_threadsafe(
+                    self._main_channel.send(f"🤖 **[Dokkan-EZALink]** {msg}"), self._loop
+                )
 
     def _on_bot_run(self, curr: int, tot: Any):
         if self._main_channel and self._loop:
             tot_str = str(tot) if tot and tot > 0 else "∞"
             asyncio.run_coroutine_threadsafe(
-                self._main_channel.send(f"📊 **Progress:** `{curr}/{tot_str}` runs completed."), self._loop
+                self._main_channel.send(f"📊 **Progress:** `{curr}/{tot_str}` runs completed."),
+                self._loop,
             )
 
     async def on_ready(self):
@@ -71,7 +78,9 @@ class DiscordBotClient(commands.Bot):
             print("[Discord] Bot logged in")
         with contextlib.suppress(Exception):
             await self.change_presence(
-                activity=discord.Activity(type=discord.ActivityType.playing, name="EZA 999 & Link Leveling")
+                activity=discord.Activity(
+                    type=discord.ActivityType.playing, name="EZA 999 & Link Leveling"
+                )
             )
         target_channel_id = self.engine.config.get("discord", {}).get("channel_id")
         if target_channel_id:
@@ -93,7 +102,9 @@ class DiscordBotClient(commands.Bot):
                 color=discord.Color.gold() if info["task_running"] else discord.Color.blue(),
             )
             embed.add_field(
-                name=t("discord.field_device"), value=str(info["device_serial"] or t("discord.val_none")), inline=True
+                name=t("discord.field_device"),
+                value=str(info["device_serial"] or t("discord.val_none")),
+                inline=True,
             )
             embed.add_field(
                 name=t("discord.field_running"),
@@ -102,15 +113,23 @@ class DiscordBotClient(commands.Bot):
             )
             embed.add_field(name=t("discord.field_task"), value=str(info["task_type"]), inline=True)
             runs_target_val = info.get("runs_target")
-            target_display = str(runs_target_val) if runs_target_val is not None and runs_target_val > 0 else "∞"
-            embed.add_field(
-                name=t("discord.field_progress"), value=f"{info['runs_completed']} / {target_display}", inline=True
+            target_display = (
+                str(runs_target_val) if runs_target_val is not None and runs_target_val > 0 else "∞"
             )
-            embed.add_field(name=t("discord.field_screen"), value=str(info["current_state"]), inline=True)
+            embed.add_field(
+                name=t("discord.field_progress"),
+                value=f"{info['runs_completed']} / {target_display}",
+                inline=True,
+            )
+            embed.add_field(
+                name=t("discord.field_screen"), value=str(info["current_state"]), inline=True
+            )
 
             await interaction.response.send_message(embed=embed)
 
-        @self.tree.command(name="screenshot", description="Captures and sends a real-time game screenshot")
+        @self.tree.command(
+            name="screenshot", description="Captures and sends a real-time game screenshot"
+        )
         async def cmd_screenshot(interaction: discord.Interaction):
             if not self._is_user_allowed(interaction.user.id):
                 await interaction.response.send_message(t("discord.not_authorized"), ephemeral=True)
@@ -125,7 +144,9 @@ class DiscordBotClient(commands.Bot):
             except Exception as e:
                 await interaction.followup.send(t("discord.screenshot_error", error=str(e)))
 
-        @self.tree.command(name="eza", description="Starts continuous automated climbing in Extreme Z-Battle")
+        @self.tree.command(
+            name="eza", description="Starts continuous automated climbing in Extreme Z-Battle"
+        )
         @app_commands.describe(target_level="Target level to reach (default: 999)")
         async def cmd_eza(interaction: discord.Interaction, target_level: int | None = 999):
             if not self._is_user_allowed(interaction.user.id):
@@ -136,12 +157,18 @@ class DiscordBotClient(commands.Bot):
                 self._main_channel = interaction.channel
             ok = self.engine.start_eza_farm(target_level=target_level or 999)
             if ok:
-                await interaction.response.send_message(t("discord.eza_started", level=target_level or 999))
+                await interaction.response.send_message(
+                    t("discord.eza_started", level=target_level or 999)
+                )
             else:
                 await interaction.response.send_message(t("discord.task_conflict"))
 
-        @self.tree.command(name="link", description="Starts Link Level farming (Chamber of Spirit and Time)")
-        @app_commands.describe(runs="Number of runs (optional: leave empty to farm until stamina runs out)")
+        @self.tree.command(
+            name="link", description="Starts Link Level farming (Chamber of Spirit and Time)"
+        )
+        @app_commands.describe(
+            runs="Number of runs (optional: leave empty to farm until stamina runs out)"
+        )
         async def cmd_link(interaction: discord.Interaction, runs: int | None = None):
             if not self._is_user_allowed(interaction.user.id):
                 await interaction.response.send_message(t("discord.not_authorized"), ephemeral=True)
@@ -152,7 +179,11 @@ class DiscordBotClient(commands.Bot):
             actual_runs = runs if (runs is not None and runs > 0) else None
             ok = self.engine.start_link_level_farm(runs=actual_runs)
             if ok:
-                runs_label = str(actual_runs) if actual_runs is not None else t("discord.link_runs_unlimited")
+                runs_label = (
+                    str(actual_runs)
+                    if actual_runs is not None
+                    else t("discord.link_runs_unlimited")
+                )
                 await interaction.response.send_message(t("discord.link_started", runs=runs_label))
             else:
                 await interaction.response.send_message(t("discord.task_conflict"))
@@ -184,10 +215,15 @@ class DiscordBotClient(commands.Bot):
             self.engine.resume_task()
             await interaction.response.send_message(t("discord.task_resumed"))
 
-        @self.tree.command(name="scrcpy", description="Starts or stops scrcpy screen mirroring on host computer")
+        @self.tree.command(
+            name="scrcpy", description="Starts or stops scrcpy screen mirroring on host computer"
+        )
         @app_commands.describe(action="start or stop")
         @app_commands.choices(
-            action=[app_commands.Choice(name="start", value="start"), app_commands.Choice(name="stop", value="stop")]
+            action=[
+                app_commands.Choice(name="start", value="start"),
+                app_commands.Choice(name="stop", value="stop"),
+            ]
         )
         async def cmd_scrcpy(interaction: discord.Interaction, action: app_commands.Choice[str]):
             if not self._is_user_allowed(interaction.user.id):
@@ -234,7 +270,9 @@ def setup_discord_interactive(engine: BotEngine) -> bool:
 
         current_channel = str(current_discord.get("channel_id", "") or "")
         channel_placeholder = current_channel if current_channel else none_val
-        channel_input = input(t("discord.setup.prompt_channel", current=channel_placeholder)).strip()
+        channel_input = input(
+            t("discord.setup.prompt_channel", current=channel_placeholder)
+        ).strip()
         if not channel_input and current_channel:
             channel_input = current_channel
 

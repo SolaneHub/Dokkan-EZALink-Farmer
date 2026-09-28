@@ -4,14 +4,16 @@ from typing import Any
 import cv2
 import numpy as np
 
-from core.system_tools import get_resource_path
+from dokkan_eza_link_farmer.core.system_tools import get_resource_path
 
 
 class Vision:
     """Handles Computer Vision, template matching, and UI element detection for Dokkan."""
 
     def __init__(self, template_dir: str = "templates/glb", default_threshold: float = 0.78):
-        self.template_dir = template_dir if os.path.isabs(template_dir) else get_resource_path(template_dir)
+        self.template_dir = (
+            template_dir if os.path.isabs(template_dir) else get_resource_path(template_dir)
+        )
         self.default_threshold = default_threshold
         self._template_cache: dict[str, np.ndarray | None] = {}
         self._template_map: dict[str, str] = {}
@@ -142,7 +144,9 @@ class Vision:
                 if scaled_w > s_w or scaled_h > s_h or scaled_w < 10 or scaled_h < 10:
                     continue
 
-                scaled_template = cv2.resize(template, (scaled_w, scaled_h), interpolation=cv2.INTER_AREA)
+                scaled_template = cv2.resize(
+                    template, (scaled_w, scaled_h), interpolation=cv2.INTER_AREA
+                )
                 res = cv2.matchTemplate(screen, scaled_template, cv2.TM_CCOEFF_NORMED)
                 _, max_val, _, max_loc = cv2.minMaxLoc(res)
 
@@ -161,7 +165,11 @@ class Vision:
         return None
 
     def find_all_templates(
-        self, screen: np.ndarray, template_name: str, threshold: float = 0.78, min_distance: int = 80
+        self,
+        screen: np.ndarray,
+        template_name: str,
+        threshold: float = 0.78,
+        min_distance: int = 80,
     ) -> list[tuple[int, int, float]]:
         """
         Finds all occurrences of a template on screen, filtered by non-maximum suppression.
@@ -191,12 +199,17 @@ class Vision:
 
         filtered: list[tuple[int, int, float]] = []
         for c in candidates:
-            if not any(abs(c[0] - f[0]) < min_distance and abs(c[1] - f[1]) < min_distance for f in filtered):
+            if not any(
+                abs(c[0] - f[0]) < min_distance and abs(c[1] - f[1]) < min_distance
+                for f in filtered
+            ):
                 filtered.append(c)
 
         return filtered
 
-    def find_ok_button(self, screen: np.ndarray, threshold: float = 0.80) -> tuple[int, int, float] | None:
+    def find_ok_button(
+        self, screen: np.ndarray, threshold: float = 0.80
+    ) -> tuple[int, int, float] | None:
         """
         Finds OK button. If a modal dialog OK button is present (between 40% and 75% Y),
         returns that modal OK button with priority to dismiss the dialog.
@@ -285,7 +298,11 @@ class Vision:
         return None
 
     def save_template_crop(
-        self, screen: np.ndarray, box: tuple[int, int, int, int], name: str, category: str | None = None
+        self,
+        screen: np.ndarray,
+        box: tuple[int, int, int, int],
+        name: str,
+        category: str | None = None,
     ) -> str:
         """
         Saves a cropped region as a template file for future matching.
@@ -312,7 +329,9 @@ class Vision:
         return path
 
     @staticmethod
-    def get_dominant_color_in_rect(screen: np.ndarray, x1: int, y1: int, x2: int, y2: int) -> tuple[int, int, int]:
+    def get_dominant_color_in_rect(
+        screen: np.ndarray, x1: int, y1: int, x2: int, y2: int
+    ) -> tuple[int, int, int]:
         """Returns average BGR color in a given rectangular area."""
         roi = screen[y1:y2, x1:x2]
         if roi.size == 0:
@@ -337,7 +356,10 @@ class Vision:
             return False
 
         # Try both modern vertical center (~0.43) and legacy (~0.48)
-        candidate_coords = [(slot_centers_modern[slot_idx], 0.429), (slot_centers_legacy[slot_idx], 0.480)]
+        candidate_coords = [
+            (slot_centers_modern[slot_idx], 0.429),
+            (slot_centers_legacy[slot_idx], 0.480),
+        ]
 
         for rx, ry in candidate_coords:
             cx = int(w * rx)
@@ -374,7 +396,11 @@ class Vision:
         return False
 
     def find_banner_on_screen(
-        self, screen: np.ndarray, banner_img: np.ndarray, threshold: float = 0.72, scales: list[float] | None = None
+        self,
+        screen: np.ndarray,
+        banner_img: np.ndarray,
+        threshold: float = 0.72,
+        scales: list[float] | None = None,
     ) -> tuple[int, int, float] | None:
         """
         Locates a DokkanDB banner on the game screen using multi-scale template matching.
@@ -385,7 +411,11 @@ class Vision:
             return None
 
         # Clean 4-channel BGRA to 3-channel BGR if needed
-        banner_bgr = banner_img[:, :, :3] if len(banner_img.shape) == 3 and banner_img.shape[2] == 4 else banner_img
+        banner_bgr = (
+            banner_img[:, :, :3]
+            if len(banner_img.shape) == 3 and banner_img.shape[2] == 4
+            else banner_img
+        )
 
         bh, bw = banner_bgr.shape[:2]
         s_h, s_w = screen.shape[:2]
@@ -475,7 +505,9 @@ class Vision:
             res["level_up_possible"]["selected"] = True
             res["level_up_possible"]["coords"] = (lu_sel[0], lu_sel[1])
         else:
-            lu_unsel = self.find_template(screen, "btn_level_up_possible_unselected", threshold=0.85)
+            lu_unsel = self.find_template(
+                screen, "btn_level_up_possible_unselected", threshold=0.85
+            )
             if lu_unsel:
                 res["level_up_possible"]["coords"] = (lu_unsel[0], lu_unsel[1])
 
@@ -589,7 +621,9 @@ class Vision:
         cols = [0.10, 0.30, 0.50, 0.70, 0.90]
         aspect = h / float(w)
         # Standard 16:9 display (e.g. 1080x1920) vs tall 20:9 display with top padding (e.g. 1080x2400)
-        rows = [0.172, 0.284, 0.396, 0.508, 0.620] if aspect < 1.85 else [0.215, 0.323, 0.431, 0.539]
+        rows = (
+            [0.172, 0.284, 0.396, 0.508, 0.620] if aspect < 1.85 else [0.215, 0.323, 0.431, 0.539]
+        )
 
         coords: list[tuple[int, int]] = []
         for ry in rows:

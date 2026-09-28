@@ -91,7 +91,8 @@ def extract_notes(changelog_path: Path, tag: str, checksums_path: Path | None = 
     # Pattern matching: ## [v1.0.1] or ## [1.0.1] or ## v1.0.1 or ## 1.0.1
     # followed by anything until next ## [ or ## v or EOF
     header_pattern = re.compile(
-        r"^##\s+\[?(" + "|".join(map(re.escape, possible_versions)) + r")\]?.*$", re.MULTILINE | re.IGNORECASE
+        r"^##\s+\[?(" + "|".join(map(re.escape, possible_versions)) + r")\]?.*$",
+        re.MULTILINE | re.IGNORECASE,
     )
     match = header_pattern.search(text)
 
@@ -104,7 +105,9 @@ def extract_notes(changelog_path: Path, tag: str, checksums_path: Path | None = 
     next_header_pattern = re.compile(r"^##\s+\[?[vV]?\d+\.\d+", re.MULTILINE)
     next_match = next_header_pattern.search(text, pos=start_pos)
 
-    content = text[start_pos : next_match.start()].strip() if next_match else text[start_pos:].strip()
+    content = (
+        text[start_pos : next_match.start()].strip() if next_match else text[start_pos:].strip()
+    )
 
     # Strip any trailing '---' divider
     content = re.sub(r"(\r?\n\s*---\s*)+$", "", content).strip()
@@ -116,14 +119,23 @@ def extract_notes(changelog_path: Path, tag: str, checksums_path: Path | None = 
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Extract release notes from CHANGELOG.md for a given tag.")
+    parser = argparse.ArgumentParser(
+        description="Extract release notes from CHANGELOG.md for a given tag."
+    )
     parser.add_argument("tag", help="Release tag (e.g., v1.0.1)")
-    parser.add_argument("--changelog", default="CHANGELOG.md", help="Path to CHANGELOG.md (default: CHANGELOG.md)")
     parser.add_argument(
-        "--output", "-o", default="release_notes.md", help="Output file path (default: release_notes.md)"
+        "--changelog", default="CHANGELOG.md", help="Path to CHANGELOG.md (default: CHANGELOG.md)"
     )
     parser.add_argument(
-        "--checksums", default=None, help="Path to SHA256SUMS.txt to include in release notes (optional)"
+        "--output",
+        "-o",
+        default="release_notes.md",
+        help="Output file path (default: release_notes.md)",
+    )
+    parser.add_argument(
+        "--checksums",
+        default=None,
+        help="Path to SHA256SUMS.txt to include in release notes (optional)",
     )
 
     args = parser.parse_args()

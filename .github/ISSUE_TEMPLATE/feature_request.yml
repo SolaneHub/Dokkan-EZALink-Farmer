@@ -1,0 +1,32 @@
+name: "✨ Feature Request"
+description: "Suggest an idea, enhancement, or new automation capability"
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve Dokkan-EZALink-Farmer! Please remember that this bot focuses strictly on laser-targeted endgame chores (EZA climbing and event link-leveling).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Limitation
+      description: Is your feature request related to a problem? Please describe it.
+      placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution / Feature
+      description: Describe the solution or new behavior you would like to see.
+      placeholder: "Add support for auto-restarting ADB daemon when device disconnects..."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or features you've considered?
+    validations:
+      required: false

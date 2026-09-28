@@ -4,11 +4,11 @@ from typing import Any
 import cv2
 import numpy as np
 
-from core.adb_client import ADBClient
-from core.game_state import GameState
-from core.i18n import t
-from core.vision import Vision
-from tasks.base_task import BaseTask
+from dokkan_eza_link_farmer.automation.game_state import GameState
+from dokkan_eza_link_farmer.automation.tasks.base_task import BaseTask
+from dokkan_eza_link_farmer.automation.vision import Vision
+from dokkan_eza_link_farmer.core.i18n import t
+from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
 
 
 class EZAFarmTask(BaseTask):
@@ -41,7 +41,9 @@ class EZAFarmTask(BaseTask):
         self.platinum_statues_earned = 0
         self._target_banner_img: np.ndarray | None = None
         if self.target_eza and self.target_eza.get("banner_local_path"):
-            self._target_banner_img = cv2.imread(self.target_eza["banner_local_path"], cv2.IMREAD_UNCHANGED)
+            self._target_banner_img = cv2.imread(
+                self.target_eza["banner_local_path"], cv2.IMREAD_UNCHANGED
+            )
 
     def _record_victory(self):
         """Records cleared stage and calculates estimated Zeni earnings."""
@@ -76,7 +78,9 @@ class EZAFarmTask(BaseTask):
                 break
 
             # Fast fling swipe upwards
-            self.adb.swipe(int(w * 0.50), int(h * 0.73), int(w * 0.50), int(h * 0.27), duration_ms=150)
+            self.adb.swipe(
+                int(w * 0.50), int(h * 0.73), int(w * 0.50), int(h * 0.27), duration_ms=150
+            )
             self.wait_check(0.45)
 
             curr_screen = self.adb.screencap()
@@ -117,7 +121,9 @@ class EZAFarmTask(BaseTask):
             h, w = screen.shape[:2]
 
             # Find all banner badge centers on current screen
-            badges = self.vision.find_all_templates(screen, "tag_next_lv", threshold=0.78, min_distance=80)
+            badges = self.vision.find_all_templates(
+                screen, "tag_next_lv", threshold=0.78, min_distance=80
+            )
             if not badges:
                 self.log(t("tasks.eza.no_banner_found"))
                 self.wait_check(1.0)
@@ -129,9 +135,14 @@ class EZAFarmTask(BaseTask):
 
             for idx, (cx, cy, _conf) in enumerate(badges):
                 # Crop number area to the right of 'NEXT >> Lv.'
-                num_crop = screen[max(0, cy - 50) : min(h, cy + 50), max(0, cx + 20) : min(w, cx + 240)]
+                num_crop = screen[
+                    max(0, cy - 50) : min(h, cy + 50), max(0, cx + 20) : min(w, cx + 240)
+                ]
                 is_999 = False
-                if num_crop.shape[0] >= template_999.shape[0] and num_crop.shape[1] >= template_999.shape[1]:
+                if (
+                    num_crop.shape[0] >= template_999.shape[0]
+                    and num_crop.shape[1] >= template_999.shape[1]
+                ):
                     res_num = cv2.matchTemplate(num_crop, template_999, cv2.TM_CCOEFF_NORMED)
                     _, max_val, _, _ = cv2.minMaxLoc(res_num)
                     if max_val >= 0.85:
@@ -149,7 +160,9 @@ class EZAFarmTask(BaseTask):
 
             # If all banners on screen are 999, scroll up to reveal preceding ones
             self.log(t("tasks.eza.scrolling_up"))
-            self.adb.swipe(int(w * 0.50), int(h * 0.35), int(w * 0.50), int(h * 0.70), duration_ms=300)
+            self.adb.swipe(
+                int(w * 0.50), int(h * 0.35), int(w * 0.50), int(h * 0.70), duration_ms=300
+            )
             self.wait_check(1.0)
 
         self.log(t("tasks.eza.all_completed"))
@@ -176,7 +189,9 @@ class EZAFarmTask(BaseTask):
             h, w = screen.shape[:2]
 
             # Check if target banner is visible on screen
-            match = self.vision.find_banner_on_screen(screen, self._target_banner_img, threshold=0.72)
+            match = self.vision.find_banner_on_screen(
+                screen, self._target_banner_img, threshold=0.72
+            )
             if match:
                 cx, cy, conf = match
                 self.log(t("tasks.eza.target_banner_found", name=target_name, conf=f"{conf:.2f}"))
@@ -193,7 +208,8 @@ class EZAFarmTask(BaseTask):
                 diff = float(
                     np.mean(
                         np.abs(
-                            prev_screen[r_y1:r_y2, r_x1:r_x2].astype(float) - screen[r_y1:r_y2, r_x1:r_x2].astype(float)
+                            prev_screen[r_y1:r_y2, r_x1:r_x2].astype(float)
+                            - screen[r_y1:r_y2, r_x1:r_x2].astype(float)
                         )
                     )
                 )
@@ -203,7 +219,9 @@ class EZAFarmTask(BaseTask):
 
             prev_screen = screen
             # Smooth drag-scroll downwards (swipe up) to show next banners
-            self.adb.swipe(int(w * 0.50), int(h * 0.70), int(w * 0.50), int(h * 0.38), duration_ms=400)
+            self.adb.swipe(
+                int(w * 0.50), int(h * 0.70), int(w * 0.50), int(h * 0.38), duration_ms=400
+            )
             self.wait_check(1.0)
 
         self.log(t("tasks.eza.target_banner_not_found", name=target_name))

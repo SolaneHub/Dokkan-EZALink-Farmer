@@ -5,10 +5,10 @@ from typing import Any
 
 import numpy as np
 
-from core.adb_client import ADBClient
-from core.game_state import GameState, StateDetector
-from core.i18n import t
-from core.vision import Vision
+from dokkan_eza_link_farmer.automation.game_state import GameState, StateDetector
+from dokkan_eza_link_farmer.automation.vision import Vision
+from dokkan_eza_link_farmer.core.i18n import t
+from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
 
 
 class BaseTask:
@@ -76,7 +76,9 @@ class BaseTask:
             self._pause_event.wait()
             time.sleep(0.1)
 
-    def handle_friend_select(self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None):
+    def handle_friend_select(
+        self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None
+    ):
         """
         Selects a friend supporter by tapping the 'Refresh' button,
         which automatically assigns a friend in Dokkan.

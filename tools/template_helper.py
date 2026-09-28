@@ -14,16 +14,28 @@ import cv2
 # Add parent dir to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from core.adb_client import ADBClient
-from core.vision import Vision
+from dokkan_eza_link_farmer.automation.vision import Vision
+from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
 
 
 def main():
     parser = argparse.ArgumentParser(description="Template capture helper for Dokkan Battle")
-    parser.add_argument("--screenshot", action="store_true", help="Capture and save current phone screenshot to file")
-    parser.add_argument("--out", type=str, default="screen_sample.png", help="Output filename for captured screenshot")
     parser.add_argument(
-        "--crop", nargs=5, metavar=("X", "Y", "W", "H", "NAME"), help="Crop a bounding box region and save as template"
+        "--screenshot",
+        action="store_true",
+        help="Capture and save current phone screenshot to file",
+    )
+    parser.add_argument(
+        "--out",
+        type=str,
+        default="screen_sample.png",
+        help="Output filename for captured screenshot",
+    )
+    parser.add_argument(
+        "--crop",
+        nargs=5,
+        metavar=("X", "Y", "W", "H", "NAME"),
+        help="Crop a bounding box region and save as template",
     )
     parser.add_argument(
         "--category",
@@ -32,8 +44,12 @@ def main():
         choices=["buttons", "eza", "popups", "system", "tabs"],
         help="Target category subfolder for cropped template",
     )
-    parser.add_argument("--list", action="store_true", help="List all categorized templates currently available")
-    parser.add_argument("--device", type=str, default=None, help="Target specific Android device serial")
+    parser.add_argument(
+        "--list", action="store_true", help="List all categorized templates currently available"
+    )
+    parser.add_argument(
+        "--device", type=str, default=None, help="Target specific Android device serial"
+    )
 
     args = parser.parse_args()
 

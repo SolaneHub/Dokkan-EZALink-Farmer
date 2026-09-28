@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import glob
 import os
 import shutil
@@ -8,15 +10,33 @@ from typing import Any
 
 def get_resource_path(relative_path: str) -> str:
     """
-    Resolves the absolute path to a project resource (templates, assets).
-    Works seamlessly both in development and when bundled into a standalone
-    executable via PyInstaller (using sys._MEIPASS).
+    Resolves the absolute path to a project resource (templates, assets, locales).
+    Works seamlessly both in development, inside installed packages (src/dokkan_eza_link_farmer/assets),
+    and when bundled into a standalone executable via PyInstaller (using sys._MEIPASS).
     """
     if getattr(sys, "frozen", False):
         base_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-    else:
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    return os.path.normpath(os.path.join(base_dir, relative_path))
+        return os.path.normpath(os.path.join(base_dir, relative_path))
+
+    # 1. Check inside package assets directory
+    pkg_assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets"))
+    pkg_candidate = os.path.normpath(os.path.join(pkg_assets_dir, relative_path))
+    if os.path.exists(pkg_candidate):
+        return pkg_candidate
+
+    # 2. Check repo root directory
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    repo_candidate = os.path.normpath(os.path.join(repo_root, relative_path))
+    if os.path.exists(repo_candidate):
+        return repo_candidate
+
+    # 3. Check legacy flat root fallback
+    flat_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    flat_candidate = os.path.normpath(os.path.join(flat_root, relative_path))
+    if os.path.exists(flat_candidate):
+        return flat_candidate
+
+    return pkg_candidate
 
 
 def get_config_path(config_filename: str = "config/settings.yaml") -> str:
@@ -43,6 +63,80 @@ def get_config_path(config_filename: str = "config/settings.yaml") -> str:
         return bundled_path
 
     return cwd_path
+
+
+class SingleInstanceMutex:
+    """
+    Guarantees single-instance execution per system to prevent concurrent
+    access conflicts on ADB connections and game automations.
+    """
+
+    def __init__(self, app_id: str = "Dokkan-EZALink-Farmer-SingleInstance"):
+        self.app_id = app_id
+        self.is_locked = False
+        self._handle: Any = None
+        self._lock_file: Any = None
+
+    def acquire(self) -> bool:
+        """Acquires the single-instance mutex. Returns True if acquired, False if already running."""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+
+                self._kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+                mutex_name = f"Global\\{self.app_id}"
+                self._handle = self._kernel32.CreateMutexW(None, False, mutex_name)
+                last_error = self._kernel32.GetLastError()
+                # ERROR_ALREADY_EXISTS = 183
+                if last_error == 183:
+                    self.is_locked = False
+                    return False
+                self.is_locked = True
+                return True
+            except Exception:
+                pass
+
+        # Fallback / POSIX file lock
+        import tempfile
+
+        lock_dir = tempfile.gettempdir()
+        lock_path = os.path.join(lock_dir, f"{self.app_id}.lock")
+        try:
+            self._lock_file = open(lock_path, "w")  # noqa: SIM115 (file must remain open for flock duration)
+            if sys.platform != "win32":
+                import fcntl
+
+                fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.is_locked = True
+            return True
+        except Exception:
+            self.is_locked = False
+            return False
+
+    def release(self) -> None:
+        """Releases the single-instance mutex."""
+        import contextlib
+
+        if sys.platform == "win32" and self._handle:
+            with contextlib.suppress(Exception):
+                self._kernel32.CloseHandle(self._handle)
+            self._handle = None
+        if self._lock_file:
+            with contextlib.suppress(Exception):
+                if sys.platform != "win32":
+                    import fcntl
+
+                    fcntl.flock(self._lock_file, fcntl.LOCK_UN)
+                self._lock_file.close()
+            self._lock_file = None
+        self.is_locked = False
+
+    def __enter__(self) -> SingleInstanceMutex:
+        self.acquire()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.release()
 
 
 class ToolLocator:
@@ -91,7 +185,9 @@ class ToolLocator:
         folder = os.path.dirname(base_file)
         exe_name = f"{target_name}.exe" if sys.platform == "win32" else target_name
         candidate = os.path.join(folder, exe_name)
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK if sys.platform != "win32" else os.F_OK):
+        if os.path.isfile(candidate) and os.access(
+            candidate, os.X_OK if sys.platform != "win32" else os.F_OK
+        ):
             return os.path.abspath(candidate)
         return None
 
@@ -138,7 +234,10 @@ class ToolLocator:
                     # For ANDROID_HOME/platform-tools
                     sub_joined = os.path.join(val, "platform-tools", exe_name)
                     if os.path.isfile(sub_joined):
-                        return (os.path.abspath(sub_joined), f"Tier 2 (Environment variable {var}/platform-tools)")
+                        return (
+                            os.path.abspath(sub_joined),
+                            f"Tier 2 (Environment variable {var}/platform-tools)",
+                        )
 
         # Tier 3: System PATH via shutil.which
         which_path = shutil.which(tool_name) or shutil.which(exe_name)
@@ -156,7 +255,9 @@ class ToolLocator:
             mac_paths = [
                 f"/opt/homebrew/bin/{tool_name}",  # Apple Silicon Homebrew
                 f"/usr/local/bin/{tool_name}",  # Intel Mac Homebrew
-                os.path.expanduser(f"~/Library/Android/sdk/platform-tools/{tool_name}"),  # Android Studio macOS
+                os.path.expanduser(
+                    f"~/Library/Android/sdk/platform-tools/{tool_name}"
+                ),  # Android Studio macOS
                 f"/opt/local/bin/{tool_name}",  # MacPorts
                 f"/Applications/scrcpy.app/Contents/MacOS/{tool_name}",
                 os.path.expanduser(f"~/Applications/{tool_name}"),
@@ -167,7 +268,9 @@ class ToolLocator:
 
         elif sys.platform == "win32":
             user_home = os.path.expanduser("~")
-            local_appdata = os.environ.get("LOCALAPPDATA", os.path.join(user_home, "AppData", "Local"))
+            local_appdata = os.environ.get(
+                "LOCALAPPDATA", os.path.join(user_home, "AppData", "Local")
+            )
             program_data = os.environ.get("PROGRAMDATA", r"C:\ProgramData")
 
             win_candidates = [
@@ -215,7 +318,7 @@ class ToolLocator:
     def _scan_windows_registry_path(cls, exe_name: str) -> str | None:
         """Reads User and Machine PATH directly from Windows Registry."""
         try:
-            import winreg  # type: ignore
+            import winreg
 
             hkey_cu = getattr(winreg, "HKEY_CURRENT_USER", None)
             hkey_lm = getattr(winreg, "HKEY_LOCAL_MACHINE", None)
@@ -226,8 +329,8 @@ class ToolLocator:
                 (hkey_lm, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
             ]:
                 try:
-                    with winreg.OpenKey(root_key, sub_key) as key:  # type: ignore
-                        raw_path, _ = winreg.QueryValueEx(key, "Path")  # type: ignore
+                    with winreg.OpenKey(root_key, sub_key) as key:
+                        raw_path, _ = winreg.QueryValueEx(key, "Path")
                         for folder in raw_path.split(";"):
                             folder = folder.strip().strip('"')
                             if not folder:
@@ -301,20 +404,26 @@ class ToolLocator:
         if not tool_path or not os.path.isfile(tool_path):
             return None
         try:
-            res = subprocess.run([tool_path, "--version"], capture_output=True, text=True, timeout=4)
+            res = subprocess.run(
+                [tool_path, "--version"], capture_output=True, text=True, timeout=4
+            )
             out = res.stdout.strip() or res.stderr.strip()
             first_line = out.splitlines()[0] if out else "Unknown"
             return first_line
         except Exception:
             try:
-                res = subprocess.run([tool_path, "version"], capture_output=True, text=True, timeout=4)
+                res = subprocess.run(
+                    [tool_path, "version"], capture_output=True, text=True, timeout=4
+                )
                 out = res.stdout.strip()
                 return out.splitlines()[0] if out else "Available"
             except Exception:
                 return "Available"
 
     @classmethod
-    def diagnose_system(cls, configured_adb: str | None = None, configured_scrcpy: str | None = None) -> dict[str, Any]:
+    def diagnose_system(
+        cls, configured_adb: str | None = None, configured_scrcpy: str | None = None
+    ) -> dict[str, Any]:
         """Produces a comprehensive system diagnostics report for the doctor command."""
         scrcpy_path = cls.find_scrcpy(configured_scrcpy)
         adb_path = cls.find_adb(configured_adb)
@@ -322,7 +431,9 @@ class ToolLocator:
         scrcpy_ver = cls.get_tool_version(scrcpy_path) if scrcpy_path else None
         adb_ver = cls.get_tool_version(adb_path) if adb_path else None
 
-        os_name = {"darwin": "macOS", "win32": "Windows", "linux": "Linux"}.get(sys.platform, sys.platform)
+        os_name = {"darwin": "macOS", "win32": "Windows", "linux": "Linux"}.get(
+            sys.platform, sys.platform
+        )
 
         # Installation guidance per platform
         install_help = {

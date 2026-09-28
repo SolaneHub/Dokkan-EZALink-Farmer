@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import os
 from typing import Any
 
 import yaml
 
-from core.system_tools import get_resource_path
+from dokkan_eza_link_farmer.core.system_tools import get_resource_path
 
 DEFAULT_LANGUAGE = "en"
 _current_language = DEFAULT_LANGUAGE
@@ -11,7 +13,7 @@ _catalogs: dict[str, dict[str, Any]] = {}
 _loaded = False
 
 
-def _load_all_locales():
+def _load_all_locales() -> None:
     """Loads all translation catalogs from the locales directory."""
     global _catalogs, _loaded
     _catalogs.clear()
@@ -77,7 +79,7 @@ def get_language() -> str:
 def _lookup_key(catalog: dict[str, Any], key: str) -> str | None:
     """Navigates dot-separated key inside a nested dictionary."""
     parts = key.split(".")
-    curr = catalog
+    curr: Any = catalog
     for p in parts:
         if isinstance(curr, dict) and p in curr:
             curr = curr[p]
@@ -88,7 +90,7 @@ def _lookup_key(catalog: dict[str, Any], key: str) -> str | None:
     return None
 
 
-def t(key: str, **kwargs) -> str:
+def t(key: str, **kwargs: Any) -> str:
     """
     Translates a dot-notated key into the active language, with fallback to English.
     Interpolates any keyword arguments provided (e.g. t('msg', count=5)).

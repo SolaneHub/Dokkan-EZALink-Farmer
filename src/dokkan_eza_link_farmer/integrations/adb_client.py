@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 import os
 import shutil
+import socket
 import subprocess
 import time
+from typing import Any
 
 import cv2
 import numpy as np
 
-from core.system_tools import ToolLocator
+from dokkan_eza_link_farmer.core.system_tools import ToolLocator
+from dokkan_eza_link_farmer.core.updater import sanitize_process_env
 
 
 class ADBClient:
@@ -38,7 +43,7 @@ class ADBClient:
         self.adb_path = self.resolve_executable(adb_path)
         self.serial = serial
         self._screen_size: tuple[int, int] | None = None
-        self._scrcpy_proc: subprocess.Popen | None = None
+        self._scrcpy_proc: subprocess.Popen[Any] | None = None
 
     def _build_cmd(self, args: list[str]) -> list[str]:
         cmd = [self.adb_path]
@@ -51,17 +56,24 @@ class ADBClient:
         """Executes an adb command and returns stdout."""
         cmd = self._build_cmd(args)
         try:
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True)
+            res = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=True,
+                env=sanitize_process_env(),
+            )
             return res.stdout.strip()
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"ADB command failed ({' '.join(cmd)}): {e.stderr.strip()}") from e
         except subprocess.TimeoutExpired as e:
             raise TimeoutError(f"ADB command timed out ({' '.join(cmd)}) after {timeout}s") from e
 
-    def list_devices(self) -> list[dict]:
+    def list_devices(self) -> list[dict[str, Any]]:
         """Lists connected devices with their serial, model, and status."""
         out = self.run_cmd(["devices", "-l"])
-        devices = []
+        devices: list[dict[str, Any]] = []
         for line in out.splitlines()[1:]:
             line = line.strip()
             if not line:
@@ -89,9 +101,7 @@ class ADBClient:
 
     def probe_and_connect_emulators(self) -> list[str]:
         """Probes standard emulator loopback ports on localhost and connects if open."""
-        import socket
-
-        connected = []
+        connected: list[str] = []
         for port in self.COMMON_EMULATOR_PORTS:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -123,7 +133,7 @@ class ADBClient:
                 "No Android device or emulator detected. Connect via USB or start your emulator with ADB enabled."
             )
 
-        self.serial = authorized[0]["serial"]
+        self.serial = str(authorized[0]["serial"])
         self.get_screen_size(force_refresh=True)
         return self.serial
 
@@ -140,39 +150,52 @@ class ADBClient:
                 return self._screen_size
         raise RuntimeError(f"Unable to determine screen resolution: {out}")
 
-    def tap(self, x: int, y: int, delay_after: float = 0.5):
+    def tap(self, x: int, y: int, delay_after: float = 0.5) -> None:
         """Sends a tap event to coordinates (x, y)."""
         self.run_cmd(["shell", "input", "tap", str(int(x)), str(int(y))])
         if delay_after > 0:
             time.sleep(delay_after)
 
-    def tap_ratio(self, rx: float, ry: float, delay_after: float = 0.5):
+    def tap_ratio(self, rx: float, ry: float, delay_after: float = 0.5) -> None:
         """Taps screen using relative coordinates (0.0 to 1.0)."""
         w, h = self.get_screen_size()
         self.tap(int(w * rx), int(h * ry), delay_after)
 
-    def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300, delay_after: float = 0.5):
+    def swipe(
+        self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300, delay_after: float = 0.5
+    ) -> None:
         """Simulates a swipe gesture."""
         self.run_cmd(
-            ["shell", "input", "swipe", str(int(x1)), str(int(y1)), str(int(x2)), str(int(y2)), str(duration_ms)]
+            [
+                "shell",
+                "input",
+                "swipe",
+                str(int(x1)),
+                str(int(y1)),
+                str(int(x2)),
+                str(int(y2)),
+                str(duration_ms),
+            ]
         )
         if delay_after > 0:
             time.sleep(delay_after)
 
-    def key_back(self):
+    def key_back(self) -> None:
         """Presses the Android back button (KEYCODE_BACK = 4)."""
         self.run_cmd(["shell", "input", "keyevent", "4"])
 
-    def key_home(self):
+    def key_home(self) -> None:
         """Presses the Android home button (KEYCODE_HOME = 3)."""
         self.run_cmd(["shell", "input", "keyevent", "3"])
 
     def screencap(self) -> np.ndarray:
         """Captures device screen directly into an OpenCV BGR image without disk I/O."""
         cmd = self._build_cmd(["exec-out", "screencap", "-p"])
-        proc = subprocess.run(cmd, capture_output=True)
+        proc = subprocess.run(cmd, capture_output=True, env=sanitize_process_env())
         if proc.returncode != 0 or not proc.stdout:
-            raise RuntimeError(f"Screen capture failed: {proc.stderr.decode('utf-8', errors='ignore')}")
+            raise RuntimeError(
+                f"Screen capture failed: {proc.stderr.decode('utf-8', errors='ignore')}"
+            )
 
         # Decode raw PNG bytes to OpenCV image
         img_array = np.frombuffer(proc.stdout, dtype=np.uint8)
@@ -186,11 +209,15 @@ class ADBClient:
         out = self.run_cmd(["shell", "dumpsys", "window", "windows"])
         return package_name in out
 
-    def launch_app(self, package_name: str):
+    def launch_app(self, package_name: str) -> None:
         """Launches the app using monkey or intent."""
-        self.run_cmd(["shell", "monkey", "-p", package_name, "-c", "android.intent.category.LAUNCHER", "1"])
+        self.run_cmd(
+            ["shell", "monkey", "-p", package_name, "-c", "android.intent.category.LAUNCHER", "1"]
+        )
 
-    def start_scrcpy(self, scrcpy_path: str = "scrcpy", extra_args: list[str] | None = None) -> bool:
+    def start_scrcpy(
+        self, scrcpy_path: str = "scrcpy", extra_args: list[str] | None = None
+    ) -> bool:
         """Starts a scrcpy mirror window in background."""
         if self._scrcpy_proc and self._scrcpy_proc.poll() is None:
             return True  # Already running
@@ -204,12 +231,17 @@ class ADBClient:
             cmd.extend(extra_args)
 
         try:
-            self._scrcpy_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self._scrcpy_proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=sanitize_process_env(),
+            )
             return True
         except FileNotFoundError:
             return False
 
-    def stop_scrcpy(self):
+    def stop_scrcpy(self) -> None:
         """Stops running scrcpy process."""
         if self._scrcpy_proc and self._scrcpy_proc.poll() is None:
             self._scrcpy_proc.terminate()

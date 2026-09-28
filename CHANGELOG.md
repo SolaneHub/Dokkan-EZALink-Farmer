@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.4] - 2026-09-28
+
+### Added
+- **Dragon Ball Z Dokkan Battle AAA Panoramic Hero Banner**: High-resolution 16:9 visual header featuring Ultra Instinct Goku, Shenron, and holographic HUD telemetry for Link Skill Farming and EZA Lv. 999 (`docs/github/official_banner.png`).
+- **Comprehensive Contextual Documentation**: Overhauled `README.md` with complete Dokkan Battle context: Rich terminal dashboard, zero-latency Scrcpy screen mirroring, Discord slash command bot control, detailed automation matrix, and antivirus transparency analysis.
+- **Single-Instance Mutex & Process Environment Isolation**: Integrated `SingleInstanceMutex` and runtime environment sanitization in `core/system_tools.py` and `core/updater.py` to prevent multi-instance ADB socket collisions and eliminate PyInstaller `_MEIPASS` variable leakage in child subprocesses.
+- **Community Health & Security Infrastructure**: Added GitHub Issue forms (`.github/ISSUE_TEMPLATE/bug_report.yml`, `feature_request.yml`, `config.yml`), `PRIVACY.md` (guaranteeing 100% local execution and zero telemetry), `TERMS.md` (disclaimer of non-affiliation with Bandai Namco/Akatsuki), and `SECURITY.md`.
+- **Standalone Distribution Builder**: Introduced clean standalone build pipeline `build_exe.py` targeting `Launch-Dokkan-EZALink.exe` with bundled internal assets.
+
+### Changed
+- **Modular Packaging Refactor (`src/dokkan_eza_link_farmer/`)**: Migrated flat legacy project structure to standard PEP 517/518/621/660 `src/` layout under the package name `dokkan_eza_link_farmer` with Hatchling backend.
+- **Root Asset Consolidation**: Relocated all template images, localization catalogs (`en.yaml`, `it.yaml`), and configuration files into `src/dokkan_eza_link_farmer/assets/`, eliminating legacy root duplicates.
+- **Streamlined Entrypoint**: Refactored `main.py` into a lightweight, robust 10-line runner delegating execution directly to `dokkan_eza_link_farmer.__main__:main`.
+- **Strict Quality Toolchain**: Enforced strict Ruff linting rules (`E`, `W`, `F`, `I`, `B`, `UP`, `SIM`, `ARG`) with `line-length = 100` and Pyright standard mode with 0 errors and 0 warnings.
+- **License Clarification**: Updated `LICENSE` to MIT License with explicit author attribution requirement (SolaneHub).
+
+### Fixed
+- **Circular Import Elimination**: Implemented PEP 562 dynamic lazy-loading in `core/__init__.py` and reordered `GameState` enum definitions to resolve circular imports between vision and bot engine modules.
+- **Asset Filtering in `.gitignore`**: Corrected asset whitelist patterns to track template PNG images inside `src/dokkan_eza_link_farmer/assets/`.
+- **DokkanDB Live Event Rotation Test**: Updated test assertion in `tests/test_link_leveling.py` to gracefully handle server-side event rotation and expiration dates.
+
+---
+
 ## [v1.0.3] - 2026-09-25
 
 ### Added

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -18,10 +20,15 @@ class DokkanDBClient:
     API_BASE_URL = "https://api.dokkandb.com/api"
     API_JP_BASE_URL = "https://api.dokkandb.com/jp/api"
     ASSETS_MIRROR_URL = "https://api.dokkandb.com/assets/mirror"
-    ASSETS_FALLBACK_URL = "https://enaskhebnjtktdfszdcb.supabase.co/storage/v1/object/public/assets/mirror"
+    ASSETS_FALLBACK_URL = (
+        "https://enaskhebnjtktdfszdcb.supabase.co/storage/v1/object/public/assets/mirror"
+    )
 
     DEFAULT_HEADERS = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
         "Referer": "https://dokkandb.com/",
         "Origin": "https://dokkandb.com",
         "Accept": "application/json, image/*, */*",
@@ -35,7 +42,7 @@ class DokkanDBClient:
         self.banners_dir = os.path.join(self.cache_dir, "banners")
         self.cache_ttl_seconds = cache_ttl_seconds
 
-    def _ensure_dirs(self):
+    def _ensure_dirs(self) -> None:
         """Creates cache directories lazily when actually writing files."""
         os.makedirs(self.cache_dir, exist_ok=True)
         os.makedirs(self.banners_dir, exist_ok=True)
@@ -85,7 +92,7 @@ class DokkanDBClient:
             return []
 
         now = datetime.now(timezone.utc)
-        results = []
+        results: list[dict[str, Any]] = []
         for item in data:
             if not isinstance(item, dict):
                 continue
@@ -166,8 +173,12 @@ class DokkanDBClient:
         Returns the absolute local path to the saved PNG image.
         """
         event_id = event.get("id")
-        primary_rel = event.get("listbutton_image_path") if prefer_button else event.get("banner_image_path")
-        secondary_rel = event.get("banner_image_path") if prefer_button else event.get("listbutton_image_path")
+        primary_rel = (
+            event.get("listbutton_image_path") if prefer_button else event.get("banner_image_path")
+        )
+        secondary_rel = (
+            event.get("banner_image_path") if prefer_button else event.get("listbutton_image_path")
+        )
 
         rel_paths_to_try = [p for p in [primary_rel, secondary_rel] if p]
         if not rel_paths_to_try:
@@ -187,7 +198,10 @@ class DokkanDBClient:
             if os.path.exists(local_path) and os.path.getsize(local_path) > 1000:
                 return local_path
 
-            urls_to_try = [f"{self.ASSETS_MIRROR_URL}/{clean_rel}", f"{self.ASSETS_FALLBACK_URL}/{clean_rel}"]
+            urls_to_try = [
+                f"{self.ASSETS_MIRROR_URL}/{clean_rel}",
+                f"{self.ASSETS_FALLBACK_URL}/{clean_rel}",
+            ]
 
             for u in urls_to_try:
                 try:
@@ -202,7 +216,9 @@ class DokkanDBClient:
 
         return None
 
-    def get_link_level_events(self, region: str = "glb", active_only: bool = False) -> list[dict[str, Any]]:
+    def get_link_level_events(
+        self, region: str = "glb", active_only: bool = False
+    ) -> list[dict[str, Any]]:
         """
         Retrieves known Link Level farming events from DokkanDB:
         - Ultimate Leveling Up! Chamber of Spirit and Time (Stanza dello Spirito e del Tempo)
@@ -220,7 +236,7 @@ class DokkanDBClient:
             "god-level intensive training",
         ]
 
-        results = []
+        results: list[dict[str, Any]] = []
         for ev in all_events:
             name = (ev.get("name") or "").lower()
             if not any(kw in name for kw in target_keywords):
@@ -269,7 +285,9 @@ class DokkanDBClient:
         Prioritizes the currently active version.
         """
         events = self.get_link_level_events(region=region, active_only=False)
-        spirit_events = [e for e in events if "chamber of spirit and time" in (e.get("name") or "").lower()]
+        spirit_events = [
+            e for e in events if "chamber of spirit and time" in (e.get("name") or "").lower()
+        ]
 
         if not spirit_events:
             return None

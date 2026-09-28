@@ -446,7 +446,7 @@ wheels = [
 
 [[package]]
 name = "dokkan-eza-link-farmer"
-version = "1.0.3"
+version = "1.0.4"
 source = { editable = "." }
 dependencies = [
     { name = "discord-py" },
@@ -486,7 +486,7 @@ dev = [
     { name = "pyinstaller", specifier = ">=6.0.0" },
     { name = "pyright", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=7.4.0" },
-    { name = "ruff", specifier = ">=0.1.0" },
+    { name = "ruff", specifier = ">=0.9.0" },
 ]
 
 [[package]]

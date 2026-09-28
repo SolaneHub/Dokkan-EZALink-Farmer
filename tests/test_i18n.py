@@ -1,6 +1,6 @@
 import unittest
 
-from core.i18n import get_available_languages, get_language, set_language, t
+from dokkan_eza_link_farmer.core.i18n import get_available_languages, get_language, set_language, t
 
 
 class TestI18n(unittest.TestCase):

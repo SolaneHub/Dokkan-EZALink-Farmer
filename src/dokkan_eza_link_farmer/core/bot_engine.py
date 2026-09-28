@@ -9,15 +9,15 @@ import cv2
 import numpy as np
 import yaml
 
-from core.adb_client import ADBClient
-from core.dokkandb_client import DokkanDBClient
-from core.game_state import GameState, StateDetector
-from core.i18n import set_language, t
-from core.system_tools import ToolLocator, get_config_path
-from core.vision import Vision
-from tasks.base_task import BaseTask
-from tasks.eza_farm import EZAFarmTask
-from tasks.link_level_farm import LinkLevelFarmTask
+from dokkan_eza_link_farmer.automation.game_state import GameState, StateDetector
+from dokkan_eza_link_farmer.automation.tasks.base_task import BaseTask
+from dokkan_eza_link_farmer.automation.tasks.eza_farm import EZAFarmTask
+from dokkan_eza_link_farmer.automation.tasks.link_level_farm import LinkLevelFarmTask
+from dokkan_eza_link_farmer.automation.vision import Vision
+from dokkan_eza_link_farmer.core.i18n import set_language, t
+from dokkan_eza_link_farmer.core.system_tools import ToolLocator, get_config_path
+from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
+from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 
 
 class BotEngine:
@@ -94,10 +94,12 @@ class BotEngine:
             active_serial = serial
         else:
             active_serial = self.adb.auto_connect()
-        self.emit_log(t("tasks.device_connected", serial=active_serial, res=str(self.adb.get_screen_size())))
+        self.emit_log(
+            t("tasks.device_connected", serial=active_serial, res=str(self.adb.get_screen_size()))
+        )
         return active_serial
 
-    def list_devices(self) -> list[dict]:
+    def list_devices(self) -> list[dict[str, Any]]:
         """Queries ADB for connected devices."""
         return self.adb.list_devices()
 
@@ -105,7 +107,9 @@ class BotEngine:
         """Runs complete system check for Python, ADB, scrcpy, and connected devices."""
         configured_adb = self.config.get("device", {}).get("adb_path")
         configured_scrcpy = self.config.get("device", {}).get("scrcpy_path")
-        report = ToolLocator.diagnose_system(configured_adb=configured_adb, configured_scrcpy=configured_scrcpy)
+        report = ToolLocator.diagnose_system(
+            configured_adb=configured_adb, configured_scrcpy=configured_scrcpy
+        )
         try:
             report["devices"] = self.list_devices()
         except Exception as e:
@@ -144,7 +148,9 @@ class BotEngine:
         state, _ = self.detector.detect(screen)
         return state
 
-    def start_eza_farm(self, target_level: int = 999, target_eza: dict[str, Any] | None = None) -> bool:
+    def start_eza_farm(
+        self, target_level: int = 999, target_eza: dict[str, Any] | None = None
+    ) -> bool:
         """Starts EZA continuous battle climbing task."""
         if self.is_task_running():
             self.emit_log(t("tasks.task_already_running"))
@@ -163,7 +169,10 @@ class BotEngine:
         return True
 
     def start_link_level_farm(
-        self, runs: int | None = None, target_event: dict[str, Any] | None = None, use_boost: bool | None = None
+        self,
+        runs: int | None = None,
+        target_event: dict[str, Any] | None = None,
+        use_boost: bool | None = None,
     ) -> bool:
         """Starts Link Level farming with DokkanDB event integration and auto-swap."""
         if self.is_task_running():
@@ -216,7 +225,9 @@ class BotEngine:
             "task_running": running,
             "task_type": type(self.current_task).__name__ if running else t("cli.status.none"),
             "runs_completed": self.current_task.runs_completed if self.current_task else 0,
-            "runs_target": getattr(self.current_task, "runs_target", None) if self.current_task else 0,
+            "runs_target": getattr(self.current_task, "runs_target", None)
+            if self.current_task
+            else 0,
             "current_state": self.current_task.current_state.value if self.current_task else "IDLE",
         }
 

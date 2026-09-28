@@ -4,12 +4,12 @@ from typing import Any
 import cv2
 import numpy as np
 
-from core.adb_client import ADBClient
-from core.dokkandb_client import DokkanDBClient
-from core.game_state import GameState
-from core.i18n import t
-from core.vision import Vision
-from tasks.base_task import BaseTask
+from dokkan_eza_link_farmer.automation.game_state import GameState
+from dokkan_eza_link_farmer.automation.tasks.base_task import BaseTask
+from dokkan_eza_link_farmer.automation.vision import Vision
+from dokkan_eza_link_farmer.core.i18n import t
+from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
+from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 
 
 class LinkLevelFarmTask(BaseTask):
@@ -51,21 +51,27 @@ class LinkLevelFarmTask(BaseTask):
 
         self._target_banner_img: np.ndarray | None = None
         if self.target_event and self.target_event.get("banner_local_path"):
-            self._target_banner_img = cv2.imread(self.target_event["banner_local_path"], cv2.IMREAD_UNCHANGED)
+            self._target_banner_img = cv2.imread(
+                self.target_event["banner_local_path"], cv2.IMREAD_UNCHANGED
+            )
 
         ll_cfg = self.config.get("link_leveling", {})
         self.auto_swap = ll_cfg.get("auto_swap_maxed_units", True)
         self.protected_slots: list[int] = ll_cfg.get("protected_slots", [])
         self.preferred_difficulty: str = ll_cfg.get("preferred_difficulty", "super").lower()
         self.target_stage: str = ll_cfg.get("target_stage", "saiyan_training").lower()
-        self.use_boost: bool = use_boost if use_boost is not None else bool(ll_cfg.get("use_boost", False))
+        self.use_boost: bool = (
+            use_boost if use_boost is not None else bool(ll_cfg.get("use_boost", False))
+        )
         self.rebuild_team_every_run: bool = ll_cfg.get("rebuild_team_every_run", True)
         self.ensure_filter_every_run: bool = ll_cfg.get("ensure_filter_every_run", False)
         self.use_attempt_again: bool = bool(ll_cfg.get("use_attempt_again", True))
 
         # Modern UI box & team formation coordinates
         self.box_card_coords = ll_cfg.get("box_first_slot_coords", [0.18, 0.28])
-        self.box_confirm_coords = ll_cfg.get("box_confirm_coords", [0.88, 0.88])  # Red Confirm button
+        self.box_confirm_coords = ll_cfg.get(
+            "box_confirm_coords", [0.88, 0.88]
+        )  # Red Confirm button
 
         # State tracking
         self.event_banner_selected = False
@@ -74,7 +80,9 @@ class LinkLevelFarmTask(BaseTask):
         self._needs_team_link_check = True
         self._team_prepared_for_run = False
 
-    def navigate_to_event_banner(self, _screen: np.ndarray, w: int, h: int, meta: dict[str, Any]) -> bool:
+    def navigate_to_event_banner(
+        self, _screen: np.ndarray, w: int, h: int, meta: dict[str, Any]
+    ) -> bool:
         """
         Navigates to the event banner in the Event List (Bonus tab):
         1. Switches to Bonus tab if on Event Select screen.
@@ -89,7 +97,9 @@ class LinkLevelFarmTask(BaseTask):
             self.event_banner_selected = True
             return True
 
-        target_name = (self.target_event.get("name") if self.target_event else None) or "Chamber of Spirit and Time"
+        target_name = (
+            self.target_event.get("name") if self.target_event else None
+        ) or "Chamber of Spirit and Time"
         self.log(t("tasks.link.searching_banner", name=target_name))
 
         # Ensure Bonus tab is active (Category 4 events are in Bonus tab)
@@ -109,7 +119,9 @@ class LinkLevelFarmTask(BaseTask):
                 return False
 
             curr_screen = self.adb.screencap()
-            match = self.vision.find_banner_on_screen(curr_screen, self._target_banner_img, threshold=0.72)
+            match = self.vision.find_banner_on_screen(
+                curr_screen, self._target_banner_img, threshold=0.72
+            )
             if match:
                 cx, cy, conf = match
                 self.log(t("tasks.link.banner_found", name=target_name, conf=f"{conf:.2f}"))
@@ -121,7 +133,9 @@ class LinkLevelFarmTask(BaseTask):
 
             # Scroll down to reveal more events
             self.log(t("tasks.link.scrolling_events"))
-            self.adb.swipe(int(w * 0.50), int(h * 0.65), int(w * 0.50), int(h * 0.35), duration_ms=250)
+            self.adb.swipe(
+                int(w * 0.50), int(h * 0.65), int(w * 0.50), int(h * 0.35), duration_ms=250
+            )
             self.wait_check(0.8)
 
             if prev_screen is not None:
@@ -191,7 +205,9 @@ class LinkLevelFarmTask(BaseTask):
                 return
 
         # 2. If on Stage List screen: specifically target 'Saiyan Training'
-        st_match = meta.get("stage_saiyan_training") or self.vision.find_stage_saiyan_training(screen)
+        st_match = meta.get("stage_saiyan_training") or self.vision.find_stage_saiyan_training(
+            screen
+        )
         if st_match:
             self.log(t("tasks.link.select_saiyan_training"))
             self.adb.tap(st_match[0], st_match[1], delay_after=2.0)
@@ -201,7 +217,9 @@ class LinkLevelFarmTask(BaseTask):
         self.log(t("tasks.link.select_stage_card"))
         self.adb.tap(int(w * 0.50), int(h * 0.55), delay_after=2.0)
 
-    def open_box_filter(self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None) -> bool:
+    def open_box_filter(
+        self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None
+    ) -> bool:
         """Opens the Character Box Filter / Sort modal from Team Formation screen via the yellow button in bottom right."""
         curr = self.adb.screencap()
         st, cur_meta = self.detector.detect(curr)
@@ -241,7 +259,10 @@ class LinkLevelFarmTask(BaseTask):
         return self.vision.is_filter_dialog_open(screen)
 
     def set_box_link_filter(
-        self, mode: str = "level_up_possible", screen_w: int | None = None, screen_h: int | None = None
+        self,
+        mode: str = "level_up_possible",
+        screen_w: int | None = None,
+        screen_h: int | None = None,
     ) -> bool:
         """
         Configures the Display Order and Link Skill Level filter in the Filter / Sort modal:
@@ -278,7 +299,11 @@ class LinkLevelFarmTask(BaseTask):
         # 3. Scroll down to Link Skill Level section
         self.log(t("tasks.link.scrolling_to_link_filter"))
         self.adb.swipe(
-            int(screen_w * 0.50), int(screen_h * 0.68), int(screen_w * 0.50), int(screen_h * 0.22), duration_ms=300
+            int(screen_w * 0.50),
+            int(screen_h * 0.68),
+            int(screen_w * 0.50),
+            int(screen_h * 0.22),
+            duration_ms=300,
         )
         self.wait_check(1.0)
 
@@ -287,7 +312,11 @@ class LinkLevelFarmTask(BaseTask):
         status = self.vision.get_link_level_filter_status(scrolled_screen)
         if not status.get("has_link_section", False):
             self.adb.swipe(
-                int(screen_w * 0.50), int(screen_h * 0.68), int(screen_w * 0.50), int(screen_h * 0.30), duration_ms=250
+                int(screen_w * 0.50),
+                int(screen_h * 0.68),
+                int(screen_w * 0.50),
+                int(screen_h * 0.30),
+                duration_ms=250,
             )
             self.wait_check(1.0)
             scrolled_screen = self.adb.screencap()
@@ -347,7 +376,9 @@ class LinkLevelFarmTask(BaseTask):
         self.set_box_link_filter("level_up_possible", screen_w, screen_h)
         return status
 
-    def rebuild_team_from_box(self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None) -> bool:
+    def rebuild_team_from_box(
+        self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None
+    ) -> bool:
         """
         Implements pre-stage team management before starting the stage:
         1. Opens Team Formation from the pre-battle screen (TEAM_CONFIRM).
@@ -384,7 +415,9 @@ class LinkLevelFarmTask(BaseTask):
 
         # 3. Tap 'Remove All' button on the team deck
         self.log(t("tasks.link.team_remove_all"))
-        deck_rm = meta.get("button_deck_remove_all") or self.vision.find_deck_remove_all(curr_screen)
+        deck_rm = meta.get("button_deck_remove_all") or self.vision.find_deck_remove_all(
+            curr_screen
+        )
         if deck_rm:
             rx, ry = deck_rm
         else:
@@ -424,7 +457,10 @@ class LinkLevelFarmTask(BaseTask):
         elif "button_confirm_formation" in meta:
             cx, cy = meta["button_confirm_formation"]
         else:
-            cx, cy = int(screen_w * self.box_confirm_coords[0]), int(screen_h * self.box_confirm_coords[1])
+            cx, cy = (
+                int(screen_w * self.box_confirm_coords[0]),
+                int(screen_h * self.box_confirm_coords[1]),
+            )
 
         self.log(t("tasks.link.confirm_char_select"))
         self.adb.tap(cx, cy, delay_after=2.5)
@@ -444,7 +480,9 @@ class LinkLevelFarmTask(BaseTask):
         self._team_prepared_for_run = True
         return True
 
-    def check_and_swap_team_via_filter(self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None) -> bool:
+    def check_and_swap_team_via_filter(
+        self, screen_w: int, screen_h: int, meta: dict[str, Any] | None = None
+    ) -> bool:
         """
         Authoritative team link verification and automatic swap routine:
         1. Navigates to TEAM_EDIT from TEAM_CONFIRM if needed.
@@ -510,7 +548,10 @@ class LinkLevelFarmTask(BaseTask):
         elif "button_confirm_formation" in meta:
             cx, cy = meta["button_confirm_formation"]
         else:
-            cx, cy = int(screen_w * self.box_confirm_coords[0]), int(screen_h * self.box_confirm_coords[1])
+            cx, cy = (
+                int(screen_w * self.box_confirm_coords[0]),
+                int(screen_h * self.box_confirm_coords[1]),
+            )
 
         self.log(t("tasks.link.confirm_char_select"))
         self.adb.tap(cx, cy, delay_after=2.5)
@@ -530,7 +571,9 @@ class LinkLevelFarmTask(BaseTask):
         self.log(t("tasks.link.unit_maxed_swap", slot=human_slot))
         self.check_and_swap_team_via_filter(screen_w, screen_h, meta)
 
-    def check_and_swap_team_if_needed(self, _screen: Any, screen_w: int, screen_h: int, meta: dict[str, Any]) -> bool:
+    def check_and_swap_team_if_needed(
+        self, _screen: Any, screen_w: int, screen_h: int, meta: dict[str, Any]
+    ) -> bool:
         """
         Inspects all swappable slots (0 to 5) for MAX link level badges using the in-game filter.
         If a maxed slot is found, performs swap and returns True.
@@ -558,7 +601,9 @@ class LinkLevelFarmTask(BaseTask):
         battle_seen = False
         loop_delay = self.config.get("bot", {}).get("loop_delay", 1.5)
 
-        while not self._stop_event.is_set() and (self.runs_target is None or self.runs_completed < self.runs_target):
+        while not self._stop_event.is_set() and (
+            self.runs_target is None or self.runs_completed < self.runs_target
+        ):
             self._pause_event.wait()
 
             try:
@@ -601,8 +646,12 @@ class LinkLevelFarmTask(BaseTask):
                     self._needs_team_link_check = True
                     self._team_prepared_for_run = False
                     tot_display = self.runs_target if self.runs_target is not None else "∞"
-                    self.log(t("tasks.link.run_completed", curr=self.runs_completed, tot=tot_display))
-                    self.on_run_complete(self.runs_completed, self.runs_target if self.runs_target is not None else 0)
+                    self.log(
+                        t("tasks.link.run_completed", curr=self.runs_completed, tot=tot_display)
+                    )
+                    self.on_run_complete(
+                        self.runs_completed, self.runs_target if self.runs_target is not None else 0
+                    )
 
                 # Find and enter the event banner
                 found = self.navigate_to_event_banner(screen, w, h, meta)
@@ -622,8 +671,12 @@ class LinkLevelFarmTask(BaseTask):
                     self._needs_team_link_check = True
                     self._team_prepared_for_run = False
                     tot_display = self.runs_target if self.runs_target is not None else "∞"
-                    self.log(t("tasks.link.run_completed", curr=self.runs_completed, tot=tot_display))
-                    self.on_run_complete(self.runs_completed, self.runs_target if self.runs_target is not None else 0)
+                    self.log(
+                        t("tasks.link.run_completed", curr=self.runs_completed, tot=tot_display)
+                    )
+                    self.on_run_complete(
+                        self.runs_completed, self.runs_target if self.runs_target is not None else 0
+                    )
 
                 if self.runs_target is not None and self.runs_completed >= self.runs_target:
                     self.log(t("tasks.link.runs_target_reached", curr=self.runs_completed))
@@ -648,7 +701,9 @@ class LinkLevelFarmTask(BaseTask):
                         self.rebuild_team_from_box(w, h, meta)
                         self._team_prepared_for_run = True
                         continue
-                    elif self.auto_swap and (not self.box_filter_initialized or self._needs_team_link_check):
+                    elif self.auto_swap and (
+                        not self.box_filter_initialized or self._needs_team_link_check
+                    ):
                         self.check_and_swap_team_via_filter(w, h, meta)
                         self.box_filter_initialized = True
                         self._needs_team_link_check = False
@@ -714,8 +769,12 @@ class LinkLevelFarmTask(BaseTask):
                     self._needs_team_link_check = True
                     self._team_prepared_for_run = False
                     tot_display = self.runs_target if self.runs_target is not None else "∞"
-                    self.log(t("tasks.link.run_completed", curr=self.runs_completed, tot=tot_display))
-                    self.on_run_complete(self.runs_completed, self.runs_target if self.runs_target is not None else 0)
+                    self.log(
+                        t("tasks.link.run_completed", curr=self.runs_completed, tot=tot_display)
+                    )
+                    self.on_run_complete(
+                        self.runs_completed, self.runs_target if self.runs_target is not None else 0
+                    )
 
                     if self.runs_target is not None and self.runs_completed >= self.runs_target:
                         self.log(t("tasks.link.runs_target_reached", curr=self.runs_completed))
@@ -740,8 +799,12 @@ class LinkLevelFarmTask(BaseTask):
                     self._needs_team_link_check = True
                     self._team_prepared_for_run = False
                     tot_display = self.runs_target if self.runs_target is not None else "∞"
-                    self.log(t("tasks.link.run_completed", curr=self.runs_completed, tot=tot_display))
-                    self.on_run_complete(self.runs_completed, self.runs_target if self.runs_target is not None else 0)
+                    self.log(
+                        t("tasks.link.run_completed", curr=self.runs_completed, tot=tot_display)
+                    )
+                    self.on_run_complete(
+                        self.runs_completed, self.runs_target if self.runs_target is not None else 0
+                    )
                 self.wait_check(2.0)
 
             # 12. Game Over

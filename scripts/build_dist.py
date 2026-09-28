@@ -28,7 +28,13 @@ if sys.platform == "win32":
 
 def copy_docs(root_dir: str, target_dir: str):
     """Copies documentation to the target distribution folder."""
-    for doc_file in ["COMMANDS.md", "COMMANDS.it.md", "DISCORD_SETUP.md", "DISCORD_SETUP.it.md", "README.md"]:
+    for doc_file in [
+        "COMMANDS.md",
+        "COMMANDS.it.md",
+        "DISCORD_SETUP.md",
+        "DISCORD_SETUP.it.md",
+        "README.md",
+    ]:
         candidates = [
             os.path.join(root_dir, doc_file),
             os.path.join(root_dir, "docs", doc_file),
@@ -45,7 +51,9 @@ def build(onefile: bool = False):
     print("=" * 60)
     print("🔨 DOKKAN BATTLE BOT - STANDALONE TERMINAL BUILDER")
     print("=" * 60)
-    os_label = "Windows" if sys.platform == "win32" else "macOS" if sys.platform == "darwin" else "Linux"
+    os_label = (
+        "Windows" if sys.platform == "win32" else "macOS" if sys.platform == "darwin" else "Linux"
+    )
     mode_label = "Single File (--onefile)" if onefile else "Distribution Folder (--onedir)"
     print(f"Target platform: {sys.platform} ({os_label})")
     print(f"Build mode:      {mode_label}")
@@ -89,6 +97,10 @@ def build(onefile: bool = False):
         add_locales,
         "--add-data",
         add_config,
+        "--paths",
+        os.path.join(root_dir, "src"),
+        "--hidden-import",
+        "dokkan_eza_link_farmer",
         "--hidden-import",
         "cv2",
         "--hidden-import",
@@ -155,7 +167,9 @@ def build(onefile: bool = False):
     else:
         launcher_linux = os.path.join(target_output_dir, "Launch-Dokkan-EZALink.sh")
         with open(launcher_linux, "w", encoding="utf-8", newline="\n") as f:
-            f.write('#!/bin/bash\nDIR="$(cd "$(dirname "$0")" && pwd)"\ncd "$DIR"\n./Launch-Dokkan-EZALink\n')
+            f.write(
+                '#!/bin/bash\nDIR="$(cd "$(dirname "$0")" && pwd)"\ncd "$DIR"\n./Launch-Dokkan-EZALink\n'
+            )
         with contextlib.suppress(Exception):
             os.chmod(launcher_linux, 0o755)
         print("✓ Created 1-click launcher: Launch-Dokkan-EZALink.sh (Linux)")
@@ -179,7 +193,9 @@ def build(onefile: bool = False):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Standalone terminal builder for Dokkan-EZALink-Farmer")
+    parser = argparse.ArgumentParser(
+        description="Standalone terminal builder for Dokkan-EZALink-Farmer"
+    )
     parser.add_argument(
         "--onefile",
         action="store_true",

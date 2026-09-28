@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "💬 GitHub Discussions"
+    url: "https://github.com/SolaneHub/Dokkan-EZALink-Farmer/discussions"
+    about: "Ask questions, share setup tips, and discuss game automation with the community."
+  - name: "📖 Commands & Documentation Guide"
+    url: "https://github.com/SolaneHub/Dokkan-EZALink-Farmer/blob/main/docs/COMMANDS.md"
+    about: "Read full usage instructions and emulator setup guides before filing a ticket."
