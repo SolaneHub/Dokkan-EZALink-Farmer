@@ -16,7 +16,18 @@ def get_resource_path(relative_path: str) -> str:
     """
     if getattr(sys, "frozen", False):
         base_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-        return os.path.normpath(os.path.join(base_dir, relative_path))
+        direct_candidate = os.path.normpath(os.path.join(base_dir, relative_path))
+        if os.path.exists(direct_candidate):
+            return direct_candidate
+        internal_candidate = os.path.normpath(os.path.join(base_dir, "_internal", relative_path))
+        if os.path.exists(internal_candidate):
+            return internal_candidate
+        pkg_asset_candidate = os.path.normpath(
+            os.path.join(base_dir, "dokkan_eza_link_farmer", "assets", relative_path)
+        )
+        if os.path.exists(pkg_asset_candidate):
+            return pkg_asset_candidate
+        return direct_candidate
 
     # 1. Check inside package assets directory
     pkg_assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets"))

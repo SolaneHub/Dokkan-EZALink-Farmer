@@ -72,15 +72,30 @@ def build(onefile: bool = False):
     # 2. Paths configuration
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     main_py = os.path.join(root_dir, "main.py")
-    templates_dir = os.path.join(root_dir, "templates")
-    locales_dir = os.path.join(root_dir, "locales")
-    config_dir = os.path.join(root_dir, "config")
+    pkg_assets_dir = os.path.join(root_dir, "src", "dokkan_eza_link_farmer", "assets")
+
+    templates_dir = (
+        os.path.join(pkg_assets_dir, "templates")
+        if os.path.isdir(os.path.join(pkg_assets_dir, "templates"))
+        else os.path.join(root_dir, "templates")
+    )
+    locales_dir = (
+        os.path.join(pkg_assets_dir, "locales")
+        if os.path.isdir(os.path.join(pkg_assets_dir, "locales"))
+        else os.path.join(root_dir, "locales")
+    )
+    config_dir = (
+        os.path.join(pkg_assets_dir, "config")
+        if os.path.isdir(os.path.join(pkg_assets_dir, "config"))
+        else os.path.join(root_dir, "config")
+    )
     dist_dir = os.path.join(root_dir, "dist")
 
     sep = ";" if sys.platform == "win32" else ":"
     add_templates = f"{templates_dir}{sep}templates"
     add_locales = f"{locales_dir}{sep}locales"
     add_config = f"{config_dir}{sep}config"
+    add_pkg_assets = f"{pkg_assets_dir}{sep}dokkan_eza_link_farmer/assets"
 
     cmd = [
         sys.executable,
@@ -97,6 +112,8 @@ def build(onefile: bool = False):
         add_locales,
         "--add-data",
         add_config,
+        "--add-data",
+        add_pkg_assets,
         "--paths",
         os.path.join(root_dir, "src"),
         "--hidden-import",
