@@ -37,6 +37,10 @@ class LinkLevelFarmTask(BaseTask):
         target_event: dict[str, Any] | None = None,
         dokkandb: DokkanDBClient | None = None,
         use_boost: bool | None = None,
+        filter_ur: bool = False,
+        filter_lr: bool = False,
+        target_stage: str | None = None,
+        stage_name: str | None = None,
         on_status: Callable[[str], None] | None = None,
         on_run_complete: Callable[[int, int], None] | None = None,
     ):
@@ -45,8 +49,38 @@ class LinkLevelFarmTask(BaseTask):
         self.dokkandb = dokkandb or DokkanDBClient()
         self.target_event = target_event
 
-        # Retrieve Chamber of Spirit and Time from DokkanDB if not explicitly passed
-        if not self.target_event:
+        ll_cfg = self.config.get("link_leveling", {})
+        self.auto_swap = ll_cfg.get("auto_swap_maxed_units", True)
+        self.protected_slots: list[int] = ll_cfg.get("protected_slots", [])
+        self.preferred_difficulty: str = ll_cfg.get("preferred_difficulty", "super").lower()
+
+        if target_stage:
+            self.target_stage: str = target_stage.lower()
+        else:
+            self.target_stage = ll_cfg.get("target_stage", "area_39_3").lower()
+
+        self.stage_name: str = stage_name or (
+            "Area 39 Stage 3: Great stamina-friendly option (also drops green gems) | 5 fights"
+            if self.target_stage == "area_39_3"
+            else (
+                "Area 35 Stage 1: Good stamina-friendly option (also drops blue gems) | 4 fights"
+                if self.target_stage == "area_35_1"
+                else (
+                    self.target_event.get("name", "Chamber of Spirit and Time")
+                    if self.target_event
+                    else "Chamber of Spirit and Time"
+                )
+            )
+        )
+        self.filter_ur: bool = bool(filter_ur or ll_cfg.get("filter_ur", False))
+        self.filter_lr: bool = bool(filter_lr or ll_cfg.get("filter_lr", False))
+
+        # Retrieve Chamber of Spirit and Time from DokkanDB if targeting spirit and not explicitly passed
+        if not self.target_event and self.target_stage in (
+            "spirit",
+            "spirit_and_time",
+            "saiyan_training",
+        ):
             self.target_event = self.dokkandb.get_chamber_of_spirit_and_time()
 
         self._target_banner_img: np.ndarray | None = None
@@ -54,12 +88,6 @@ class LinkLevelFarmTask(BaseTask):
             self._target_banner_img = cv2.imread(
                 self.target_event["banner_local_path"], cv2.IMREAD_UNCHANGED
             )
-
-        ll_cfg = self.config.get("link_leveling", {})
-        self.auto_swap = ll_cfg.get("auto_swap_maxed_units", True)
-        self.protected_slots: list[int] = ll_cfg.get("protected_slots", [])
-        self.preferred_difficulty: str = ll_cfg.get("preferred_difficulty", "super").lower()
-        self.target_stage: str = ll_cfg.get("target_stage", "saiyan_training").lower()
         self.use_boost: bool = (
             use_boost if use_boost is not None else bool(ll_cfg.get("use_boost", False))
         )
@@ -170,9 +198,122 @@ class LinkLevelFarmTask(BaseTask):
             else:
                 self.log(t("tasks.link.boost_already_off"))
 
+    def handle_quest_navigation(
+        self, screen: np.ndarray, w: int, h: int, meta: dict[str, Any]
+    ) -> bool:
+        """
+        Navigates through Dokkan Quest Story hierarchy to reach the target stage:
+        1. If on Difficulty Screen (diff_super or diff_z_hard present):
+           Delegates to handle_stage_selection.
+        2. If on Target Stage List (stage_area39_3 or stage_area35_1 visible):
+           Taps the target stage card to open the difficulty screen.
+        3. If on Area Stages List but stage 1 is not scrolled down yet (for Area 35):
+           Swipes up to reveal stage 1.
+        4. If on Chapter 6 Area List:
+           - For Area 39: taps Area 39 badge / card.
+           - For Area 35: scrolls down if needed, then taps Area 35 badge / card.
+        5. If on Chapter Carousel (text_chapter_6 visible):
+           - Centers Chapter 6 if below center, then taps center to enter Chapter 6.
+        6. If stuck in wrong chapter (e.g. Chapter 7) with green back button:
+           - Taps green back button (<<<) to return to Chapter Carousel.
+        """
+        # 1. If on difficulty selection screen
+        if "diff_super" in meta or "diff_z_hard" in meta:
+            self.handle_stage_selection(screen, w, h, meta)
+            return True
+
+        # 2. Target stage card is directly visible
+        if self.target_stage == "area_39_3":
+            s39_3 = meta.get("stage_area39_3") or self.vision.find_stage_area39_3(screen)
+            if s39_3:
+                self.log(t("tasks.link.select_stage_card_target", name="Area 39 Stage 3"))
+                self.adb.tap(int(w * 0.50), s39_3[1], delay_after=2.0)
+                return True
+        elif self.target_stage == "area_35_1":
+            s35_1 = meta.get("stage_area35_1") or self.vision.find_stage_area35_1(screen)
+            if s35_1:
+                self.log(t("tasks.link.select_stage_card_target", name="Area 35 Stage 1"))
+                self.adb.tap(int(w * 0.50), s35_1[1], delay_after=2.0)
+                return True
+
+        # 3. Area badge is visible
+        if self.target_stage == "area_39_3":
+            b39 = meta.get("badge_area_39") or self.vision.find_badge_area_39(screen)
+            if b39:
+                self.log(t("tasks.link.select_quest_area", area="39"))
+                self.adb.tap(int(w * 0.50), b39[1], delay_after=2.0)
+                return True
+        elif self.target_stage == "area_35_1":
+            b35 = meta.get("badge_area_35") or self.vision.find_badge_area_35(screen)
+            if b35:
+                self.log(t("tasks.link.select_quest_area", area="35"))
+                self.adb.tap(int(w * 0.50), b35[1], delay_after=2.0)
+                return True
+
+        # 4. Check if we are inside Chapter 6 Area List (badge_area_39 visible or header Chapter 6 at Y < 0.48 H)
+        b39_any = meta.get("badge_area_39") or self.vision.find_badge_area_39(screen)
+        c6 = meta.get("chapter_6") or self.vision.find_chapter_6(screen)
+        is_inside_ch6 = b39_any is not None or (c6 is not None and c6[1] < int(h * 0.48))
+
+        if is_inside_ch6 and self.target_stage == "area_35_1":
+            # In Chapter 6 area list, Area 35 is further down: scroll inside scrollable region to reveal Area 35
+            for _ in range(2):
+                self.log(t("tasks.link.scrolling_quest_areas"))
+                self.adb.swipe(
+                    int(w * 0.50), int(h * 0.65), int(w * 0.50), int(h * 0.45), duration_ms=250
+                )
+                self.wait_check(1.0)
+                curr = self.adb.screencap()
+                b35 = self.vision.find_badge_area_35(curr)
+                if b35:
+                    self.log(t("tasks.link.select_quest_area", area="35"))
+                    self.adb.tap(int(w * 0.50), b35[1], delay_after=2.0)
+                    return True
+            return True
+
+        # 5. Chapter 6 is detected on the Carousel
+        if c6 and not is_inside_ch6:
+            # If Chapter 6 is below center in carousel (Y > 55% H)
+            if c6[1] > int(h * 0.55):
+                self.log(t("tasks.link.centering_chapter_6"))
+                self.adb.swipe(
+                    int(w * 0.50), int(h * 0.67), int(w * 0.50), int(h * 0.40), duration_ms=250
+                )
+                self.wait_check(1.0)
+            self.log(t("tasks.link.entering_chapter_6"))
+            self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=2.0)
+            return True
+
+        # 6. If inside stage list or wrong screen with green back button:
+        back_btn = meta.get("back_green_button") or self.vision.find_template(
+            screen, "button_back_green"
+        )
+        if back_btn and back_btn[1] < int(h * 0.88):
+            # If targeting Area 35 Stage 1, we might be inside Area 35 stage list where Stage 1 is at the bottom!
+            if self.target_stage == "area_35_1":
+                for _ in range(3):
+                    self.log(t("tasks.link.scrolling_stages"))
+                    self.adb.swipe(
+                        int(w * 0.50), int(h * 0.70), int(w * 0.50), int(h * 0.32), duration_ms=250
+                    )
+                    self.wait_check(1.0)
+                    curr = self.adb.screencap()
+                    s35_1 = self.vision.find_stage_area35_1(curr)
+                    if s35_1:
+                        self.log(t("tasks.link.select_stage_card_target", name="Area 35 Stage 1"))
+                        self.adb.tap(int(w * 0.50), s35_1[1], delay_after=2.0)
+                        return True
+
+            # If not in target stage list, tap green back button to navigate backwards
+            self.log(t("tasks.link.nav_back_to_carousel"))
+            self.adb.tap(back_btn[0], back_btn[1], delay_after=2.0)
+            return True
+
+        return False
+
     def handle_stage_selection(self, screen: np.ndarray, w: int, h: int, meta: dict[str, Any]):
         """
-        Handles stage difficulty selection (SUPER) and stage selection (Saiyan Training)
+        Handles stage difficulty selection (SUPER) and stage selection (Saiyan Training, Area 39-3, Area 35-1)
         with integrated Boost flag verification.
         """
         # 1. If on difficulty selection screen (SUPER / Z-HARD buttons present)
@@ -204,7 +345,26 @@ class LinkLevelFarmTask(BaseTask):
                 self.adb.tap(zx, zy, delay_after=2.0)
                 return
 
-        # 2. If on Stage List screen: specifically target 'Saiyan Training'
+        # 2. If targeting specific stage in Stage List
+        if self.target_stage == "area_39_3":
+            s39_3 = meta.get("stage_area39_3") or self.vision.find_stage_area39_3(screen)
+            if s39_3:
+                self.log(t("tasks.link.select_stage_card_target", name="Area 39 Stage 3"))
+                self.adb.tap(int(w * 0.50), s39_3[1], delay_after=2.0)
+                return
+            self.handle_quest_navigation(screen, w, h, meta)
+            return
+
+        if self.target_stage == "area_35_1":
+            s35_1 = meta.get("stage_area35_1") or self.vision.find_stage_area35_1(screen)
+            if s35_1:
+                self.log(t("tasks.link.select_stage_card_target", name="Area 35 Stage 1"))
+                self.adb.tap(int(w * 0.50), s35_1[1], delay_after=2.0)
+                return
+            self.handle_quest_navigation(screen, w, h, meta)
+            return
+
+        # Saiyan Training template match if chamber of spirit and time
         st_match = meta.get("stage_saiyan_training") or self.vision.find_stage_saiyan_training(
             screen
         )
@@ -295,6 +455,26 @@ class LinkLevelFarmTask(BaseTask):
             curr_screen = self.adb.screencap()
         else:
             self.log(t("tasks.link.released_already_selected"))
+
+        # 2b. Configure Card Rarity filter if UR/LR flags are requested
+        if self.filter_ur or self.filter_lr:
+            ur_str = "ON" if self.filter_ur else "OFF"
+            lr_str = "ON" if self.filter_lr else "OFF"
+            self.log(t("tasks.link.setting_rarity_filter", ur=ur_str, lr=lr_str))
+
+            # UR toggle
+            ur_is_sel = self.vision.is_filter_ur_selected(curr_screen)
+            if (self.filter_ur and not ur_is_sel) or (not self.filter_ur and ur_is_sel):
+                ur_x, ur_y = self.vision.get_filter_ur_coords(curr_screen)
+                self.adb.tap(ur_x, ur_y, delay_after=0.6)
+                curr_screen = self.adb.screencap()
+
+            # LR toggle
+            lr_is_sel = self.vision.is_filter_lr_selected(curr_screen)
+            if (self.filter_lr and not lr_is_sel) or (not self.filter_lr and lr_is_sel):
+                lr_x, lr_y = self.vision.get_filter_lr_coords(curr_screen)
+                self.adb.tap(lr_x, lr_y, delay_after=0.6)
+                curr_screen = self.adb.screencap()
 
         # 3. Scroll down to Link Skill Level section
         self.log(t("tasks.link.scrolling_to_link_filter"))
@@ -407,11 +587,20 @@ class LinkLevelFarmTask(BaseTask):
             st, cur_meta = self.detector.detect(curr_screen)
             meta = cur_meta or meta
 
-        # 2. Always verify and set filter ('Released' Display Order + 'Level Up Possible' Link Skill Level)
-        self.set_box_link_filter("level_up_possible", screen_w, screen_h)
-        curr_screen = self.adb.screencap()
-        st, cur_meta = self.detector.detect(curr_screen)
-        meta = cur_meta or meta
+        # 2. Check and set filter ONLY on the very first run (or if explicitly configured to ensure filter every run)
+        if not self.box_filter_initialized or self.ensure_filter_every_run:
+            rarity_desc = (
+                "UR + LR"
+                if (self.filter_ur and self.filter_lr)
+                else ("UR" if self.filter_ur else ("LR" if self.filter_lr else "All"))
+            )
+            self.log(t("tasks.link.filter_first_run_init", rarities=rarity_desc))
+            self.set_box_link_filter("level_up_possible", screen_w, screen_h)
+            curr_screen = self.adb.screencap()
+            st, cur_meta = self.detector.detect(curr_screen)
+            meta = cur_meta or meta
+        else:
+            self.log(t("tasks.link.filter_reused"))
 
         # 3. Tap 'Remove All' button on the team deck
         self.log(t("tasks.link.team_remove_all"))
@@ -429,11 +618,12 @@ class LinkLevelFarmTask(BaseTask):
         ok_match = self.vision.find_ok_button(popup_screen)
         if ok_match:
             self.adb.tap(ok_match[0], ok_match[1], delay_after=0.8)
-        self.wait_check(0.5)
+        self.wait_check(0.8)
 
         # 4. Insert 6 cards from the top, top-to-bottom and left-to-right
         self.log(t("tasks.link.team_inserting_cards"))
-        candidate_coords = self.vision.get_top_box_card_coords(curr_screen, count=10)
+        curr_box = self.adb.screencap()
+        candidate_coords = self.vision.get_top_box_card_coords(curr_box, count=10)
         for idx in range(min(6, len(candidate_coords))):
             cx, cy = candidate_coords[idx]
             self.log(t("tasks.link.team_card_inserted", idx=idx + 1, x=cx, y=cy))
@@ -587,12 +777,19 @@ class LinkLevelFarmTask(BaseTask):
         self.is_running = True
         self.runs_completed = 0
         event_name = (
-            self.target_event.get("name", "Chamber of Spirit and Time")
-            if self.target_event
-            else "Chamber of Spirit and Time"
+            self.stage_name
+            or (self.target_event.get("name") if self.target_event else None)
+            or "Link Level Stage"
         )
         runs_display = str(self.runs_target) if self.runs_target is not None else "∞"
         self.log(t("tasks.link.started", runs=runs_display, event=event_name))
+        rarity_tags = []
+        if self.filter_ur:
+            rarity_tags.append("UR")
+        if self.filter_lr:
+            rarity_tags.append("LR")
+        if rarity_tags:
+            self.log(t("tasks.link.rarity_active", rarities=" + ".join(rarity_tags)))
         if self.auto_swap:
             self.log(t("tasks.link.auto_swap_hint"))
 
@@ -629,12 +826,24 @@ class LinkLevelFarmTask(BaseTask):
 
             elif state == GameState.MODE_SELECT:
                 unknown_counter = 0
-                self.log(t("tasks.link.nav_from_mode"))
-                if "event_button" in meta:
-                    self.adb.tap(*meta["event_button"], delay_after=2.0)
+                if self.target_stage in ("area_39_3", "area_35_1"):
+                    self.log(t("tasks.link.nav_to_quest", stage=self.stage_name))
+                    if "quest_button" in meta:
+                        self.adb.tap(*meta["quest_button"], delay_after=2.0)
+                    else:
+                        quest_btn = self.vision.find_quest_button(screen)
+                        if quest_btn:
+                            self.adb.tap(quest_btn[0], quest_btn[1], delay_after=2.0)
+                        else:
+                            self.adb.tap(int(w * 0.25), int(h * 0.54), delay_after=2.0)
+                    self.wait_check(2.0)
                 else:
-                    self.adb.tap(int(w * 0.50), int(h * 0.35), delay_after=2.0)
-                self.wait_check(1.5)
+                    self.log(t("tasks.link.nav_from_mode"))
+                    if "event_button" in meta:
+                        self.adb.tap(*meta["event_button"], delay_after=2.0)
+                    else:
+                        self.adb.tap(int(w * 0.50), int(h * 0.35), delay_after=2.0)
+                    self.wait_check(1.5)
 
             # 2. Event Select screen (Bonus / Growth tabs)
             elif state == GameState.EVENT_SELECT:
@@ -653,6 +862,16 @@ class LinkLevelFarmTask(BaseTask):
                         self.runs_completed, self.runs_target if self.runs_target is not None else 0
                     )
 
+                if self.target_stage in ("area_39_3", "area_35_1"):
+                    self.log(t("tasks.link.nav_to_quest", stage=self.stage_name))
+                    back_btn = meta.get("back_green_button")
+                    if back_btn:
+                        self.adb.tap(*back_btn, delay_after=2.0)
+                    else:
+                        self.adb.tap(int(w * 0.14), int(h * 0.79), delay_after=2.0)
+                    self.wait_check(1.5)
+                    continue
+
                 # Find and enter the event banner
                 found = self.navigate_to_event_banner(screen, w, h, meta)
                 if not found:
@@ -660,6 +879,26 @@ class LinkLevelFarmTask(BaseTask):
                     self.stop()
                     break
                 self.wait_check(2.5)
+
+            # 2b. Quest Dokkan Story Navigation
+            elif state == GameState.QUEST_SELECT:
+                unknown_counter = 0
+                if in_run and battle_seen:
+                    self.runs_completed += 1
+                    in_run = False
+                    battle_seen = False
+                    self._needs_team_link_check = True
+                    self._team_prepared_for_run = False
+                    tot_display = self.runs_target if self.runs_target is not None else "∞"
+                    self.log(
+                        t("tasks.link.run_completed", curr=self.runs_completed, tot=tot_display)
+                    )
+                    self.on_run_complete(
+                        self.runs_completed, self.runs_target if self.runs_target is not None else 0
+                    )
+
+                self.handle_quest_navigation(screen, w, h, meta)
+                self.wait_check(2.0)
 
             # 3. Stage & Difficulty Selection
             elif state == GameState.STAGE_SELECT:
@@ -820,6 +1059,12 @@ class LinkLevelFarmTask(BaseTask):
                 if "ok_button" in meta:
                     self.log(t("tasks.link.popup_dismiss_ok"))
                     self.adb.tap(*meta["ok_button"], delay_after=1.5)
+                elif self.target_stage in (
+                    "area_39_3",
+                    "area_35_1",
+                ) and self.handle_quest_navigation(screen, w, h, meta):
+                    unknown_counter = 0
+                    self.wait_check(2.0)
                 elif in_run:
                     self.log(t("tasks.stage.post_stage_advance", cycles=unknown_counter))
                     self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=0.4)

@@ -27,6 +27,7 @@ class GameState(enum.Enum):
     TEAM_EDIT = "TEAM_EDIT"
     CHARACTER_BOX = "CHARACTER_BOX"
     FILTER_MODAL = "FILTER_MODAL"
+    QUEST_SELECT = "QUEST_SELECT"
 
 
 from dokkan_eza_link_farmer.automation.vision import Vision  # noqa: E402
@@ -46,11 +47,15 @@ class StateDetector:
         h, w = screen.shape[:2]
         meta: dict[str, Any] = {"screen_width": w, "screen_height": h}
 
-        # 1. Check for popups first: OK button / Cancel / Close
+        # 1. Check for popups first: OK button / Cancel / Close / Attempt Again
         # Dokkan popups have distinct OK / CANCEL buttons
         ok_match = self.vision.find_ok_button(screen)
         if ok_match:
             meta["ok_button"] = (ok_match[0], ok_match[1])
+
+        attempt_again_match = self.vision.find_attempt_again_button(screen)
+        if attempt_again_match:
+            meta["attempt_again_button"] = attempt_again_match
 
         cancel_match = self.vision.find_template(screen, "button_cancel")
         if cancel_match:
@@ -99,9 +104,11 @@ class StateDetector:
             return (GameState.FILTER_MODAL, meta)
 
         # 5. Results Screen or Modal OK / Close Dialog
-        results_match = self.vision.find_template(
-            screen, "header_clear"
-        ) or self.vision.find_template(screen, "header_rewards")
+        results_match = (
+            self.vision.find_template(screen, "header_clear")
+            or self.vision.find_template(screen, "header_rewards")
+            or attempt_again_match is not None
+        )
         if results_match or ok_match or close_match:
             return (GameState.RESULTS_SCREEN, meta)
 
@@ -152,12 +159,59 @@ class StateDetector:
         if box_match:
             return (GameState.CHARACTER_BOX, meta)
 
+        # 6d. Stage Select Screen (Difficulty buttons, Stage Cards, or Boost toggle)
+        diff_super = self.vision.find_template(screen, "diff_super")
+        diff_z_hard = self.vision.find_template(screen, "diff_z_hard")
+        diff_super2 = self.vision.find_template(screen, "diff_super2")
+        saiyan_training = self.vision.find_template(screen, "stage_saiyan_training")
+        stage_39_3 = self.vision.find_stage_area39_3(screen)
+        stage_35_1 = self.vision.find_stage_area35_1(screen)
+        boost_off = self.vision.find_template(screen, "button_boost_off")
+        stage_match = (
+            diff_super
+            or diff_z_hard
+            or diff_super2
+            or saiyan_training
+            or stage_39_3
+            or stage_35_1
+            or boost_off
+        )
+        if stage_match:
+            if diff_super:
+                meta["diff_super"] = (diff_super[0], diff_super[1])
+            if diff_z_hard:
+                meta["diff_z_hard"] = (diff_z_hard[0], diff_z_hard[1])
+            if diff_super2:
+                meta["diff_super2"] = (diff_super2[0], diff_super2[1])
+            if saiyan_training:
+                meta["stage_saiyan_training"] = (saiyan_training[0], saiyan_training[1])
+            if stage_39_3:
+                meta["stage_area39_3"] = stage_39_3
+            if stage_35_1:
+                meta["stage_area35_1"] = stage_35_1
+            if boost_off:
+                meta["boost_off"] = (boost_off[0], boost_off[1])
+            return (GameState.STAGE_SELECT, meta)
+
+        # 6e. Quest Select Screen (Chapter Carousel, Chapter 6 Areas)
+        badge_39 = self.vision.find_badge_area_39(screen)
+        badge_35 = self.vision.find_badge_area_35(screen)
+        chapter_6 = self.vision.find_chapter_6(screen)
+        if badge_39 or badge_35 or chapter_6:
+            if badge_39:
+                meta["badge_area_39"] = badge_39
+            if badge_35:
+                meta["badge_area_35"] = badge_35
+            if chapter_6:
+                meta["chapter_6"] = chapter_6
+            return (GameState.QUEST_SELECT, meta)
+
         # 7. Friend Selection Screen
         friend_header = self.vision.find_template(screen, "header_select_friend")
         refresh_match = self.vision.find_template(
-            screen, "button_friend_refresh", threshold=0.90
+            screen, "button_friend_refresh", threshold=0.92
         ) or self.vision.find_template(screen, "button_friend_auto")
-        if friend_header or refresh_match:
+        if friend_header or (refresh_match and not diff_super and not diff_z_hard):
             if refresh_match:
                 meta["friend_refresh_button"] = (refresh_match[0], refresh_match[1])
             return (GameState.FRIEND_SELECT, meta)
@@ -232,8 +286,12 @@ class StateDetector:
 
         # 10d. Mode Select Menu (Start pressed -> Quest, Event, Dokkan Frontier)
         button_event = self.vision.find_template(screen, "button_event")
-        if button_event:
-            meta["event_button"] = (button_event[0], button_event[1])
+        button_quest = self.vision.find_template(screen, "button_quest")
+        if button_event or button_quest:
+            if button_event:
+                meta["event_button"] = (button_event[0], button_event[1])
+            if button_quest:
+                meta["quest_button"] = (button_quest[0], button_quest[1])
             return (GameState.MODE_SELECT, meta)
 
         # 11. KO Animation Screen
@@ -256,28 +314,5 @@ class StateDetector:
         if home_match:
             meta["start_button"] = (home_match[0], home_match[1])
             return (GameState.HOME_SCREEN, meta)
-
-        # 14. Stage Select Screen (Difficulty buttons or Event Stage List cards)
-        diff_super = self.vision.find_template(screen, "diff_super")
-        diff_z_hard = self.vision.find_template(screen, "diff_z_hard")
-        diff_super2 = self.vision.find_template(screen, "diff_super2")
-        cleared_tag = self.vision.find_template(screen, "tag_cleared")
-        saiyan_training = self.vision.find_template(screen, "stage_saiyan_training")
-        boost_off = self.vision.find_template(screen, "button_boost_off")
-        stage_match = (
-            diff_super or diff_z_hard or diff_super2 or cleared_tag or saiyan_training or boost_off
-        )
-        if stage_match:
-            if diff_super:
-                meta["diff_super"] = (diff_super[0], diff_super[1])
-            if diff_z_hard:
-                meta["diff_z_hard"] = (diff_z_hard[0], diff_z_hard[1])
-            if diff_super2:
-                meta["diff_super2"] = (diff_super2[0], diff_super2[1])
-            if saiyan_training:
-                meta["stage_saiyan_training"] = (saiyan_training[0], saiyan_training[1])
-            if boost_off:
-                meta["boost_off"] = (boost_off[0], boost_off[1])
-            return (GameState.STAGE_SELECT, meta)
 
         return (GameState.UNKNOWN, meta)

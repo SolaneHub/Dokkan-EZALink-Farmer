@@ -95,6 +95,7 @@ class TestLinkLeveling(unittest.TestCase):
                 "box_first_slot_coords": [0.18, 0.28],
                 "box_confirm_coords": [0.81, 0.80],
                 "preferred_difficulty": "super",
+                "target_stage": "spirit_and_time",
             }
         }
         task = LinkLevelFarmTask(
@@ -301,14 +302,66 @@ class TestLinkLeveling(unittest.TestCase):
         self._paste_template(canvas1, "button_ok", 540, 1600)
         self.assertIsNone(self.vision.find_attempt_again_button(canvas1))
 
-        # 2. Left-shifted OK button (stage clear screen with Attempt Again on right)
+        # 2. Modern Dokkan: Right-shifted OK button (stage clear screen with Attempt Again on left)
         canvas2 = self._create_canvas()
-        self._paste_template(canvas2, "button_ok", 300, 1600)
+        self._paste_template(canvas2, "button_ok", 780, 1600)
         again_coords = self.vision.find_attempt_again_button(canvas2)
         self.assertIsNotNone(again_coords)
         assert again_coords is not None
-        self.assertEqual(again_coords[0], int(1080 * 0.72))
+        self.assertEqual(again_coords[0], int(1080 * 0.28))
         self.assertEqual(again_coords[1], 1600)
+
+        # 3. Direct template match with button_attempt_again
+        canvas3 = self._create_canvas()
+        self._paste_template(canvas3, "button_attempt_again", 304, 1600)
+        self._paste_template(canvas3, "button_ok", 776, 1600)
+        again_match = self.vision.find_attempt_again_button(canvas3)
+        self.assertIsNotNone(again_match)
+        assert again_match is not None
+        self.assertEqual(again_match, (304, 1600))
+
+    def test_rebuild_team_first_run_vs_second_run_filter_behavior(self):
+        from unittest.mock import MagicMock
+
+        mock_adb = MagicMock()
+        task = LinkLevelFarmTask(
+            adb=mock_adb,
+            vision=self.vision,
+            config={"link_leveling": {}},
+            runs=2,
+            target_stage="area_39_3",
+        )
+        self.assertFalse(task.box_filter_initialized)
+
+        # Mock set_box_link_filter
+        filter_calls = []
+
+        def mock_set_filter(
+            mode: str = "level_up_possible",
+            screen_w: int | None = None,
+            screen_h: int | None = None,
+        ) -> bool:
+            _ = (screen_w, screen_h)
+            filter_calls.append(mode)
+            task.box_filter_initialized = True
+            return True
+
+        task.set_box_link_filter = mock_set_filter
+
+        # Run 1: rebuild_team_from_box should invoke set_box_link_filter
+        canvas_team_confirm = self._create_canvas()
+        self._paste_template(canvas_team_confirm, "button_start", 840, 1600)
+        self._paste_template(canvas_team_confirm, "button_team_formation", 800, 1180)
+        mock_adb.screencap.return_value = canvas_team_confirm
+
+        task.rebuild_team_from_box(1080, 1920)
+        self.assertEqual(len(filter_calls), 1)
+        self.assertTrue(task.box_filter_initialized)
+
+        # Run 2: rebuild_team_from_box should SKIP set_box_link_filter
+        task._team_prepared_for_run = False
+        task.rebuild_team_from_box(1080, 1920)
+        self.assertEqual(len(filter_calls), 1, "Run 2 must NOT call set_box_link_filter!")
 
     def test_restore_sta_detection_and_cancel(self):
         canvas = self._create_canvas()
@@ -319,6 +372,197 @@ class TestLinkLeveling(unittest.TestCase):
         self.assertEqual(state, GameState.STAMINA_EMPTY)
         self.assertIn("cancel_button", meta)
         self.assertEqual(meta["cancel_button"], (540, 1500))
+
+    def test_rarity_filter_templates_and_detection(self):
+        for tmpl in [
+            "btn_ur_selected",
+            "btn_ur_unselected",
+            "btn_lr_selected",
+            "btn_lr_unselected",
+        ]:
+            img = self.vision.load_template(tmpl)
+            self.assertIsNotNone(img, f"Template '{tmpl}' failed to load!")
+
+        canvas = self._create_canvas()
+        self._paste_template(canvas, "btn_ur_selected", 755, 1530)
+        self._paste_template(canvas, "btn_lr_unselected", 910, 1530)
+
+        self.assertTrue(self.vision.is_filter_ur_selected(canvas))
+        self.assertFalse(self.vision.is_filter_lr_selected(canvas))
+
+        ur_coords = self.vision.get_filter_ur_coords(canvas)
+        self.assertIsNotNone(ur_coords)
+        self.assertEqual(ur_coords, (755, 1530))
+
+        lr_coords = self.vision.get_filter_lr_coords(canvas)
+        self.assertIsNotNone(lr_coords)
+        self.assertEqual(lr_coords, (910, 1530))
+
+    def test_quest_button_and_mode_select(self):
+        img = self.vision.load_template("button_quest")
+        self.assertIsNotNone(img, "Template 'button_quest' failed to load!")
+
+        canvas = self._create_canvas()
+        self._paste_template(canvas, "button_quest", 540, 960)
+
+        quest_coords = self.vision.find_quest_button(canvas)
+        self.assertIsNotNone(quest_coords)
+        self.assertEqual(quest_coords, (540, 960))
+
+        state, meta = self.detector.detect(canvas)
+        self.assertEqual(state, GameState.MODE_SELECT)
+        self.assertIn("quest_button", meta)
+        self.assertEqual(meta["quest_button"], (540, 960))
+
+    def test_link_level_task_stage_and_cumulative_rarity(self):
+        config = {"link_leveling": {}}
+        # 1. Cumulative UR + LR on Area 39 Stage 3
+        task1 = LinkLevelFarmTask(
+            adb=ADBClient(),
+            vision=self.vision,
+            config=config,
+            runs=5,
+            filter_ur=True,
+            filter_lr=True,
+            target_stage="area_39_3",
+        )
+        self.assertTrue(task1.filter_ur)
+        self.assertTrue(task1.filter_lr)
+        self.assertEqual(task1.target_stage, "area_39_3")
+        self.assertIn("Area 39 Stage 3", task1.stage_name)
+        self.assertEqual(task1.runs_target, 5)
+
+        # 2. Only LR on Area 35 Stage 1
+        task2 = LinkLevelFarmTask(
+            adb=ADBClient(),
+            vision=self.vision,
+            config=config,
+            filter_ur=False,
+            filter_lr=True,
+            target_stage="area_35_1",
+        )
+        self.assertFalse(task2.filter_ur)
+        self.assertTrue(task2.filter_lr)
+        self.assertEqual(task2.target_stage, "area_35_1")
+        self.assertIn("Area 35 Stage 1", task2.stage_name)
+        self.assertIsNone(task2.runs_target)
+
+    def test_cli_link_interactive_and_cumulative_flags(self):
+        from unittest.mock import MagicMock, patch
+
+        from dokkan_eza_link_farmer.core.bot_engine import BotEngine
+        from dokkan_eza_link_farmer.ui.cli import TerminalCLI
+
+        engine = BotEngine()
+        engine.start_link_level_farm = MagicMock()
+        cli = TerminalCLI(engine)
+
+        # 1. Direct CLI flags with cumulative --ur and --lr
+        cli.handle_link_interactive(["15", "--ur", "--lr", "39-3", "--boost"])
+        engine.start_link_level_farm.assert_called_once()
+        _, kwargs = engine.start_link_level_farm.call_args
+        self.assertEqual(kwargs["runs"], 15)
+        self.assertTrue(kwargs["filter_ur"])
+        self.assertTrue(kwargs["filter_lr"])
+        self.assertTrue(kwargs["use_boost"])
+        self.assertEqual(kwargs["target_stage"], "area_39_3")
+
+        # 2. Interactive dropdown selection
+        engine.start_link_level_farm.reset_mock()
+        with (
+            patch("questionary.select") as mock_select,
+            patch("questionary.text") as mock_text,
+            patch("questionary.checkbox") as mock_checkbox,
+        ):
+            mock_select.return_value.ask.return_value = "area_35_1"
+            mock_text.return_value.ask.return_value = "30"
+            mock_checkbox.return_value.ask.return_value = ["lr"]
+
+            cli.handle_link_interactive([])
+
+            engine.start_link_level_farm.assert_called_once()
+            _, kwargs = engine.start_link_level_farm.call_args
+            self.assertEqual(kwargs["runs"], 30)
+            self.assertFalse(kwargs["filter_ur"])
+            self.assertTrue(kwargs["filter_lr"])
+            self.assertEqual(kwargs["target_stage"], "area_35_1")
+
+    def test_quest_templates_detection(self):
+        # 1. Chapter Carousel with Chapter 6
+        canvas1 = self._create_canvas()
+        self._paste_template(canvas1, "text_chapter_6", 540, 1500)
+        state1, meta1 = self.detector.detect(canvas1)
+        self.assertEqual(state1, GameState.QUEST_SELECT)
+        self.assertIn("chapter_6", meta1)
+
+        # 2. Area 39 badge
+        canvas2 = self._create_canvas()
+        self._paste_template(canvas2, "badge_area_39", 112, 1220)
+        state2, meta2 = self.detector.detect(canvas2)
+        self.assertEqual(state2, GameState.QUEST_SELECT)
+        self.assertIn("badge_area_39", meta2)
+
+        # 3. Area 35 badge
+        canvas3 = self._create_canvas()
+        self._paste_template(canvas3, "badge_area_35", 112, 1220)
+        state3, meta3 = self.detector.detect(canvas3)
+        self.assertEqual(state3, GameState.QUEST_SELECT)
+        self.assertIn("badge_area_35", meta3)
+
+        # 4. Stage 39-3 card
+        canvas4 = self._create_canvas()
+        self._paste_template(canvas4, "stage_area39_3", 300, 710)
+        state4, meta4 = self.detector.detect(canvas4)
+        self.assertEqual(state4, GameState.STAGE_SELECT)
+        self.assertIn("stage_area39_3", meta4)
+
+        # 5. Stage 35-1 card
+        canvas5 = self._create_canvas()
+        self._paste_template(canvas5, "stage_area35_1", 300, 710)
+        state5, meta5 = self.detector.detect(canvas5)
+        self.assertEqual(state5, GameState.STAGE_SELECT)
+        self.assertIn("stage_area35_1", meta5)
+
+    def test_quest_navigation_flow(self):
+        from unittest.mock import MagicMock
+
+        config = {"link_leveling": {}}
+        task = LinkLevelFarmTask(
+            adb=ADBClient(),
+            vision=self.vision,
+            config=config,
+            target_stage="area_39_3",
+        )
+        task.adb = MagicMock()
+
+        # A. On Carousel with Chapter 6 below center -> swipes to center and taps
+        screen = np.zeros((2400, 1080, 3), dtype=np.uint8)
+        meta_carousel = {"chapter_6": (541, 1514)}
+        res = task.handle_quest_navigation(screen, 1080, 2400, meta_carousel)
+        self.assertTrue(res)
+        task.adb.swipe.assert_called_once()
+        task.adb.tap.assert_called_once_with(540, 1200, delay_after=2.0)
+
+        # B. On Chapter 6 area list -> taps Area 39
+        task.adb.reset_mock()
+        meta_area = {"badge_area_39": (112, 1220)}
+        res = task.handle_quest_navigation(screen, 1080, 2400, meta_area)
+        self.assertTrue(res)
+        task.adb.tap.assert_called_once_with(540, 1220, delay_after=2.0)
+
+        # C. On Area 39 stages list -> taps Stage 3
+        task.adb.reset_mock()
+        meta_stage = {"stage_area39_3": (297, 710)}
+        res = task.handle_quest_navigation(screen, 1080, 2400, meta_stage)
+        self.assertTrue(res)
+        task.adb.tap.assert_called_once_with(540, 710, delay_after=2.0)
+
+        # D. On wrong Chapter with green back button -> taps back button
+        task.adb.reset_mock()
+        meta_wrong = {"back_green_button": (152, 1899)}
+        res = task.handle_quest_navigation(screen, 1080, 2400, meta_wrong)
+        self.assertTrue(res)
+        task.adb.tap.assert_called_once_with(152, 1899, delay_after=2.0)
 
 
 if __name__ == "__main__":

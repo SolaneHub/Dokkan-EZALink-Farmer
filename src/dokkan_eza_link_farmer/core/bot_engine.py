@@ -173,8 +173,12 @@ class BotEngine:
         runs: int | None = None,
         target_event: dict[str, Any] | None = None,
         use_boost: bool | None = None,
+        filter_ur: bool = False,
+        filter_lr: bool = False,
+        target_stage: str | None = None,
+        stage_name: str | None = None,
     ) -> bool:
-        """Starts Link Level farming with DokkanDB event integration and auto-swap."""
+        """Starts Link Level farming with stage selection, rarity filtering, and auto-swap."""
         if self.is_task_running():
             self.emit_log(t("tasks.task_already_running"))
             return False
@@ -187,6 +191,10 @@ class BotEngine:
             target_event=target_event,
             dokkandb=self.dokkandb,
             use_boost=use_boost,
+            filter_ur=filter_ur,
+            filter_lr=filter_lr,
+            target_stage=target_stage,
+            stage_name=stage_name,
             on_status=self.emit_log,
             on_run_complete=self.emit_run,
         )

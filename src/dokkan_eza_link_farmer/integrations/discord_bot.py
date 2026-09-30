@@ -164,12 +164,39 @@ class DiscordBotClient(commands.Bot):
                 await interaction.response.send_message(t("discord.task_conflict"))
 
         @self.tree.command(
-            name="link", description="Starts Link Level farming (Chamber of Spirit and Time)"
+            name="link", description="Starts Link Level farming with stage and rarity options"
         )
         @app_commands.describe(
-            runs="Number of runs (optional: leave empty to farm until stamina runs out)"
+            runs="Number of runs (optional: leave empty to farm until stamina runs out)",
+            stage="Target stage to farm (Area 39 Stage 3, Area 35 Stage 1, or Chamber of Spirit and Time)",
+            ur="Filter box to UR rarity cards (can combine with lr)",
+            lr="Filter box to LR rarity cards (can combine with ur)",
+            boost="Activate stamina boost",
         )
-        async def cmd_link(interaction: discord.Interaction, runs: int | None = None):
+        @app_commands.choices(
+            stage=[
+                app_commands.Choice(
+                    name="Area 39 Stage 3 (Green Gems | 5 fights)",
+                    value="area_39_3",
+                ),
+                app_commands.Choice(
+                    name="Area 35 Stage 1 (Blue Gems | 4 fights)",
+                    value="area_35_1",
+                ),
+                app_commands.Choice(
+                    name="Chamber of Spirit and Time (Daily / Event)",
+                    value="spirit_and_time",
+                ),
+            ]
+        )
+        async def cmd_link(
+            interaction: discord.Interaction,
+            runs: int | None = None,
+            stage: app_commands.Choice[str] | None = None,
+            ur: bool = False,
+            lr: bool = False,
+            boost: bool | None = None,
+        ):
             if not self._is_user_allowed(interaction.user.id):
                 await interaction.response.send_message(t("discord.not_authorized"), ephemeral=True)
                 return
@@ -177,14 +204,32 @@ class DiscordBotClient(commands.Bot):
             if isinstance(interaction.channel, discord.abc.Messageable):
                 self._main_channel = interaction.channel
             actual_runs = runs if (runs is not None and runs > 0) else None
-            ok = self.engine.start_link_level_farm(runs=actual_runs)
+            target_stage = stage.value if stage else None
+            stage_name = stage.name if stage else None
+            ok = self.engine.start_link_level_farm(
+                runs=actual_runs,
+                target_stage=target_stage,
+                stage_name=stage_name,
+                filter_ur=ur,
+                filter_lr=lr,
+                use_boost=boost,
+            )
             if ok:
                 runs_label = (
                     str(actual_runs)
                     if actual_runs is not None
                     else t("discord.link_runs_unlimited")
                 )
-                await interaction.response.send_message(t("discord.link_started", runs=runs_label))
+                rarities = []
+                if ur:
+                    rarities.append("UR")
+                if lr:
+                    rarities.append("LR")
+                rarity_str = f" [Rarity: {', '.join(rarities)}]" if rarities else ""
+                stage_str = f" on {stage_name}" if stage_name else ""
+                await interaction.response.send_message(
+                    f"{t('discord.link_started', runs=runs_label)}{stage_str}{rarity_str}"
+                )
             else:
                 await interaction.response.send_message(t("discord.task_conflict"))
 

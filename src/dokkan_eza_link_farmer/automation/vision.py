@@ -264,10 +264,11 @@ class Vision:
         """
         Detects the 'Attempt Again' button on the stage results / clear screen.
         Checks:
-        1. Template 'button_attempt_again' if present.
-        2. Geometry of bottom OK button: when 'Attempt Again' is present, Dokkan places
-           the 'OK' button on the left (cx / w < 0.42, typically ~0.28).
-           The 'Attempt Again' button is positioned on the right (~0.72 * w, at the same Y height).
+        1. Template 'button_attempt_again' if present (primary match).
+        2. Geometry of bottom OK button:
+           - In modern Dokkan, 'Attempt Again' is on the left (~0.28 * w) and 'OK' is on the right (~0.72 * w).
+           - If OK button is right-shifted (> 0.58 * w), returns left coordinate (~0.28 * w).
+           - If OK button is left-shifted (< 0.42 * w), returns right coordinate (~0.72 * w).
         Returns (x, y) coordinates of the 'Attempt Again' button, or None if single centered OK.
         """
         # 1. Template match
@@ -275,15 +276,16 @@ class Vision:
         if m:
             return (m[0], m[1])
 
-        # 2. Bottom OK geometry
+        # 2. Bottom OK geometry fallback
         s_h, s_w = screen.shape[:2]
         ok_match = self.find_ok_button(screen)
         if ok_match:
             ok_x, ok_y = ok_match[0], ok_match[1]
-            if (ok_y / s_h) > 0.75 and (ok_x / s_w) < 0.42:
-                attempt_x = int(s_w * 0.72)
-                attempt_y = ok_y
-                return (attempt_x, attempt_y)
+            if (ok_y / s_h) > 0.75:
+                if (ok_x / s_w) > 0.58:
+                    return (int(s_w * 0.28), ok_y)
+                elif (ok_x / s_w) < 0.42:
+                    return (int(s_w * 0.72), ok_y)
 
         return None
 
@@ -610,6 +612,74 @@ class Vision:
     def is_filter_released_selected(self, screen: np.ndarray) -> bool:
         """Checks if 'Released' is selected in the Display Order filter dialog."""
         return self.find_template(screen, "btn_released_selected", threshold=0.80) is not None
+
+    def is_filter_ur_selected(self, screen: np.ndarray) -> bool:
+        """Checks if 'UR' rarity filter button is currently selected in the Filter dialog."""
+        h, w = screen.shape[:2]
+        x_min, x_max = int(w * 0.58), int(w * 0.78)
+        roi = screen[:, x_min:x_max]
+        return self.find_template(roi, "btn_ur_selected", threshold=0.85) is not None
+
+    def is_filter_lr_selected(self, screen: np.ndarray) -> bool:
+        """Checks if 'LR' rarity filter button is currently selected in the Filter dialog."""
+        h, w = screen.shape[:2]
+        x_min, x_max = int(w * 0.77), int(w * 0.99)
+        roi = screen[:, x_min:x_max]
+        return self.find_template(roi, "btn_lr_selected", threshold=0.85) is not None
+
+    def get_filter_ur_coords(self, screen: np.ndarray) -> tuple[int, int]:
+        """Returns (x, y) coordinates of the UR filter button in the Filter modal."""
+        h, w = screen.shape[:2]
+        x_min, x_max = int(w * 0.58), int(w * 0.78)
+        roi = screen[:, x_min:x_max]
+        m = self.find_template(roi, "btn_ur_selected", threshold=0.80) or self.find_template(
+            roi, "btn_ur_unselected", threshold=0.80
+        )
+        if m:
+            return (m[0] + x_min, m[1])
+        return (int(w * 0.70), int(h * 0.638))
+
+    def get_filter_lr_coords(self, screen: np.ndarray) -> tuple[int, int]:
+        """Returns (x, y) coordinates of the LR filter button in the Filter modal."""
+        h, w = screen.shape[:2]
+        x_min, x_max = int(w * 0.77), int(w * 0.99)
+        roi = screen[:, x_min:x_max]
+        m = self.find_template(roi, "btn_lr_selected", threshold=0.80) or self.find_template(
+            roi, "btn_lr_unselected", threshold=0.80
+        )
+        if m:
+            return (m[0] + x_min, m[1])
+        return (int(w * 0.84), int(h * 0.638))
+
+    def find_quest_button(self, screen: np.ndarray) -> tuple[int, int] | None:
+        """Finds 'Quest Dokkan Story' button on Mode Select screen."""
+        m = self.find_template(screen, "button_quest", threshold=0.80)
+        return (m[0], m[1]) if m else None
+
+    def find_badge_area_39(self, screen: np.ndarray) -> tuple[int, int] | None:
+        """Finds Area 39 badge on Quest Chapter 6 area list."""
+        m = self.find_template(screen, "badge_area_39", threshold=0.85)
+        return (m[0], m[1]) if m else None
+
+    def find_badge_area_35(self, screen: np.ndarray) -> tuple[int, int] | None:
+        """Finds Area 35 badge on Quest Chapter 6 area list."""
+        m = self.find_template(screen, "badge_area_35", threshold=0.85)
+        return (m[0], m[1]) if m else None
+
+    def find_stage_area39_3(self, screen: np.ndarray) -> tuple[int, int] | None:
+        """Finds Stage 3 ('3. The Time Has Come...') inside Area 39."""
+        m = self.find_template(screen, "stage_area39_3", threshold=0.85)
+        return (m[0], m[1]) if m else None
+
+    def find_stage_area35_1(self, screen: np.ndarray) -> tuple[int, int] | None:
+        """Finds Stage 1 ('1. Guldo vs. Chiaotzu') inside Area 35."""
+        m = self.find_template(screen, "stage_area35_1", threshold=0.85)
+        return (m[0], m[1]) if m else None
+
+    def find_chapter_6(self, screen: np.ndarray) -> tuple[int, int] | None:
+        """Finds 'Chapter 6' text/banner in Quest story carousel or area header."""
+        m = self.find_template(screen, "text_chapter_6", threshold=0.82)
+        return (m[0], m[1]) if m else None
 
     def get_top_box_card_coords(self, screen: np.ndarray, count: int = 6) -> list[tuple[int, int]]:
         """

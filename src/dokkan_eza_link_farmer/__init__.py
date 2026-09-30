@@ -14,7 +14,7 @@ from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
 from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 from dokkan_eza_link_farmer.ui.cli import TerminalCLI
 
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 __author__ = "SolaneHub"
 
 __all__ = [

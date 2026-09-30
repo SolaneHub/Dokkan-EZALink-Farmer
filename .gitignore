@@ -45,6 +45,3 @@ cache/
 !assets/**/*.png
 !docs/**/*.*
 !src/dokkan_eza_link_farmer/assets/**/*.*
-
-# Internal Prompts & Guidelines
-GEMINI_MASTER_PROMPT.md

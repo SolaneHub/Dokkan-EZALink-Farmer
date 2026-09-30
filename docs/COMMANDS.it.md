@@ -48,7 +48,9 @@ Puoi passare argomenti diretti all'eseguibile per eseguire compiti specifici sen
 | `--doctor` | *nessuno* | Esegue la diagnostica completa dell'ambiente (scrcpy, adb, OS, telefoni collegati) |
 | `--devices` | *nessuno* | Mostra l'elenco dei dispositivi Android collegati via USB o Wi-Fi |
 | `--eza` | `[livello=999]` | Naviga automaticamente agli Eventi EZA, scorre fino in fondo, individua il primo EZA non a 999 e avvia la scalata fino al livello indicato (default: `999`) |
-| `--link` | `[run]` | Avvia il Link Level farming sulla Stanza dello Spirito e del Tempo (stage "1. Saiyan Training", difficoltà SUPER) con ricostruzione automatica del team con filtri "Released" e "Level Up Possible" (opzionale: default fino a esaurimento stamina) |
+| `--link` | `[run]` | Avvia il Link Level farming per N run (o fino a esaurimento stamina se omesso). Richiede lo stage interattivo (Area 39-3, Area 35-1, Stanza) se non preimpostato. Esegue il loop veloce via "Attempt Again" e imposta i filtri solo alla Run 1 |
+| `--ur` | *nessuno* | Filtra il box dei personaggi per rarità UR durante il Link Level farming (cumulabile con `--lr`) |
+| `--lr` | *nessuno* | Filtra il box dei personaggi per rarità LR durante il Link Level farming (cumulabile con `--ur`) |
 | `--boost` / `--no-boost` | *nessuno* | Attiva (`--boost`) o disattiva forzatamente (`--no-boost`) l'uso delle cariche Boost durante il Link Level farming |
 | `--scrcpy` | *nessuno* | Apre la finestra di mirroring a latenza zero dello schermo del telefono |
 | `--discord` | *nessuno* | Avvia il bot in background collegato a Discord per il controllo remoto |
@@ -65,8 +67,11 @@ Puoi passare argomenti diretti all'eseguibile per eseguire compiti specifici sen
 # Avvia direttamente la scalata continua dell'EZA senza conferme:
 ./Launch-Dokkan-EZALink --eza
 
-# Esegui 30 run della Stanza dello Spirito e del Tempo per i Link:
-./Launch-Dokkan-EZALink --link 30
+# Esegui 30 run di Link Leveling combinando carte UR e LR:
+./Launch-Dokkan-EZALink --link 30 --ur --lr
+
+# Esegui il Link Leveling filtrando solo le carte LR:
+./Launch-Dokkan-EZALink --link --lr
 
 # Apri la finestra video di mirroring dello smartphone sul computer:
 ./Launch-Dokkan-EZALink --scrcpy
@@ -90,7 +95,7 @@ Eseguire il file senza parametri avvia la console interattiva Rich con log color
 | `inspect` / `state` | `inspect` | Cattura lo schermo del gioco e identifica la schermata attuale |
 | `shot` | `shot [nome.png]` | Scatta e salva uno screenshot dello schermo su disco |
 | `eza` | `eza [livello\|auto]` | Apre il menu interattivo DokkanDB (frecce e ricerca) o avvia la scalata fino a 999 |
-| `link` | `link [run] [boost]` | Avvia il farming dei link con ricambio continuo delle carte al livello 10 (default: fino a esaurimento stamina) |
+| `link` | `link [run] [--ur] [--lr] [--boost]` | Apre il menu a tendina interattivo per la scelta dello stage (Area 39 Stage 3, Area 35 Stage 1, Stanza dello Spirito e del Tempo). Supporta i flag cumulabili `--ur` e `--lr`. Riavvia istantaneamente tramite "Attempt Again" e controlla i filtri solo alla Run 1 |
 | `discord` | `discord [setup\|start]` | Avvia il setup guidato interattivo (`discord setup`) o avvia il bot in ascolto (`discord start`) |
 | `status` | `status` | Mostra lo stato attuale del bot, le statistiche Zeni e l'attività in corso |
 | `lang` | `lang [en\|it]` | Visualizza o cambia la lingua al volo |
@@ -144,7 +149,7 @@ Una volta configurato, puoi avviare la modalità Discord in qualsiasi momento:
 - `/status`: Mostra un riepilogo dettagliato con dispositivo connesso, run completate, stato attuale e statistiche Zeni/Statue di Satan.
 - `/screenshot`: Cattura lo schermo dello smartphone/emulatore in tempo reale e invia l'immagine su Discord.
 - `/eza [target_level]`: Avvia la navigazione automatica e la scalata dell'EZA fino al livello scelto (default: 999).
-- `/link [runs]`: Avvia il farming dei link sulla Stanza dello Spirito e del Tempo.
+- `/link [runs] [stage] [filter_rarity] [boost]`: Avvia il Link Level farming con selezione dello stage (`Area 39 Stage 3`, `Area 35 Stage 1`, `Chamber of Spirit and Time`), filtri di rarità cumulabili (`UR + LR`, `UR`, `LR`), riavvio rapido automatico con "Attempt Again" e ottimizzazione dei filtri solo alla prima run.
 - `/stop`: Interrompe l'attività da remoto in sicurezza.
 - `/pause` / `/resume`: Mette in pausa o riprende l'automazione.
 - `/scrcpy [start/stop]`: Apre o chiude la finestra video di mirroring sul PC.

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dokkan-eza-link-farmer"
-version = "v1.0.4"
+version = "v1.0.5"
 description = "Specialized endgame automation for DBZ Dokkan Battle - Extreme Z-Battle (EZA 999 Zeni) & Chamber of Spirit and Time Link Leveling"
 readme = "README.md"
 requires-python = ">=3.10"

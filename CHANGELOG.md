@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.5] - 2026-09-30
+
+### Added
+- **Multi-Stage Link Leveling with Interactive Dropdown**: Added interactive dropdown selection (via `questionary.select` in CLI and choice options in Discord) for Link Level farming locations:
+  - *Area 39 Stage 3*: Great stamina-friendly option (also drops green gems) | 5 fights (`area_39_3`).
+  - *Area 35 Stage 1*: Good stamina-friendly option (also drops blue gems) | 4 fights (`area_35_1`).
+  - *Chamber of Spirit and Time*: Daily event (`spirit_and_time`).
+- **Cumulative Card Rarity Flags (`--ur` & `--lr`)**: Added support for combinable CLI and Discord rarity flags (`--ur`, `--lr`, `--ur --lr`, defaulting to both UR+LR when omitted) to target unmaxed cards.
+- **Native "Attempt Again" Fast-Looping**: Extracted and integrated high-fidelity `button_attempt_again.png` template (red button at left coordinates `~304, 2045`). Updated `find_attempt_again_button` and `dismiss_results_and_popups` to click "Attempt Again" and confirm the stamina consumption modal (`Please Confirm`), restarting stages directly on `TEAM_CONFIRM` without returning to menus.
+- **Area 39 & Area 35 Unique Badge/Title Templates**: Generated high-contrast templates for Area 39 (`badge_area_39.png`, `stage_area39_3.png`) and Area 35 (`badge_area_35.png`, `stage_area35_1.png`), eliminating visual octagon collisions between Quest areas.
+
+### Changed
+- **Single-Setup Filter Optimization**: In `rebuild_team_from_box`, box filters (*Released*, *UR/LR*, and *Level Up Possible*) are now configured and verified **only on the very first run (Run 1)**. From Run 2 onwards, the bot skips the filter menu entirely and immediately clears and populates cards from the already-filtered box.
+- **Quest Story Navigation Engine**: Added dynamic multi-scroll handling for Area 35 (2-swipe stage list scroll to reveal Stage 1) and carousel-vs-list discrimination for Chapter 6.
+
+### Fixed
+- **Infinite "Advancing stage selection..." Loop**: Adjusted `find_chapter_6` matching threshold from `0.95` to `0.82` (matching rendered font at `0.88`), preventing the bot from falling into `UNKNOWN` fallback tap loops.
+- **Clear Screen Button Geometry**: Corrected `find_attempt_again_button` geometry assumption (Dokkan places "Attempt Again" on the left `~0.28 * W` and "OK" on the right `~0.72 * W`).
+
+---
+
 ## [v1.0.4] - 2026-09-28
 
 ### Added

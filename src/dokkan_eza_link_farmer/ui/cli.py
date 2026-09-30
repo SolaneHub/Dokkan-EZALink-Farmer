@@ -68,7 +68,7 @@ class TerminalCLI:
         table.add_row("inspect", "", t("cli.help.desc_inspect"))
         table.add_row("shot", "[file.png]", t("cli.help.desc_shot"))
         table.add_row("eza", "[level=999]", t("cli.help.desc_eza"))
-        table.add_row("link", "[runs] [boost]", t("cli.help.desc_link"))
+        table.add_row("link", "[runs] [--ur] [--lr] [--boost]", t("cli.help.desc_link"))
         table.add_row("discord", "[setup|run]", t("cli.help.desc_discord"))
         table.add_row("doctor / check", "", t("cli.help.desc_doctor"))
         table.add_row("status", "", t("cli.help.desc_status"))
@@ -292,22 +292,121 @@ class TerminalCLI:
             self.console.print(f"[bold red]{t('cli.unexpected_error', error=str(e))}[/]")
 
     def handle_link_interactive(self, args: list):
-        """Handles Link Leveling command focusing on Chamber of Spirit and Time."""
+        """Handles Link Leveling command with interactive stage dropdown and rarity flags."""
         runs: int | None = None
-        use_boost = None
+        use_boost: bool | None = None
+        filter_ur: bool = False
+        filter_lr: bool = False
+        target_stage: str | None = None
+        stage_name: str | None = None
+        rarity_specified_in_cli: bool = False
+
         for arg in args:
             low = arg.lower()
-            if low in ("boost", "--boost", "-b"):
+            if low in ("--ur", "-ur", "ur"):
+                filter_ur = True
+                rarity_specified_in_cli = True
+            elif low in ("--lr", "-lr", "lr"):
+                filter_lr = True
+                rarity_specified_in_cli = True
+            elif low in ("boost", "--boost", "-b"):
                 use_boost = True
             elif low in ("noboost", "no-boost", "--no-boost", "-nb"):
                 use_boost = False
+            elif low in ("39-3", "39_3", "393", "area_39_3"):
+                target_stage = "area_39_3"
+                stage_name = "Area 39 Stage 3: Great stamina-friendly option (also drops green gems) | 5 fights"
+            elif low in ("35-1", "35_1", "351", "area_35_1"):
+                target_stage = "area_35_1"
+                stage_name = "Area 35 Stage 1: Good stamina-friendly option (also drops blue gems) | 4 fights"
+            elif low in ("spirit", "spirit_and_time", "event"):
+                target_stage = "spirit_and_time"
+                stage_name = t("cli.link.stage_spirit")
             elif arg.isdigit():
                 val = int(arg)
                 if val > 0:
                     runs = val
 
-        self.console.print(f"[cyan]{t('cli.dokkandb.fetching')}[/]")
-        spirit = self.engine.dokkandb.get_chamber_of_spirit_and_time()
+        try:
+            import questionary
+
+            # 1. Interactive stage selection dropdown if not provided in CLI args
+            if not target_stage:
+                stage_choices = [
+                    questionary.Choice(
+                        title="Area 39 Stage 3: Great stamina-friendly option (also drops green gems) | 5 fights",
+                        value="area_39_3",
+                    ),
+                    questionary.Choice(
+                        title="Area 35 Stage 1: Good stamina-friendly option (also drops blue gems) | 4 fights",
+                        value="area_35_1",
+                    ),
+                    questionary.Choice(
+                        title=t("cli.link.stage_spirit"),
+                        value="spirit_and_time",
+                    ),
+                    questionary.Choice(
+                        title=t("cli.dokkandb.opt_cancel"),
+                        value="cancel",
+                    ),
+                ]
+                selected_stage = questionary.select(
+                    t("cli.link.menu_title"),
+                    choices=stage_choices,
+                ).ask()
+
+                if not selected_stage or selected_stage == "cancel":
+                    self.console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
+                    return
+
+                target_stage = selected_stage
+                if target_stage == "area_39_3":
+                    stage_name = "Area 39 Stage 3: Great stamina-friendly option (also drops green gems) | 5 fights"
+                elif target_stage == "area_35_1":
+                    stage_name = "Area 35 Stage 1: Good stamina-friendly option (also drops blue gems) | 4 fights"
+                elif target_stage == "spirit_and_time":
+                    stage_name = t("cli.link.stage_spirit")
+
+            # 2. Interactive runs prompt if not provided in CLI
+            if runs is None:
+                runs_str = questionary.text(
+                    t("cli.link.runs_prompt"),
+                    default="",
+                ).ask()
+                if runs_str and runs_str.isdigit():
+                    runs = int(runs_str)
+                elif runs_str is None:  # Cancelled
+                    self.console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
+                    return
+
+            # 3. Interactive rarity prompt if not provided in CLI args
+            if not rarity_specified_in_cli:
+                rarity_choices = [
+                    questionary.Choice(title="UR (Ultra Rare)", value="ur"),
+                    questionary.Choice(title="LR (Legendary Rare)", value="lr"),
+                ]
+                selected_rarities = questionary.checkbox(
+                    t("cli.link.rarity_prompt"),
+                    choices=rarity_choices,
+                ).ask()
+
+                if selected_rarities is None:  # Cancelled
+                    self.console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
+                    return
+
+                if "ur" in selected_rarities:
+                    filter_ur = True
+                if "lr" in selected_rarities:
+                    filter_lr = True
+
+        except (KeyboardInterrupt, EOFError):
+            self.console.print(f"\n[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
+            return
+        except Exception as e:
+            self.console.print(f"[bold red]{t('cli.unexpected_error', error=str(e))}[/bold red]")
+            return
+
+        # Boost label display
         if use_boost is True:
             boost_label = t("cli.link.boost_on")
         elif use_boost is False:
@@ -316,25 +415,46 @@ class TerminalCLI:
             boost_label = t("cli.link.boost_config")
 
         runs_display = f"{runs} runs" if runs is not None else t("cli.link.runs_unlimited")
-        if spirit:
-            status_text = (
-                t("cli.link.status_open")
-                if spirit.get("is_currently_open")
-                else t("cli.link.status_rotating")
-            )
-            name = spirit.get("name", "Ultimate Leveling Up! Chamber of Spirit and Time")
-            self.console.print(
-                f"[bold green]{t('cli.link.event_info', name=name, status=status_text)}[/bold green]"
-            )
-            self.console.print(
-                f"[dim]{t('cli.link.summary_info', runs=runs_display, boost=boost_label)}[/dim]"
-            )
-            self.engine.start_link_level_farm(runs=runs, target_event=spirit, use_boost=use_boost)
-        else:
-            self.console.print(
-                f"[yellow]{t('cli.link.event_not_found_fallback', runs=runs_display, boost=boost_label)}[/yellow]"
-            )
-            self.engine.start_link_level_farm(runs=runs, use_boost=use_boost)
+
+        # Rarity label display
+        rarity_tags = []
+        if filter_ur:
+            rarity_tags.append("UR")
+        if filter_lr:
+            rarity_tags.append("LR")
+        rarity_label = " + ".join(rarity_tags) if rarity_tags else t("cli.link.rarity_all")
+
+        self.console.print(
+            f"[bold green]{t('cli.link.selected_stage', name=stage_name)}[/bold green]"
+        )
+        self.console.print(
+            f"[dim]Runs: {runs_display} | {boost_label} | Rarity: {rarity_label}[/dim]"
+        )
+
+        spirit_event = None
+        if target_stage == "spirit_and_time":
+            self.console.print(f"[cyan]{t('cli.dokkandb.fetching')}[/cyan]")
+            spirit_event = self.engine.dokkandb.get_chamber_of_spirit_and_time()
+            if spirit_event:
+                status_text = (
+                    t("cli.link.status_open")
+                    if spirit_event.get("is_currently_open")
+                    else t("cli.link.status_rotating")
+                )
+                name = spirit_event.get("name", stage_name)
+                self.console.print(
+                    f"[bold green]{t('cli.link.event_info', name=name, status=status_text)}[/bold green]"
+                )
+
+        self.engine.start_link_level_farm(
+            runs=runs,
+            target_event=spirit_event,
+            use_boost=use_boost,
+            filter_ur=filter_ur,
+            filter_lr=filter_lr,
+            target_stage=target_stage,
+            stage_name=stage_name,
+        )
 
     def run(self):
         """Runs the interactive CLI command loop."""

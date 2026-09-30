@@ -48,7 +48,9 @@ You can pass arguments directly to the executable to perform specific tasks with
 | `--doctor` | *none* | Runs a complete system diagnostic check (scrcpy, adb, OS, connected devices) |
 | `--devices` | *none* | Displays all connected Android devices (USB or Wi-Fi) |
 | `--eza` | `[level=999]` | Automatically navigates to EZA Events, scrolls to the bottom, finds the first uncompleted EZA (< 999), and farms up to the target level (default: `999`) |
-| `--link` | `[runs]` | Starts Link Level farming on the Chamber of Spirit and Time (stage "1. Saiyan Training", SUPER difficulty) with auto-rebuilding of the team using "Released" and "Level Up Possible" filters (optional: default until stamina depleted) |
+| `--link` | `[runs]` | Starts Link Level farming for N runs (or until stamina depleted if omitted). Prompts for stage (Area 39-3, Area 35-1, Chamber) if not preset. Auto-loops using "Attempt Again" and configures filters on Run 1 only |
+| `--ur` | *none* | Filters character box for UR rarity unmaxed cards during Link Level farming (can combine with `--lr`) |
+| `--lr` | *none* | Filters character box for LR rarity unmaxed cards during Link Level farming (can combine with `--ur`) |
 | `--boost` / `--no-boost` | *none* | Enables (`--boost`) or disables (`--no-boost`) using Boost energy charges during Link Level farming |
 | `--scrcpy` | *none* | Opens the zero-latency screen mirroring window |
 | `--discord` | *none* | Runs the bot as a background service controlled remotely via Discord |
@@ -65,8 +67,11 @@ You can pass arguments directly to the executable to perform specific tasks with
 # Start automatic EZA climbing directly:
 ./Launch-Dokkan-EZALink --eza
 
-# Farm 30 runs of Chamber of Spirit and Time:
-./Launch-Dokkan-EZALink --link 30
+# Farm 30 runs of Link Leveling with UR and LR cards:
+./Launch-Dokkan-EZALink --link 30 --ur --lr
+
+# Farm Link Leveling with only LR cards:
+./Launch-Dokkan-EZALink --link --lr
 
 # Launch phone screen mirroring window:
 ./Launch-Dokkan-EZALink --scrcpy
@@ -90,7 +95,7 @@ Running the executable without extra arguments enters the interactive Rich termi
 | `inspect` / `state` | `inspect` | Captures the active screen and prints the detected game state |
 | `shot` | `shot [name.png]` | Takes and saves a screenshot of the current screen |
 | `eza` | `eza [level\|auto]` | Opens interactive DokkanDB selector (arrow keys & search) or starts directly if specified |
-| `link` | `link [runs] [boost]` | Starts Link Level farming with auto-swap of maxed characters (default: until stamina depleted) |
+| `link` | `link [runs] [--ur] [--lr] [--boost]` | Opens interactive stage selection dropdown (Area 39 Stage 3, Area 35 Stage 1, Chamber of Spirit and Time). Supports cumulative `--ur` and `--lr` rarity flags. Loops directly via "Attempt Again" and configures box filters on Run 1 only |
 | `discord` | `discord [setup\|start]` | Starts the interactive configuration wizard (`discord setup`) or runs the bot listener (`discord start`) |
 | `status` | `status` | Shows current bot status, statistics, and running tasks |
 | `lang` | `lang [en\|it]` | Shows or dynamically changes the bot language at runtime |
@@ -141,7 +146,7 @@ Once configured, run the Discord bot anytime:
 - `/status`: Displays an embed card with connected device, completed runs, active state, and Zeni / Platinum Statue statistics.
 - `/screenshot`: Captures phone display and sends a real-time screenshot directly to Discord.
 - `/eza [target_level]`: Initiates automated EZA navigation and continuous climb to target level (default: 999).
-- `/link [runs]`: Starts automated Link Leveling on Chamber of Spirit and Time with automatic character cycling.
+- `/link [runs] [stage] [filter_rarity] [boost]`: Starts automated Link Leveling with selectable stage (`Area 39 Stage 3`, `Area 35 Stage 1`, `Chamber of Spirit and Time`), cumulative rarity filters (`UR + LR`, `UR`, `LR`), automatic "Attempt Again" rapid restart looping, and single-setup Run 1 filter optimization.
 - `/stop`: Aborts the current running task remotely and safely.
 - `/pause` / `/resume`: Pauses or resumes automation.
 - `/scrcpy [start/stop]`: Controls the screen mirroring window on the host computer.

@@ -132,9 +132,22 @@ class BaseTask:
 
         screen = self.adb.screencap()
 
+        # If a modal confirmation dialog is open (e.g. 'Please Confirm' STA dialog after tapping Attempt Again),
+        # prioritize confirming the modal dialog instead of looking for Attempt Again in the background!
+        is_modal_confirm = "ok_button" in meta and (
+            "cancel_button" in meta or (0.40 <= meta["ok_button"][1] / screen_h <= 0.75)
+        )
+        if is_modal_confirm:
+            x, y = meta["ok_button"]
+            self.log(t("tasks.base.ok_clicked", x=x, y=y))
+            self.adb.tap(x, y, delay_after=1.5)
+            return
+
         # Check for 'Attempt Again' on results screen if requested
         if prefer_again:
-            again_pos = self.vision.find_attempt_again_button(screen)
+            again_pos = meta.get("attempt_again_button") or self.vision.find_attempt_again_button(
+                screen
+            )
             if again_pos:
                 self.log(t("tasks.link.attempt_again_clicked", x=again_pos[0], y=again_pos[1]))
                 self.adb.tap(again_pos[0], again_pos[1], delay_after=2.0)
