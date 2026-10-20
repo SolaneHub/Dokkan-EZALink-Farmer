@@ -1,0 +1,654 @@
+{
+  "stages": [
+    {
+      "stage_id": 10101,
+      "slug": "rz_broly",
+      "event_id": 101,
+      "stage_name": "Stage 7: Broly",
+      "event_name": "Ultimate Red Zone: Movie Edition",
+      "difficulty": 1,
+      "phases": [
+        {
+          "phase_index": 1,
+          "element": 20,
+          "element_name": "Extreme AGL",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 12000000,
+          "atk": 250000,
+          "def_stat": 80000,
+          "bosses": [
+            {
+              "card_id": 1010101,
+              "name": "Broly (Wrathful)",
+              "subname": "Uncontrollable Rage",
+              "element": 20,
+              "type_name": "Extreme AGL",
+              "mechanics": [
+                {"id": 1, "name": "Immunity", "description": "Cannot be stunned or sealed"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 2,
+          "element": 21,
+          "element_name": "Extreme TEQ",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 18000000,
+          "atk": 350000,
+          "def_stat": 100000,
+          "bosses": [
+            {
+              "card_id": 1010102,
+              "name": "Super Saiyan Broly",
+              "subname": "Transcendent Saiyan",
+              "element": 21,
+              "type_name": "Extreme TEQ",
+              "mechanics": [
+                {"id": 2, "name": "Immunity", "description": "Cannot be stunned or sealed"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 3,
+          "element": 23,
+          "element_name": "Extreme STR",
+          "cancels_dodge": false,
+          "has_aoe": true,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 22000000,
+          "atk": 450000,
+          "def_stat": 120000,
+          "bosses": [
+            {
+              "card_id": 1010103,
+              "name": "Legendary Super Saiyan Broly",
+              "subname": "Cataclysmic Awakener",
+              "element": 23,
+              "type_name": "Extreme STR",
+              "mechanics": [
+                {"id": 3, "name": "AoE Super Attack", "description": "Super Attack hits all targets / enemies"},
+                {"id": 4, "name": "Immunity", "description": "Cannot be stunned or sealed"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 4,
+          "element": 20,
+          "element_name": "Extreme AGL",
+          "cancels_dodge": true,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 35000000,
+          "atk": 700000,
+          "def_stat": 150000,
+          "bosses": [
+            {
+              "card_id": 1010104,
+              "name": "Super Saiyan Broly (Full Power)",
+              "subname": "Ultimate Berserker",
+              "element": 20,
+              "type_name": "Extreme AGL",
+              "mechanics": [
+                {"id": 5, "name": "Dodge Cancellation", "description": "Cancels dodge / evasion cannot be evaded"},
+                {"id": 6, "name": "Immunity", "description": "Cannot be stunned or sealed"}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stage_id": 10102,
+      "slug": "rz_cell_max",
+      "event_id": 102,
+      "stage_name": "Stage 2: Cell Max",
+      "event_name": "Ultimate Red Zone: Red Ribbon Army",
+      "difficulty": 1,
+      "phases": [
+        {
+          "phase_index": 1,
+          "element": 24,
+          "element_name": "Extreme PHY",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 15000000,
+          "atk": 300000,
+          "def_stat": 90000,
+          "bosses": [
+            {
+              "card_id": 1010201,
+              "name": "Cell Max",
+              "subname": "Uncontrollable Monster",
+              "element": 24,
+              "type_name": "Extreme PHY",
+              "mechanics": [
+                {"id": 11, "name": "Immunity", "description": "Cannot be stunned or sealed"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 2,
+          "element": 22,
+          "element_name": "Extreme INT",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 25000000,
+          "atk": 500000,
+          "def_stat": 130000,
+          "bosses": [
+            {
+              "card_id": 1010202,
+              "name": "Cell Max",
+              "subname": "Raging Beast",
+              "element": 22,
+              "type_name": "Extreme INT",
+              "mechanics": [
+                {"id": 12, "name": "Immunity", "description": "Cannot be stunned or sealed"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 3,
+          "element": 21,
+          "element_name": "Extreme TEQ",
+          "cancels_dodge": true,
+          "has_aoe": true,
+          "locks_slots": true,
+          "nullifies_stun_seal": true,
+          "hp": 45000000,
+          "atk": 850000,
+          "def_stat": 180000,
+          "bosses": [
+            {
+              "card_id": 1010203,
+              "name": "Cell Max",
+              "subname": "Cataclysmic Superweapon",
+              "element": 21,
+              "type_name": "Extreme TEQ",
+              "mechanics": [
+                {"id": 13, "name": "Dodge Cancellation", "description": "Cancels dodge / evasion"},
+                {"id": 14, "name": "AoE Rampage", "description": "Hits all enemies with devastating force"},
+                {"id": 15, "name": "Slot Lock", "description": "Locks player slots / target cannot switch position"},
+                {"id": 16, "name": "Immunity", "description": "Cannot be stunned or sealed"}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stage_id": 10103,
+      "slug": "rz_zamasu",
+      "event_id": 103,
+      "stage_name": "Stage 4: Fusion Zamasu",
+      "event_name": "Ultimate Red Zone: Dismal Future",
+      "difficulty": 1,
+      "phases": [
+        {
+          "phase_index": 1,
+          "element": 22,
+          "element_name": "Extreme INT",
+          "cancels_dodge": false,
+          "has_aoe": true,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 30000000,
+          "atk": 550000,
+          "def_stat": 140000,
+          "bosses": [
+            {
+              "card_id": 1010301,
+              "name": "Fusion Zamasu",
+              "subname": "Wrath of the Absolute God",
+              "element": 22,
+              "type_name": "Extreme INT",
+              "mechanics": [
+                {"id": 21, "name": "AoE Lightning", "description": "Hits all targets AoE attack"},
+                {"id": 22, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 2,
+          "element": 24,
+          "element_name": "Extreme PHY",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": true,
+          "nullifies_stun_seal": true,
+          "hp": 50000000,
+          "atk": 900000,
+          "def_stat": 200000,
+          "bosses": [
+            {
+              "card_id": 1010302,
+              "name": "Fusion Zamasu (Corrupt)",
+              "subname": "Grotesque Distortion",
+              "element": 24,
+              "type_name": "Extreme PHY",
+              "mechanics": [
+                {"id": 23, "name": "Divine Locking", "description": "Locks slots / characters cannot switch"},
+                {"id": 24, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stage_id": 10104,
+      "slug": "rz_kid_buu",
+      "event_id": 104,
+      "stage_name": "Stage 6: Kid Buu",
+      "event_name": "Ultimate Red Zone: Majin Buu Saga",
+      "difficulty": 1,
+      "phases": [
+        {
+          "phase_index": 1,
+          "element": 21,
+          "element_name": "Extreme TEQ",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 20000000,
+          "atk": 400000,
+          "def_stat": 110000,
+          "bosses": [
+            {
+              "card_id": 1010401,
+              "name": "Majin Buu (South Supreme Kai)",
+              "subname": "Unbridled Muscle",
+              "element": 21,
+              "type_name": "Extreme TEQ",
+              "mechanics": [
+                {"id": 31, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 2,
+          "element": 24,
+          "element_name": "Extreme PHY",
+          "cancels_dodge": true,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 55000000,
+          "atk": 950000,
+          "def_stat": 210000,
+          "bosses": [
+            {
+              "card_id": 1010402,
+              "name": "Kid Buu",
+              "subname": "Pure Destruction",
+              "element": 24,
+              "type_name": "Extreme PHY",
+              "mechanics": [
+                {"id": 32, "name": "Cancel Evasion", "description": "Cancels dodge / cannot be evaded"},
+                {"id": 33, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stage_id": 10105,
+      "slug": "rz_omega",
+      "event_id": 105,
+      "stage_name": "Stage 7: Omega Shenron",
+      "event_name": "Ultimate Red Zone: GT Edition",
+      "difficulty": 1,
+      "phases": [
+        {
+          "phase_index": 1,
+          "element": 20,
+          "element_name": "Extreme AGL",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 16000000,
+          "atk": 300000,
+          "def_stat": 90000,
+          "bosses": [
+            {
+              "card_id": 1010501,
+              "name": "Syn Shenron",
+              "subname": "Evil Shadow Dragon",
+              "element": 20,
+              "type_name": "Extreme AGL",
+              "mechanics": [
+                {"id": 41, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 2,
+          "element": 23,
+          "element_name": "Extreme STR",
+          "cancels_dodge": false,
+          "has_aoe": true,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 24000000,
+          "atk": 450000,
+          "def_stat": 120000,
+          "bosses": [
+            {
+              "card_id": 1010502,
+              "name": "Syn Shenron",
+              "subname": "Negative Energy Overflow",
+              "element": 23,
+              "type_name": "Extreme STR",
+              "mechanics": [
+                {"id": 42, "name": "AoE Quake", "description": "AoE hits all enemies"},
+                {"id": 43, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 3,
+          "element": 22,
+          "element_name": "Extreme INT",
+          "cancels_dodge": true,
+          "has_aoe": false,
+          "locks_slots": true,
+          "nullifies_stun_seal": true,
+          "hp": 40000000,
+          "atk": 800000,
+          "def_stat": 160000,
+          "bosses": [
+            {
+              "card_id": 1010503,
+              "name": "Omega Shenron",
+              "subname": "Ultimate Shadow Dragon",
+              "element": 22,
+              "type_name": "Extreme INT",
+              "mechanics": [
+                {"id": 44, "name": "Shadow Dragon Chains", "description": "Locks slots / switch prevented"},
+                {"id": 45, "name": "Cancel Evasion", "description": "Cancels dodge / evasion"},
+                {"id": 46, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stage_id": 20101,
+      "slug": "smb_beast_gohan",
+      "event_id": 201,
+      "stage_name": "Stage 3: Beast Gohan",
+      "event_name": "Supreme Magnificent Battle: Super Hero Edition",
+      "difficulty": 1,
+      "phases": [
+        {
+          "phase_index": 1,
+          "element": 11,
+          "element_name": "Super TEQ",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 25000000,
+          "atk": 450000,
+          "def_stat": 130000,
+          "bosses": [
+            {
+              "card_id": 2010101,
+              "name": "Ultimate Gohan",
+              "subname": "Awakened Warrior",
+              "element": 11,
+              "type_name": "Super TEQ",
+              "mechanics": [
+                {"id": 51, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 2,
+          "element": 14,
+          "element_name": "Super PHY",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": true,
+          "nullifies_stun_seal": true,
+          "hp": 35000000,
+          "atk": 600000,
+          "def_stat": 160000,
+          "bosses": [
+            {
+              "card_id": 2010102,
+              "name": "Ultimate Gohan",
+              "subname": "Unleashed Power",
+              "element": 14,
+              "type_name": "Super PHY",
+              "mechanics": [
+                {"id": 52, "name": "Lock Rotation", "description": "Locks slots / switch prevented"},
+                {"id": 53, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 3,
+          "element": 13,
+          "element_name": "Super STR",
+          "cancels_dodge": true,
+          "has_aoe": false,
+          "locks_slots": true,
+          "nullifies_stun_seal": true,
+          "hp": 65000000,
+          "atk": 1200000,
+          "def_stat": 240000,
+          "bosses": [
+            {
+              "card_id": 2010103,
+              "name": "Gohan (Beast)",
+              "subname": "Awakened Beast of Justice",
+              "element": 13,
+              "type_name": "Super STR",
+              "mechanics": [
+                {"id": 54, "name": "Cancel Evasion", "description": "Cancels dodge / evasion completely"},
+                {"id": 55, "name": "Beast Gaze", "description": "Locks slots / character switch disabled"},
+                {"id": 56, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stage_id": 20102,
+      "slug": "smb_gogeta",
+      "event_id": 202,
+      "stage_name": "Stage 2: Super Gogeta",
+      "event_name": "Supreme Magnificent Battle: Movie Edition",
+      "difficulty": 1,
+      "phases": [
+        {
+          "phase_index": 1,
+          "element": 10,
+          "element_name": "Super AGL",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 22000000,
+          "atk": 400000,
+          "def_stat": 120000,
+          "bosses": [
+            {
+              "card_id": 2010201,
+              "name": "Goku (Angel) & Vegeta (Angel)",
+              "subname": "Otherworld Allies",
+              "element": 10,
+              "type_name": "Super AGL",
+              "mechanics": [
+                {"id": 61, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 2,
+          "element": 13,
+          "element_name": "Super STR",
+          "cancels_dodge": false,
+          "has_aoe": true,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 38000000,
+          "atk": 700000,
+          "def_stat": 170000,
+          "bosses": [
+            {
+              "card_id": 2010202,
+              "name": "Super Gogeta",
+              "subname": "Supreme Soul Cleanser",
+              "element": 13,
+              "type_name": "Super STR",
+              "mechanics": [
+                {"id": 62, "name": "Soul Punisher Wave", "description": "AoE hits all enemies"},
+                {"id": 63, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 3,
+          "element": 14,
+          "element_name": "Super PHY",
+          "cancels_dodge": true,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 60000000,
+          "atk": 1100000,
+          "def_stat": 230000,
+          "bosses": [
+            {
+              "card_id": 2010203,
+              "name": "Super Saiyan Gogeta",
+              "subname": "Unmatched Fusion Warrior",
+              "element": 14,
+              "type_name": "Super PHY",
+              "mechanics": [
+                {"id": 64, "name": "Cancel Evasion", "description": "Cancels dodge / evasion"},
+                {"id": 65, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stage_id": 20103,
+      "slug": "smb_evo_ui",
+      "event_id": 203,
+      "stage_name": "Stage 2: SSGSS Evolution Vegeta & UI Goku",
+      "event_name": "Supreme Magnificent Battle: Tournament of Power Edition",
+      "difficulty": 1,
+      "phases": [
+        {
+          "phase_index": 1,
+          "element": 12,
+          "element_name": "Super INT",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 30000000,
+          "atk": 500000,
+          "def_stat": 150000,
+          "bosses": [
+            {
+              "card_id": 2010301,
+              "name": "Super Saiyan God SS Evolved Vegeta",
+              "subname": "Pride Beyond Limits",
+              "element": 12,
+              "type_name": "Super INT",
+              "mechanics": [
+                {"id": 71, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 2,
+          "element": 10,
+          "element_name": "Super AGL",
+          "cancels_dodge": false,
+          "has_aoe": false,
+          "locks_slots": false,
+          "nullifies_stun_seal": true,
+          "hp": 42000000,
+          "atk": 750000,
+          "def_stat": 190000,
+          "bosses": [
+            {
+              "card_id": 2010302,
+              "name": "Ultra Instinct -Sign- Goku",
+              "subname": "Omen of Awakening",
+              "element": 10,
+              "type_name": "Super AGL",
+              "mechanics": [
+                {"id": 72, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        },
+        {
+          "phase_index": 3,
+          "element": 11,
+          "element_name": "Super TEQ",
+          "cancels_dodge": true,
+          "has_aoe": false,
+          "locks_slots": true,
+          "nullifies_stun_seal": true,
+          "hp": 70000000,
+          "atk": 1250000,
+          "def_stat": 250000,
+          "bosses": [
+            {
+              "card_id": 2010303,
+              "name": "Goku (Ultra Instinct) & Super Saiyan God SS Evolved Vegeta",
+              "subname": "Miraculous Universe 7 Duo",
+              "element": 11,
+              "type_name": "Super TEQ",
+              "mechanics": [
+                {"id": 73, "name": "Cancel Evasion", "description": "Cancels dodge / cannot be evaded"},
+                {"id": 74, "name": "Universal Pressure", "description": "Locks slots / switch prevented"},
+                {"id": 75, "name": "Immunity", "description": "Immune to stun and seal"}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

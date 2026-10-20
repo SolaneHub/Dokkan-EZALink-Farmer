@@ -46,7 +46,7 @@ cache/
 !docs/**/*.*
 !src/dokkan_eza_link_farmer/assets/**/*.*
 # Local User Configurations & Box Caches
-config/
+/config/
 *.json.bak
 
 # Internal Agent Teamwork
