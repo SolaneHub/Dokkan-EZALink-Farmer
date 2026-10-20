@@ -86,11 +86,7 @@ class AIConfig:
             else AIModelFamily.QWEN
         )
 
-        raw_url = str(
-            data.get("ollama_url")
-            or data.get("base_url")
-            or "http://localhost:11434/v1"
-        )
+        raw_url = str(data.get("ollama_url") or data.get("base_url") or "http://localhost:11434/v1")
         if raw_url and not raw_url.endswith("/v1") and not raw_url.endswith("/v1/"):
             base_url = f"{raw_url.rstrip('/')}/v1"
         else:
@@ -108,7 +104,6 @@ class AIConfig:
             max_attempts=int(data.get("max_attempts", 10)),
             confidence_threshold=float(data.get("confidence_threshold", 0.72)),
         )
-
 
 
 @dataclass
@@ -194,12 +189,12 @@ class LeaderSkillSpec:
     main_category_ids: list[int] = field(default_factory=list)
     extra_category_ids: list[int] = field(default_factory=list)
     sub_elements_classes: list[int] = field(default_factory=list)
-    base_boost_pct: int = 170
-    extra_boost_pct: int = 30
-    sub_boost_pct: int = 0
-    hp_stat_pct: int = 170
-    atk_stat_pct: int = 170
-    def_stat_pct: int = 170
+    base_boost_pct: float = 170.0
+    extra_boost_pct: float = 30.0
+    sub_boost_pct: float = 0.0
+    hp_stat_pct: float = 170.0
+    atk_stat_pct: float = 170.0
+    def_stat_pct: float = 170.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -383,11 +378,11 @@ class DokkanCard:
             return "bold yellow"
 
         type_colors = {
-            0: "bold cyan",     # AGL
-            1: "bold green",    # TEQ
+            0: "bold cyan",  # AGL
+            1: "bold green",  # TEQ
             2: "bold magenta",  # INT
-            3: "bold red",      # STR
-            4: "bold yellow",   # PHY
+            3: "bold red",  # STR
+            4: "bold yellow",  # PHY
         }
         return type_colors.get(self.element % 10, "bold white")
 

@@ -295,7 +295,7 @@ class BotEngine:
 
     def start_ai_endgame(
         self,
-        stage_identifier: int | str = 10101,
+        stage_identifier: int | str | Any = 10101,
         max_attempts: int | None = None,
         dry_run: bool = False,
         force_solve: bool = False,
@@ -363,7 +363,7 @@ class BotEngine:
 
     def run_ai_endgame_sync(
         self,
-        stage_identifier: int | str = 10101,
+        stage_identifier: int | str | Any = 10101,
         max_attempts: int | None = None,
         dry_run: bool = False,
         force_solve: bool = False,

@@ -120,9 +120,15 @@ def verify_scenario_a() -> None:
         )
 
         assert decision.action == "InstantRetry", f"Expected InstantRetry, got {decision.action}"
-        assert len(decision.replaced_card_ids) == 0, f"Expected 0 replacements, got {decision.replaced_card_ids}"
-        assert [c.id for c in decision.team] == [c.id for c in team], "Team was modified unexpectedly"
-        print("  [OK] Scenario A: Boss HP 14.5% (<20%) in Final Phase triggered InstantRetry without modifying team.")
+        assert len(decision.replaced_card_ids) == 0, (
+            f"Expected 0 replacements, got {decision.replaced_card_ids}"
+        )
+        assert [c.id for c in decision.team] == [c.id for c in team], (
+            "Team was modified unexpectedly"
+        )
+        print(
+            "  [OK] Scenario A: Boss HP 14.5% (<20%) in Final Phase triggered InstantRetry without modifying team."
+        )
 
 
 def verify_scenario_b() -> None:
@@ -149,14 +155,29 @@ def verify_scenario_b() -> None:
         )
 
         c_lead = make_card(
-            1001, "LR Vegito Leader", element=0, category_ids=[10, 20], leader_spec=lead_spec, slot1_viable=True
+            1001,
+            "LR Vegito Leader",
+            element=0,
+            category_ids=[10, 20],
+            leader_spec=lead_spec,
+            slot1_viable=True,
         )
         c_gohan = make_card(
-            1002, "Beast Gohan", element=3, category_ids=[10, 20], slot1_viable=True, dr_pct=80, has_guard=True
+            1002,
+            "Beast Gohan",
+            element=3,
+            category_ids=[10, 20],
+            slot1_viable=True,
+            dr_pct=80,
+            has_guard=True,
         )
-        c_teq = make_card(1003, "TEQ Vegito", element=1, category_ids=[10, 20], dr_pct=50, has_guard=True)
+        c_teq = make_card(
+            1003, "TEQ Vegito", element=1, category_ids=[10, 20], dr_pct=50, has_guard=True
+        )
         # PHY Gotenks is floater (Slot 3), type disadvantage against STR boss, 0% DR, no guard
-        c_gotenks = make_card(1004, "PHY Gotenks", element=4, category_ids=[10], dr_pct=0, has_guard=False)
+        c_gotenks = make_card(
+            1004, "PHY Gotenks", element=4, category_ids=[10], dr_pct=0, has_guard=False
+        )
         c_sub5 = make_card(1005, "Hero 5", element=2, category_ids=[10], dr_pct=40)
         c_sub6 = make_card(1006, "Hero 6", element=0, category_ids=[10], dr_pct=40)
 
@@ -199,9 +220,15 @@ def verify_scenario_b() -> None:
             is_final_phase=False,
         )
 
-        assert decision.action == "SurgicalReplace", f"Expected SurgicalReplace, got {decision.action}"
-        assert 1004 in decision.replaced_card_ids, f"Expected 1004 in replaced IDs, got {decision.replaced_card_ids}"
-        assert 1007 in decision.new_card_ids, f"Expected 1007 in new card IDs, got {decision.new_card_ids}"
+        assert decision.action == "SurgicalReplace", (
+            f"Expected SurgicalReplace, got {decision.action}"
+        )
+        assert 1004 in decision.replaced_card_ids, (
+            f"Expected 1004 in replaced IDs, got {decision.replaced_card_ids}"
+        )
+        assert 1007 in decision.new_card_ids, (
+            f"Expected 1007 in new card IDs, got {decision.new_card_ids}"
+        )
 
         new_card = next(c for c in decision.team if c.id == 1007)
         assert (
@@ -211,7 +238,9 @@ def verify_scenario_b() -> None:
         is_cov, boost_pct, _ = new_card.is_covered_by_leader(c_lead)
         assert is_cov and boost_pct >= 170.0, f"Replacement card leader boost too low: {boost_pct}%"
 
-        print("  [OK] Scenario B: Game over at STR Phase surgically replaced PHY floater with AGL/Guard tank under >=170% leader boost.")
+        print(
+            "  [OK] Scenario B: Game over at STR Phase surgically replaced PHY floater with AGL/Guard tank under >=170% leader boost."
+        )
 
 
 def verify_scenario_c() -> None:
@@ -231,16 +260,40 @@ def verify_scenario_c() -> None:
         base_boost_pct=170.0,
     )
 
-    leader = make_card(3000, "Leader Unit", element=0, category_ids=[10], leader_spec=lead_spec, slot1_viable=True)
-    slot1_tank = make_card(3001, "Slot 1 Tank", element=3, category_ids=[10], slot1_viable=True, has_guard=True, dr_pct=50)
+    leader = make_card(
+        3000, "Leader Unit", element=0, category_ids=[10], leader_spec=lead_spec, slot1_viable=True
+    )
+    slot1_tank = make_card(
+        3001,
+        "Slot 1 Tank",
+        element=3,
+        category_ids=[10],
+        slot1_viable=True,
+        has_guard=True,
+        dr_pct=50,
+    )
 
     # Candidate 1: Pure dodge glass cannon (70% dodge, 0% DR, no guard)
     mui_goku = make_card(
-        3002, "MUI Goku", element=0, category_ids=[10], slot1_viable=False, dr_pct=0, has_guard=False, dodge_pct=70
+        3002,
+        "MUI Goku",
+        element=0,
+        category_ids=[10],
+        slot1_viable=False,
+        dr_pct=0,
+        has_guard=False,
+        dodge_pct=70,
     )
     # Candidate 2: Pure damage reduction tank (90% DR, 0% dodge)
     golden_frieza = make_card(
-        3003, "Golden Frieza", element=0, category_ids=[10], slot1_viable=False, dr_pct=90, has_guard=False, dodge_pct=0
+        3003,
+        "Golden Frieza",
+        element=0,
+        category_ids=[10],
+        slot1_viable=False,
+        dr_pct=90,
+        has_guard=False,
+        dodge_pct=0,
     )
 
     subs = [
@@ -262,7 +315,9 @@ def verify_scenario_c() -> None:
         "High vulnerability: relies on dodge but lacks Guard/DR" in p for p in ev_mui.penalty_points
     ), f"Expected high vulnerability penalty, got {ev_mui.penalty_points}"
 
-    assert ev_frieza.score > ev_mui.score, f"Expected Frieza ({ev_frieza.score}) > MUI ({ev_mui.score})"
+    assert ev_frieza.score > ev_mui.score, (
+        f"Expected Frieza ({ev_frieza.score}) > MUI ({ev_mui.score})"
+    )
 
     # Full solver execution on 7-card pool (only 6 can make the team)
     pool = [leader, slot1_tank, mui_goku, golden_frieza] + subs
@@ -272,7 +327,9 @@ def verify_scenario_c() -> None:
     assert 3003 in team_ids, "Golden Frieza should have been included in the 6-card team"
     assert 3002 not in team_ids, "MUI Goku should have been excluded due to cancels_dodge penalty"
 
-    print("  [OK] Scenario C: Boss with cancels_dodge discarded pure dodge candidates in favor of Guard/DR tanking.")
+    print(
+        "  [OK] Scenario C: Boss with cancels_dodge discarded pure dodge candidates in favor of Guard/DR tanking."
+    )
 
     # Additionally verify dry-run formation application
     formation_ok = apply_team_in_game(None, None, None, result.team_cards, dry_run=True)

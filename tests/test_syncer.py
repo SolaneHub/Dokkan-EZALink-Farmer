@@ -110,8 +110,20 @@ class TestDokkanSyncer:
             # Box contains only 2 cards out of a 1436 catalog
             box_data = {
                 "cards": [
-                    {"id": 1001, "is_rainbow": True, "is_eza": True, "swipe_page": 0, "grid_slot": 2},
-                    {"id": 1002, "is_rainbow": False, "is_eza": False, "swipe_page": 1, "grid_slot": 7},
+                    {
+                        "id": 1001,
+                        "is_rainbow": True,
+                        "is_eza": True,
+                        "swipe_page": 0,
+                        "grid_slot": 2,
+                    },
+                    {
+                        "id": 1002,
+                        "is_rainbow": False,
+                        "is_eza": False,
+                        "swipe_page": 1,
+                        "grid_slot": 7,
+                    },
                 ]
             }
             with open(box_file, "w", encoding="utf-8") as f:
@@ -135,7 +147,9 @@ class TestDokkanSyncer:
                             "passive_skill_description": "Base Passive",
                             "eza_passive_skill_description": "Guards all attacks; reduces damage received by 60%",
                             "special_descriptions": ["Causes colossal damage"],
-                            "special_descriptions_eza": ["Greatly raises DEF and causes mega-colossal damage"],
+                            "special_descriptions_eza": [
+                                "Greatly raises DEF and causes mega-colossal damage"
+                            ],
                         }
                     ]
                 elif "code=1002" in url:
@@ -168,6 +182,8 @@ class TestDokkanSyncer:
             assert card1001.is_eza is True
             assert card1001.swipe_page == 0
             assert card1001.grid_slot == 2
+            assert card1001.base_form is not None and card1001.base_form.passive_tags is not None
+            assert card1001.base_form.sa_tags is not None
             assert card1001.base_form.passive_tags.has_guard is True
             assert card1001.base_form.passive_tags.dr_base_percent == 60
             assert card1001.base_form.sa_tags.stacks_def is True
@@ -176,6 +192,7 @@ class TestDokkanSyncer:
             assert card1002.is_eza is False
             assert card1002.swipe_page == 1
             assert card1002.grid_slot == 7
+            assert card1002.base_form is not None and card1002.base_form.sa_tags is not None
             assert card1002.base_form.sa_tags.stacks_def is False
 
     def test_distinguish_passive_base_vs_eza_vs_seza(self):
@@ -201,6 +218,7 @@ class TestDokkanSyncer:
         base_card = syncer.build_dokkan_card(raw_dokkandb_data, is_eza=False, is_seza=False)
         assert base_card.has_guard is False
         assert base_card.damage_reduction_percent == 0
+        assert base_card.base_form is not None and base_card.base_form.passive_tags is not None
         assert base_card.base_form.passive_tags.slot1_viable is False
 
         # 2. Regular EZA (uses _pre fields because card has SEZA)
@@ -213,6 +231,7 @@ class TestDokkanSyncer:
         seza_card = syncer.build_dokkan_card(raw_dokkandb_data, is_eza=True, is_seza=True)
         assert seza_card.has_guard is True
         assert seza_card.damage_reduction_percent == 50
+        assert seza_card.base_form is not None and seza_card.base_form.passive_tags is not None
         assert seza_card.base_form.passive_tags.dodge_chance_percent == 50
         assert seza_card.base_form.passive_tags.slot1_viable is True
 
@@ -273,8 +292,16 @@ class TestDokkanSyncer:
                     "element": 21,
                     "type_name": "Extreme TEQ",
                     "mechanics": [
-                        {"id": 1, "name": "Cancels evasion", "description": "Disables enemy's evasion"},
-                        {"id": 2, "name": "AOE Attack", "description": "Super Attack hits all targets"},
+                        {
+                            "id": 1,
+                            "name": "Cancels evasion",
+                            "description": "Disables enemy's evasion",
+                        },
+                        {
+                            "id": 2,
+                            "name": "AOE Attack",
+                            "description": "Super Attack hits all targets",
+                        },
                         {"id": 3, "name": "Locking", "description": "Locks slot positions"},
                         {"id": 4, "name": "Immunity", "description": "Immune to stun and sealing"},
                     ],
@@ -370,7 +397,9 @@ class TestDokkanSyncer:
         assert 3 in spec_potara.main_category_ids
         assert spec_potara.sub_boost_pct == 90
 
-        lead_card = DokkanCard(id=1012901, name="LR Vegito", leader_skill=lead_potara, leader_spec=spec_potara)
+        lead_card = DokkanCard(
+            id=1012901, name="LR Vegito", leader_skill=lead_potara, leader_spec=spec_potara
+        )
         non_potara_int = DokkanCard(id=999, name="INT Goku", element=12, category_ids=[1])
         is_cov, mult, desc = non_potara_int.is_covered_by_leader(lead_card)
         assert is_cov is True
@@ -420,7 +449,9 @@ class TestDokkanSyncer:
             element=23,
             type_name="Extreme STR",
             mechanics=[
-                BossMechanic(id=1, name="Cancels Dodge", description="Enemy attack cannot be evaded"),
+                BossMechanic(
+                    id=1, name="Cancels Dodge", description="Enemy attack cannot be evaded"
+                ),
                 BossMechanic(id=2, name="Nullifies Stun", description="Cannot be stunned"),
             ],
         )
@@ -429,4 +460,3 @@ class TestDokkanSyncer:
         assert phase.nullifies_stun_seal is True
         assert phase.element == 23
         assert phase.element_name == "Extreme STR"
-

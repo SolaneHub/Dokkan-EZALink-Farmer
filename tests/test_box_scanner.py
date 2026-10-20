@@ -266,7 +266,10 @@ class TestBoxScanner:
     def test_default_user_box_path_and_coordinates(self):
         """Tests that BoxScanner defaults to ~/.dokkan-farmer/cache/user_box.json and tracks swipe_page + grid_slot."""
         from dokkan_eza_link_farmer.automation.tasks.box_scanner import DEFAULT_USER_BOX_PATH
-        assert DEFAULT_USER_BOX_PATH.endswith(os.path.join(".dokkan-farmer", "cache", "user_box.json"))
+
+        assert DEFAULT_USER_BOX_PATH.endswith(
+            os.path.join(".dokkan-farmer", "cache", "user_box.json")
+        )
 
         adb = MagicMock()
         vision = MagicMock()
@@ -278,7 +281,9 @@ class TestBoxScanner:
             crop = np.zeros((100, 100, 3), dtype=np.uint8)
 
             # Register with swipe_page=2, grid_slot=14 (3rd row, 5th column)
-            scanner._register_card(cand, score=0.95, crop=crop, cy=1111.0, cx=970, swipe_page=2, grid_slot=14)
+            scanner._register_card(
+                cand, score=0.95, crop=crop, cy=1111.0, cx=970, swipe_page=2, grid_slot=14
+            )
 
             assert 1028731 in scanner.scanned_cards
             saved_entry = scanner.scanned_cards[1028731]
@@ -348,4 +353,3 @@ class TestBoxScanner:
             assert syncer.sync_catalog.called
             assert len(scanner._catalog) == 1
             assert 1012901 in scanner._id_index
-

@@ -149,9 +149,7 @@ class EndgameRunner:
 
         self.memory_path = Path(memory_path or DEFAULT_MEMORY_CACHE_PATH)
         self.user_box_path = Path(user_box_path or DEFAULT_USER_BOX_PATH)
-        self.memory = memory or EpisodicMemory(
-            cache_path=self.memory_path, ephemeral=dry_run
-        )
+        self.memory = memory or EpisodicMemory(cache_path=self.memory_path, ephemeral=dry_run)
         self.telemetry_tracker = telemetry_tracker or CombatTelemetryTracker(
             ring_buffer=CombatRingBuffer(capacity=4),
             episodic_memory=self.memory,
@@ -297,10 +295,9 @@ class EndgameRunner:
                 return self.current_team
 
         # Synthesize optimal initial team using TeamBuilder & Constraint Solver
-        if has_mission_restrictions:
-            self.log(
-                f"[Step A] Synthesizing mission-tailored 6-card team ({self.mission_batch.summary})..."
-            )
+        if has_mission_restrictions and self.mission_batch is not None:
+            summary_str = getattr(self.mission_batch, "summary", "")
+            self.log(f"[Step A] Synthesizing mission-tailored 6-card team ({summary_str})...")
         else:
             self.log("[Step A] Synthesizing optimal 6-card team with TeamBuilder & Solver...")
 
@@ -401,12 +398,8 @@ class EndgameRunner:
                 is_connected = False
 
         if self.dry_run or not is_connected or not self.vision or not self.detector:
-            self.log(
-                f"[Step C] Simulating live combat in Dry-Run mode (attempt {attempt_num})..."
-            )
-            self.log(
-                "  1. Selecting Friend Leader (checking button_friend_refresh.png)..."
-            )
+            self.log(f"[Step C] Simulating live combat in Dry-Run mode (attempt {attempt_num})...")
+            self.log("  1. Selecting Friend Leader (checking button_friend_refresh.png)...")
             self.log("  2. Tapping button_start.png...")
             self.log("  3. Verifying Auto-Battle is ON (btn_auto_battle_on.png)...")
             self.log("  4. Running observation telemetry ring buffer...")
@@ -453,12 +446,8 @@ class EndgameRunner:
 
             # Step C-1: Friend Selection Screen
             if state == GameState.FRIEND_SELECT:
-                self.log(
-                    "[Step C] Screen: FRIEND_SELECT. Selecting optimal Friend Leader..."
-                )
-                refresh_match = self.vision.find_template(
-                    screen, "button_friend_refresh"
-                )
+                self.log("[Step C] Screen: FRIEND_SELECT. Selecting optimal Friend Leader...")
+                refresh_match = self.vision.find_template(screen, "button_friend_refresh")
                 if refresh_match:
                     logger.debug("Friend refresh button visible at %s", refresh_match)
                 # Tap top friend candidate
@@ -498,7 +487,9 @@ class EndgameRunner:
 
                 # Ki spheres snapshot & telemetry observation
                 orb_y = int(h * 0.53)
-                self.log(f"[Step C] Capturing Ki sphere board snapshot (y~{orb_y}) & updating telemetry...")
+                self.log(
+                    f"[Step C] Capturing Ki sphere board snapshot (y~{orb_y}) & updating telemetry..."
+                )
 
                 # Capture Turn Snapshot
                 active_rot = self.current_team[:3]
@@ -530,10 +521,10 @@ class EndgameRunner:
                 time.sleep(2.0)
 
             # Step D: Victory Check (Results / OK Button)
-            elif (
-                state in (GameState.RESULTS_SCREEN, GameState.KO_SCREEN)
-                or self.vision.find_template(screen, "button_ok")
-            ):
+            elif state in (
+                GameState.RESULTS_SCREEN,
+                GameState.KO_SCREEN,
+            ) or self.vision.find_template(screen, "button_ok"):
                 ok_btn = self.vision.find_template(screen, "button_ok")
                 if ok_btn:
                     self.adb.tap(ok_btn[0], ok_btn[1], delay_after=1.5)
@@ -544,9 +535,8 @@ class EndgameRunner:
                 )
 
             # Step D: Game Over Check (Attempt Again Button)
-            elif (
-                state == GameState.GAME_OVER
-                or self.vision.find_template(screen, "button_attempt_again")
+            elif state == GameState.GAME_OVER or self.vision.find_template(
+                screen, "button_attempt_again"
             ):
                 self.log("[Step D] Game Over screen detected!")
                 again_btn = self.vision.find_template(screen, "button_attempt_again")
@@ -585,9 +575,7 @@ class EndgameRunner:
         self.current_state = EndgameRunnerState.STEP_D_OUTCOME
 
         if outcome == EndgameStageOutcome.VICTORY:
-            self.log(
-                f"\n🎉 [Step D] STAGE CLEARED! Victory confirmed against {stage.stage_name}!"
-            )
+            self.log(f"\n🎉 [Step D] STAGE CLEARED! Victory confirmed against {stage.stage_name}!")
             self.telemetry_tracker.handle_victory(
                 stage_id=stage.stage_id,
                 winning_team=self.current_team,
@@ -628,13 +616,12 @@ class EndgameRunner:
             self.log(
                 f"[Step D] Failure Classification: {report.classification} | Reason: {report.reason}"
             )
-            self.log(
-                f"[Step D] Decision Tree Action: {decision.action} -> {decision.reason}"
-            )
+            self.log(f"[Step D] Decision Tree Action: {decision.action} -> {decision.reason}")
 
             # Apply Decision Tree Team Modification
             if (
-                decision.action in ("SurgicalReplace", "SurgicalSwap", "DemoteLeader", "LeaderSwitch")
+                decision.action
+                in ("SurgicalReplace", "SurgicalSwap", "DemoteLeader", "LeaderSwitch")
                 and decision.team
             ):
                 self.current_team = list(decision.team)

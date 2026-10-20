@@ -256,13 +256,9 @@ class DiscordBotClient(commands.Bot):
             ok = self.engine.start_stage_farm(runs=actual_runs, use_boost=boost)
             if ok:
                 runs_label = (
-                    str(actual_runs)
-                    if actual_runs is not None
-                    else t("cli.stage.runs_unlimited")
+                    str(actual_runs) if actual_runs is not None else t("cli.stage.runs_unlimited")
                 )
-                await interaction.response.send_message(
-                    t("discord.stage_started", runs=runs_label)
-                )
+                await interaction.response.send_message(t("discord.stage_started", runs=runs_label))
             else:
                 await interaction.response.send_message(t("discord.task_conflict"))
 

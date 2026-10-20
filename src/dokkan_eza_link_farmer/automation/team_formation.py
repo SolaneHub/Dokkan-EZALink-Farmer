@@ -52,7 +52,9 @@ def _load_box_coordinates(user_box_path: str | None = None) -> dict[int, tuple[i
             break
 
     if not resolved_path:
-        logger.info("[apply_team_in_game] No existing user_box.json found; using default slot indexing.")
+        logger.info(
+            "[apply_team_in_game] No existing user_box.json found; using default slot indexing."
+        )
         return {}
 
     try:
@@ -100,7 +102,9 @@ def apply_team_in_game(
         except Exception:
             is_connected = is_mock
 
-    should_simulate = dry_run or adb is None or vision is None or detector is None or not is_connected
+    should_simulate = (
+        dry_run or adb is None or vision is None or detector is None or not is_connected
+    )
 
     if should_simulate and not is_mock:
         logger.info(
@@ -144,8 +148,12 @@ def apply_team_in_game(
 
         # 1. Screen State Validation: Navigate from TEAM_CONFIRM to TEAM_EDIT
         if state == GameState.TEAM_CONFIRM:
-            logger.info("[apply_team_in_game] State TEAM_CONFIRM detected. Tapping team formation button...")
-            formation_btn = meta.get("team_formation_button") or vision.find_template(screen, "button_team_formation")
+            logger.info(
+                "[apply_team_in_game] State TEAM_CONFIRM detected. Tapping team formation button..."
+            )
+            formation_btn = meta.get("team_formation_button") or vision.find_template(
+                screen, "button_team_formation"
+            )
             if formation_btn:
                 adb.tap(formation_btn[0], formation_btn[1], delay_after=2.5)
             elif "edit_team_button" in meta:
@@ -158,19 +166,27 @@ def apply_team_in_game(
 
         # 2. Deck Clearing: Remove all current cards from deck
         logger.info("[apply_team_in_game] Entering deck clear phase...")
-        deck_rm = meta.get("button_deck_remove_all") or (
-            vision.find_deck_remove_all(screen) if hasattr(vision, "find_deck_remove_all") else None
-        ) or vision.find_template(screen, "button_deck_remove_all")
+        deck_rm = (
+            meta.get("button_deck_remove_all")
+            or (
+                vision.find_deck_remove_all(screen)
+                if hasattr(vision, "find_deck_remove_all")
+                else None
+            )
+            or vision.find_template(screen, "button_deck_remove_all")
+        )
 
         if deck_rm:
-            rx, ry = deck_rm
+            rx, ry = int(deck_rm[0]), int(deck_rm[1])
         else:
             rx, ry = int(w * 0.91), int(h * 0.80)
         adb.tap(rx, ry, delay_after=0.8)
 
         # Dismiss confirmation OK popup if present
         popup_screen = adb.screencap()
-        ok_match = vision.find_ok_button(popup_screen) if hasattr(vision, "find_ok_button") else None
+        ok_match = (
+            vision.find_ok_button(popup_screen) if hasattr(vision, "find_ok_button") else None
+        )
         if ok_match:
             adb.tap(ok_match[0], ok_match[1], delay_after=0.8)
         time.sleep(0.5)
@@ -178,7 +194,11 @@ def apply_team_in_game(
         # 3. Filter Integrity Verification
         curr_box = adb.screencap()
         if hasattr(vision, "is_sort_released") and not vision.is_sort_released(curr_box):
-            yellow_btn = vision.find_yellow_sort_button(curr_box) if hasattr(vision, "find_yellow_sort_button") else None
+            yellow_btn = (
+                vision.find_yellow_sort_button(curr_box)
+                if hasattr(vision, "find_yellow_sort_button")
+                else None
+            )
             if yellow_btn:
                 adb.tap(yellow_btn[0], yellow_btn[1], delay_after=0.8)
 
@@ -189,7 +209,11 @@ def apply_team_in_game(
             target_page, target_slot = box_coords.get(card.id, (0, idx % 25))
 
             while current_page < target_page:
-                logger.info("[apply_team_in_game] Swiping page up (page %d -> %d)...", current_page, current_page + 1)
+                logger.info(
+                    "[apply_team_in_game] Swiping page up (page %d -> %d)...",
+                    current_page,
+                    current_page + 1,
+                )
                 adb.swipe(
                     int(w * 0.50),
                     int(h * 0.58),
@@ -201,7 +225,11 @@ def apply_team_in_game(
                 current_page += 1
 
             while current_page > target_page:
-                logger.info("[apply_team_in_game] Swiping page down (page %d -> %d)...", current_page, current_page - 1)
+                logger.info(
+                    "[apply_team_in_game] Swiping page down (page %d -> %d)...",
+                    current_page,
+                    current_page - 1,
+                )
                 adb.swipe(
                     int(w * 0.50),
                     int(h * 0.35),
@@ -230,10 +258,14 @@ def apply_team_in_game(
         fresh = adb.screencap()
         if hasattr(vision, "get_team_slots_in_box"):
             slots_filled = vision.get_team_slots_in_box(fresh)
-            logger.info("[apply_team_in_game] Verified active team slot badges: %s", sorted(slots_filled))
+            logger.info(
+                "[apply_team_in_game] Verified active team slot badges: %s", sorted(slots_filled)
+            )
 
         # 6. Confirmation of Formation
-        confirm_match = meta.get("button_confirm_formation") or vision.find_template(fresh, "button_confirm_formation")
+        confirm_match = meta.get("button_confirm_formation") or vision.find_template(
+            fresh, "button_confirm_formation"
+        )
         if confirm_match:
             cx, cy = confirm_match[0], confirm_match[1]
         else:
@@ -244,7 +276,10 @@ def apply_team_in_game(
 
         final_screen = adb.screencap()
         final_state, _ = detector.detect(final_screen)
-        logger.info("[apply_team_in_game] Formation applied successfully; returned to state: %s", final_state)
+        logger.info(
+            "[apply_team_in_game] Formation applied successfully; returned to state: %s",
+            final_state,
+        )
         return True
 
     except Exception as exc:

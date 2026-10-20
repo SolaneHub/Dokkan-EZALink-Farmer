@@ -112,8 +112,8 @@ class TestLeaderSkillFilter:
     def leader_card(self) -> DokkanCard:
         spec = LeaderSkillSpec(
             main_category_ids=[10, 20],  # Realm of Gods (10), Potara (20)
-            extra_category_ids=[30],      # Future Saga (30) -> 200%
-            sub_elements_classes=[0],     # Super AGL fallback
+            extra_category_ids=[30],  # Future Saga (30) -> 200%
+            sub_elements_classes=[0],  # Super AGL fallback
             base_boost_pct=170,
             extra_boost_pct=30,
             sub_boost_pct=150,
@@ -131,8 +131,12 @@ class TestLeaderSkillFilter:
     @pytest.fixture
     def leader_card_220(self) -> DokkanCard:
         spec = LeaderSkillSpec(
-            main_category_ids=[17, 85, 95],  # Pure Saiyans (17), Fused Fighters (85), Earth-Protecting Heroes (95)
-            extra_category_ids=[10, 89],     # Potara (10), Earth-Bred Fighters (89)
+            main_category_ids=[
+                17,
+                85,
+                95,
+            ],  # Pure Saiyans (17), Fused Fighters (85), Earth-Protecting Heroes (95)
+            extra_category_ids=[10, 89],  # Potara (10), Earth-Bred Fighters (89)
             sub_elements_classes=[],
             base_boost_pct=170,
             extra_boost_pct=50,
@@ -143,7 +147,14 @@ class TestLeaderSkillFilter:
             name="Super Saiyan Goku + Super Saiyan Vegeta (Angel)",
             element=11,
             category_ids=[9, 17, 85, 95, 10, 89],
-            categories=["Majin Buu Saga", "Pure Saiyans", "Fused Fighters", "Earth-Protecting Heroes", "Potara", "Earth-Bred Fighters"],
+            categories=[
+                "Majin Buu Saga",
+                "Pure Saiyans",
+                "Fused Fighters",
+                "Earth-Protecting Heroes",
+                "Potara",
+                "Earth-Bred Fighters",
+            ],
             leader_skill="Pure Saiyans, Fused Fighters, Earth-Protecting Heroes +170%; Potara, Earth-Bred Fighters +50%",
             leader_spec=spec,
         )
@@ -173,7 +184,10 @@ class TestLeaderSkillFilter:
             id=1024861,
             name="Super Saiyan Goku",
             element=11,
-            category_ids=[17, 89],  # Main Pure Saiyans (17) + Extra Earth-Bred Fighters (89) -> 220%
+            category_ids=[
+                17,
+                89,
+            ],  # Main Pure Saiyans (17) + Extra Earth-Bred Fighters (89) -> 220%
             categories=["Pure Saiyans", "Earth-Bred Fighters"],
         )
         is_cov, boost_pct, _ = candidate.is_covered_by_leader(leader_card_220)
@@ -283,7 +297,9 @@ class TestLeaderSkillFilter:
         assert results[0][1] == 200.0
 
         team = [flat_lead, cand] + [
-            DokkanCard(id=1012 + i, name=f"God {i}", category_ids=[10], categories=["Realm of Gods"])
+            DokkanCard(
+                id=1012 + i, name=f"God {i}", category_ids=[10], categories=["Realm of Gods"]
+            )
             for i in range(4)
         ]
         table = format_team_summary_table(team)
@@ -341,7 +357,6 @@ class TestLeaderSkillFilter:
         ev = solver.evaluate_card(candidate, leader_card)
         assert ev.score <= -1000.0
         assert ev.lead_boost_pct == 0.0
-
 
 
 class TestBossGimmickOverrides:
@@ -459,7 +474,9 @@ class TestBossGimmickOverrides:
                 form_index=0,
                 form_name="Glass Cannon",
                 element=0,
-                passive_tags=PassiveTags(dodge_chance_percent=70, has_guard=False, dr_base_percent=0),
+                passive_tags=PassiveTags(
+                    dodge_chance_percent=70, has_guard=False, dr_base_percent=0
+                ),
             ),
         )
         shielded_dodge = DokkanCard(
@@ -471,7 +488,9 @@ class TestBossGimmickOverrides:
                 form_index=0,
                 form_name="Shielded Tank",
                 element=0,
-                passive_tags=PassiveTags(dodge_chance_percent=70, has_guard=True, dr_base_percent=40),
+                passive_tags=PassiveTags(
+                    dodge_chance_percent=70, has_guard=True, dr_base_percent=40
+                ),
             ),
         )
 
@@ -481,7 +500,9 @@ class TestBossGimmickOverrides:
         # Unshielded receives dodge neutralization (-10.5) PLUS vulnerability penalty (-20) = -30.5
         assert delta_unshielded == pytest.approx(-30.5, abs=0.1)
         assert any("neutralized by Boss (Cancels Dodge)" in p for p in pen_unshielded)
-        assert any("High vulnerability: relies on dodge but lacks Guard/DR" in p for p in pen_unshielded)
+        assert any(
+            "High vulnerability: relies on dodge but lacks Guard/DR" in p for p in pen_unshielded
+        )
 
         # Shielded has dodge neutralized (-10.5) but does NOT suffer the extra -20 penalty
         assert delta_shielded == pytest.approx(-10.5, abs=0.1)
@@ -509,12 +530,18 @@ class TestBossGimmickOverrides:
                 form_index=0,
                 form_name="Text Dodge Unit",
                 element=0,
-                passive_tags=PassiveTags(dodge_chance_percent=0, has_guard=False, dr_base_percent=0),
+                passive_tags=PassiveTags(
+                    dodge_chance_percent=0, has_guard=False, dr_base_percent=0
+                ),
             ),
         )
 
         assert text_dodge_card.has_dodge is True
-        assert text_dodge_card.base_form.passive_tags.dodge_chance_percent == 0
+        assert (
+            text_dodge_card.base_form is not None
+            and text_dodge_card.base_form.passive_tags is not None
+            and text_dodge_card.base_form.passive_tags.dodge_chance_percent == 0
+        )
 
         delta, _, penalties = solver.evaluate_boss_gimmicks(text_dodge_card, boss)
 
@@ -660,14 +687,18 @@ class TestSameNameBaseFormPenalty:
             element=0,
             category_ids=[10],
             leader_spec=LeaderSkillSpec(main_category_ids=[10], base_boost_pct=170),
-            base_form=CardForm(form_id=3003, form_index=0, form_name="Vegito Blue (Base)", element=0),
+            base_form=CardForm(
+                form_id=3003, form_index=0, form_name="Vegito Blue (Base)", element=0
+            ),
         )
         candidate_diff = DokkanCard(
             id=3004,
             name="Super Gogeta",
             element=3,
             category_ids=[10],
-            base_form=CardForm(form_id=3004, form_index=0, form_name="Super Gogeta (Base)", element=3),
+            base_form=CardForm(
+                form_id=3004, form_index=0, form_name="Super Gogeta (Base)", element=3
+            ),
         )
         ev = solver.evaluate_card(candidate_diff, leader, selected_team=[leader])
         assert not any("Same-Name Base Form Penalty" in p for p in ev.penalty_points)
@@ -898,10 +929,7 @@ class TestFullSolverIntegration:
 
     def test_pool_too_small_raises_error(self) -> None:
         solver = DokkanConstraintSolver()
-        small_pool = [
-            DokkanCard(id=i, name=f"Card {i}", category_ids=[10])
-            for i in range(5)
-        ]
+        small_pool = [DokkanCard(id=i, name=f"Card {i}", category_ids=[10]) for i in range(5)]
         with pytest.raises(ValueError, match="Need at least 6 distinct cards"):
             solver.solve(small_pool)
 
@@ -1031,7 +1059,9 @@ class TestFullSolverIntegration:
         assert "Extra: Nessuna" in table
 
     def test_candidate_evaluation_reasoning_property(self) -> None:
-        card = DokkanCard(id=999, name="Test Card", categories=["Pure Saiyans", "Hybrid Saiyans", "Goku's Family"])
+        card = DokkanCard(
+            id=999, name="Test Card", categories=["Pure Saiyans", "Hybrid Saiyans", "Goku's Family"]
+        )
         # Case 1: counter_points populated
         eval1 = CandidateEvaluation(
             card=card,

@@ -24,7 +24,7 @@ class TestTeamBuilderStep1:
     def sample_leader(self) -> DokkanCard:
         spec = LeaderSkillSpec(
             main_category_ids=[10, 20],  # Realm of Gods (10), Potara (20)
-            extra_category_ids=[30],      # Future Saga (30) -> 200%
+            extra_category_ids=[30],  # Future Saga (30) -> 200%
             base_boost_pct=170,
             extra_boost_pct=30,
         )
@@ -77,7 +77,9 @@ class TestTeamBuilderStep1:
                 form_index=0,
                 form_name="MUI Goku (Base)",
                 element=0,
-                passive_tags=PassiveTags(slot1_viable=False, dodge_chance_percent=70, dr_base_percent=0),
+                passive_tags=PassiveTags(
+                    slot1_viable=False, dodge_chance_percent=70, dr_base_percent=0
+                ),
                 sa_tags=SATags(raise_def_turns=1),
             ),
         )
@@ -129,7 +131,9 @@ class TestTeamBuilderStep1:
             ],
         )
 
-    def test_leader_skill_170_vs_200_coverage_scoring(self, sample_leader, glass_cannon_dodge, slot1_tank):
+    def test_leader_skill_170_vs_200_coverage_scoring(
+        self, sample_leader, glass_cannon_dodge, slot1_tank
+    ):
         tb = TeamBuilder()
         ev_200 = tb.evaluate_card_against_boss(glass_cannon_dodge, sample_leader)
         assert ev_200.lead_boost_pct == 200.0
@@ -139,7 +143,9 @@ class TestTeamBuilderStep1:
         assert ev_170.lead_boost_pct == 170.0
         assert "170% Leader Skill coverage" in ev_170.counter_points
 
-    def test_base_form_slot1_viability_strictly_enforced(self, sample_leader, slot1_tank, transforming_late_game):
+    def test_base_form_slot1_viability_strictly_enforced(
+        self, sample_leader, slot1_tank, transforming_late_game
+    ):
         tb = TeamBuilder()
         ev_tank = tb.evaluate_card_against_boss(slot1_tank, sample_leader)
         assert ev_tank.base_slot1_viable is True
@@ -162,11 +168,15 @@ class TestTeamBuilderStep1:
                 BossPhase(phase_index=2, element=3, cancels_dodge=True),
             ],
         )
-        ev = tb.evaluate_card_against_boss(glass_cannon_dodge, sample_leader, boss_stage=boss_no_dodge)
+        ev = tb.evaluate_card_against_boss(
+            glass_cannon_dodge, sample_leader, boss_stage=boss_no_dodge
+        )
         assert any("Cancels Dodge" in pp for pp in ev.penalty_points)
         assert any("relies on dodge but lacks Guard/DR" in pp for pp in ev.penalty_points)
 
-    def test_aoe_gimmick_penalizes_post_super_floaters(self, sample_leader, post_super_floater, slot1_tank):
+    def test_aoe_gimmick_penalizes_post_super_floaters(
+        self, sample_leader, post_super_floater, slot1_tank
+    ):
         tb = TeamBuilder()
         boss_aoe = BossStage(
             stage_id=2,
@@ -176,14 +186,21 @@ class TestTeamBuilderStep1:
             difficulty=10,
             phases=[BossPhase(phase_index=1, element=3, has_aoe=True)],
         )
-        ev_floater = tb.evaluate_card_against_boss(post_super_floater, sample_leader, boss_stage=boss_aoe)
+        ev_floater = tb.evaluate_card_against_boss(
+            post_super_floater, sample_leader, boss_stage=boss_aoe
+        )
         assert any("AoE Vulnerability" in pp for pp in ev_floater.penalty_points)
 
         ev_tank = tb.evaluate_card_against_boss(slot1_tank, sample_leader, boss_stage=boss_aoe)
         assert any("mitigates Boss AoE attacks" in cp for cp in ev_tank.counter_points)
 
     def test_select_best_team_guarantees_minimum_two_slot1_units(
-        self, sample_leader, slot1_tank, glass_cannon_dodge, post_super_floater, transforming_late_game
+        self,
+        sample_leader,
+        slot1_tank,
+        glass_cannon_dodge,
+        post_super_floater,
+        transforming_late_game,
     ):
         # Create a 6th filler card with no slot 1 viability
         filler = DokkanCard(
@@ -199,7 +216,14 @@ class TestTeamBuilderStep1:
                 passive_tags=PassiveTags(slot1_viable=False, has_support=True),
             ),
         )
-        pool = [sample_leader, slot1_tank, glass_cannon_dodge, post_super_floater, transforming_late_game, filler]
+        pool = [
+            sample_leader,
+            slot1_tank,
+            glass_cannon_dodge,
+            post_super_floater,
+            transforming_late_game,
+            filler,
+        ]
         tb = TeamBuilder()
         team_rec, shortlist = tb.select_best_team_for_boss(pool, forced_leader=sample_leader)
 
@@ -207,27 +231,40 @@ class TestTeamBuilderStep1:
         assert len(team_rec.all_cards) == 6
         # Count base slot 1 viable units in team
         slot1_count = sum(
-            1 for c in team_rec.all_cards
+            1
+            for c in team_rec.all_cards
             if (c.base_form and c.base_form.passive_tags and c.base_form.passive_tags.slot1_viable)
             or c.is_slot1_tank
         )
         assert slot1_count >= 2
 
-    def test_ollama_advisor_tie_breaker_and_graceful_fallback(self, sample_leader, slot1_tank, glass_cannon_dodge):
+    def test_ollama_advisor_tie_breaker_and_graceful_fallback(
+        self, sample_leader, slot1_tank, glass_cannon_dodge
+    ):
         tb = TeamBuilder()
         boss_stage = BossStage(
-            stage_id=1, event_id=1, stage_name="Stage 1", event_name="Red Zone", difficulty=10,
-            phases=[BossPhase(phase_index=1, element=3)]
+            stage_id=1,
+            event_id=1,
+            stage_name="Stage 1",
+            event_name="Red Zone",
+            difficulty=10,
+            phases=[BossPhase(phase_index=1, element=3)],
         )
         candidates = [
-            CandidateEvaluation(card=glass_cannon_dodge, score=85.0, lead_boost_pct=200.0, base_slot1_viable=False),
-            CandidateEvaluation(card=slot1_tank, score=82.0, lead_boost_pct=170.0, base_slot1_viable=True),
+            CandidateEvaluation(
+                card=glass_cannon_dodge, score=85.0, lead_boost_pct=200.0, base_slot1_viable=False
+            ),
+            CandidateEvaluation(
+                card=slot1_tank, score=82.0, lead_boost_pct=170.0, base_slot1_viable=True
+            ),
         ]
 
         # 1. Test offline/unavailable fallback -> returns Candidate #1
         ai_client_offline = MagicMock(spec=DokkanAIClient)
         ai_client_offline.is_available.return_value = False
-        chosen, reason = tb.consult_ollama_advisor(candidates, [sample_leader], boss_stage, ai_client=ai_client_offline)
+        chosen, reason = tb.consult_ollama_advisor(
+            candidates, [sample_leader], boss_stage, ai_client=ai_client_offline
+        )
         assert chosen.id == glass_cannon_dodge.id
         assert "Graceful Fallback" in reason
 
@@ -238,6 +275,8 @@ class TestTeamBuilderStep1:
             '{"selected_card_id": 1002, "reasoning": "Beast Gohan garantisce guardia assoluta e countera la fase STR"}',
             "Chain of Thought: Boss attacks heavily in Slot 1, Beast Gohan is necessary.",
         )
-        chosen_ai, reason_ai = tb.consult_ollama_advisor(candidates, [sample_leader], boss_stage, ai_client=ai_client_online)
+        chosen_ai, reason_ai = tb.consult_ollama_advisor(
+            candidates, [sample_leader], boss_stage, ai_client=ai_client_online
+        )
         assert chosen_ai.id == 1002
         assert "Beast Gohan garantisce guardia assoluta" in reason_ai

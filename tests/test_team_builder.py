@@ -43,7 +43,7 @@ from dokkan_eza_link_farmer.ai.team_builder import (
 def sample_leader_200() -> DokkanCard:
     spec = LeaderSkillSpec(
         main_category_ids=[10, 20],  # Realm of Gods (10), Potara (20)
-        extra_category_ids=[30],      # Future Saga (30) -> 200%
+        extra_category_ids=[30],  # Future Saga (30) -> 200%
         base_boost_pct=170,
         extra_boost_pct=30,
     )
@@ -104,7 +104,9 @@ def candidate_pool_sample(sample_leader_200: DokkanCard) -> list[DokkanCard]:
                 form_index=0,
                 form_name="MUI Goku (Base)",
                 element=0,
-                passive_tags=PassiveTags(slot1_viable=False, dodge_chance_percent=70, dr_base_percent=0),
+                passive_tags=PassiveTags(
+                    slot1_viable=False, dodge_chance_percent=70, dr_base_percent=0
+                ),
                 sa_tags=SATags(raise_def_turns=1),
             ),
             passive_skill="Great chance of evading enemy attacks (including Super Attack)",
@@ -199,7 +201,9 @@ def candidate_pool_sample(sample_leader_200: DokkanCard) -> list[DokkanCard]:
                 form_index=0,
                 form_name="Whis (Base)",
                 element=0,
-                passive_tags=PassiveTags(slot1_viable=False, has_support=True, dodge_chance_percent=50),
+                passive_tags=PassiveTags(
+                    slot1_viable=False, has_support=True, dodge_chance_percent=50
+                ),
                 sa_tags=SATags(raise_def_turns=1),
             ),
             passive_skill="Super Class allies Ki +2 and ATK & DEF +40%; high chance of evading enemy attacks",
@@ -242,7 +246,9 @@ def sample_boss_stage() -> BossStage:
         phases=[
             BossPhase(phase_index=1, element=0, element_name="AGL"),
             BossPhase(phase_index=2, element=1, element_name="TEQ", has_aoe=True),
-            BossPhase(phase_index=3, element=3, element_name="STR", cancels_dodge=True, locks_slots=True),
+            BossPhase(
+                phase_index=3, element=3, element_name="STR", cancels_dodge=True, locks_slots=True
+            ),
         ],
     )
 
@@ -251,7 +257,10 @@ class TestShortlistGenerationAndScoring:
     """Verifies that TeamBuilder correctly produces and ranks the Top-5 shortlist."""
 
     def test_top_5_shortlist_generation_and_ordering(
-        self, sample_leader_200: DokkanCard, candidate_pool_sample: list[DokkanCard], sample_boss_stage: BossStage
+        self,
+        sample_leader_200: DokkanCard,
+        candidate_pool_sample: list[DokkanCard],
+        sample_boss_stage: BossStage,
     ) -> None:
         tb = TeamBuilder()
         shortlist = tb.get_top_candidates(
@@ -281,7 +290,10 @@ class TestShortlistGenerationAndScoring:
             assert isinstance(ev.penalty_points, list)
 
     def test_shortlist_excludes_specified_ids(
-        self, sample_leader_200: DokkanCard, candidate_pool_sample: list[DokkanCard], sample_boss_stage: BossStage
+        self,
+        sample_leader_200: DokkanCard,
+        candidate_pool_sample: list[DokkanCard],
+        sample_boss_stage: BossStage,
     ) -> None:
         tb = TeamBuilder()
         excluded = {1002, 1003}
@@ -301,7 +313,10 @@ class TestAdvisorPayloadStructure:
     """Verifies the compact JSON payload delivered to the Ollama AI client."""
 
     def test_payload_structure_without_failure_report(
-        self, sample_leader_200: DokkanCard, candidate_pool_sample: list[DokkanCard], sample_boss_stage: BossStage
+        self,
+        sample_leader_200: DokkanCard,
+        candidate_pool_sample: list[DokkanCard],
+        sample_boss_stage: BossStage,
     ) -> None:
         tb = TeamBuilder()
         current_team = candidate_pool_sample[:5]
@@ -361,7 +376,10 @@ class TestAdvisorPayloadStructure:
             assert "penalty_points" in c
 
     def test_payload_structure_with_failure_report(
-        self, sample_leader_200: DokkanCard, candidate_pool_sample: list[DokkanCard], sample_boss_stage: BossStage
+        self,
+        sample_leader_200: DokkanCard,
+        candidate_pool_sample: list[DokkanCard],
+        sample_boss_stage: BossStage,
     ) -> None:
         tb = TeamBuilder()
         current_team = candidate_pool_sample[:5]
@@ -407,8 +425,18 @@ class TestGracefulDegradation:
     ) -> None:
         tb = TeamBuilder()
         cands = [
-            CandidateEvaluation(card=candidate_pool_sample[1], score=95.0, lead_boost_pct=170.0, base_slot1_viable=True),
-            CandidateEvaluation(card=candidate_pool_sample[2], score=90.0, lead_boost_pct=200.0, base_slot1_viable=False),
+            CandidateEvaluation(
+                card=candidate_pool_sample[1],
+                score=95.0,
+                lead_boost_pct=170.0,
+                base_slot1_viable=True,
+            ),
+            CandidateEvaluation(
+                card=candidate_pool_sample[2],
+                score=90.0,
+                lead_boost_pct=200.0,
+                base_slot1_viable=False,
+            ),
         ]
 
         mock_client = MagicMock(spec=DokkanAIClient)
@@ -430,8 +458,18 @@ class TestGracefulDegradation:
     ) -> None:
         tb = TeamBuilder()
         cands = [
-            CandidateEvaluation(card=candidate_pool_sample[1], score=95.0, lead_boost_pct=170.0, base_slot1_viable=True),
-            CandidateEvaluation(card=candidate_pool_sample[2], score=90.0, lead_boost_pct=200.0, base_slot1_viable=False),
+            CandidateEvaluation(
+                card=candidate_pool_sample[1],
+                score=95.0,
+                lead_boost_pct=170.0,
+                base_slot1_viable=True,
+            ),
+            CandidateEvaluation(
+                card=candidate_pool_sample[2],
+                score=90.0,
+                lead_boost_pct=200.0,
+                base_slot1_viable=False,
+            ),
         ]
 
         mock_client = MagicMock(spec=DokkanAIClient)
@@ -455,8 +493,18 @@ class TestGracefulDegradation:
     ) -> None:
         tb = TeamBuilder()
         cands = [
-            CandidateEvaluation(card=candidate_pool_sample[1], score=95.0, lead_boost_pct=170.0, base_slot1_viable=True),
-            CandidateEvaluation(card=candidate_pool_sample[2], score=90.0, lead_boost_pct=200.0, base_slot1_viable=False),
+            CandidateEvaluation(
+                card=candidate_pool_sample[1],
+                score=95.0,
+                lead_boost_pct=170.0,
+                base_slot1_viable=True,
+            ),
+            CandidateEvaluation(
+                card=candidate_pool_sample[2],
+                score=90.0,
+                lead_boost_pct=200.0,
+                base_slot1_viable=False,
+            ),
         ]
 
         mock_client = MagicMock(spec=DokkanAIClient)
@@ -478,15 +526,27 @@ class TestGracefulDegradation:
     ) -> None:
         tb = TeamBuilder()
         cands = [
-            CandidateEvaluation(card=candidate_pool_sample[1], score=95.0, lead_boost_pct=170.0, base_slot1_viable=True),
-            CandidateEvaluation(card=candidate_pool_sample[2], score=90.0, lead_boost_pct=200.0, base_slot1_viable=False),
+            CandidateEvaluation(
+                card=candidate_pool_sample[1],
+                score=95.0,
+                lead_boost_pct=170.0,
+                base_slot1_viable=True,
+            ),
+            CandidateEvaluation(
+                card=candidate_pool_sample[2],
+                score=90.0,
+                lead_boost_pct=200.0,
+                base_slot1_viable=False,
+            ),
         ]
 
         mock_client = MagicMock(spec=DokkanAIClient)
         mock_client.is_available.return_value = True
         # Model hallucinated ID 999999 not present in cands
         mock_client.chat_completion.return_value = (
-            json.dumps({"selected_card_id": 999999, "reasoning": "Scelgo questo personaggio inventato"}),
+            json.dumps(
+                {"selected_card_id": 999999, "reasoning": "Scelgo questo personaggio inventato"}
+            ),
             "Chain of Thought",
         )
 
@@ -505,8 +565,18 @@ class TestGracefulDegradation:
     ) -> None:
         tb = TeamBuilder()
         cands = [
-            CandidateEvaluation(card=candidate_pool_sample[1], score=95.0, lead_boost_pct=170.0, base_slot1_viable=True),
-            CandidateEvaluation(card=candidate_pool_sample[2], score=90.0, lead_boost_pct=200.0, base_slot1_viable=False),
+            CandidateEvaluation(
+                card=candidate_pool_sample[1],
+                score=95.0,
+                lead_boost_pct=170.0,
+                base_slot1_viable=True,
+            ),
+            CandidateEvaluation(
+                card=candidate_pool_sample[2],
+                score=90.0,
+                lead_boost_pct=200.0,
+                base_slot1_viable=False,
+            ),
         ]
 
         mock_client = MagicMock(spec=DokkanAIClient)
@@ -537,8 +607,18 @@ class TestGracefulDegradation:
     ) -> None:
         tb = TeamBuilder()
         cands = [
-            CandidateEvaluation(card=candidate_pool_sample[1], score=95.0, lead_boost_pct=170.0, base_slot1_viable=True),
-            CandidateEvaluation(card=candidate_pool_sample[2], score=90.0, lead_boost_pct=200.0, base_slot1_viable=False),
+            CandidateEvaluation(
+                card=candidate_pool_sample[1],
+                score=95.0,
+                lead_boost_pct=170.0,
+                base_slot1_viable=True,
+            ),
+            CandidateEvaluation(
+                card=candidate_pool_sample[2],
+                score=90.0,
+                lead_boost_pct=200.0,
+                base_slot1_viable=False,
+            ),
         ]
 
         mock_client = MagicMock(spec=DokkanAIClient)
@@ -564,8 +644,18 @@ class TestGracefulDegradation:
     ) -> None:
         tb = TeamBuilder()
         cands = [
-            CandidateEvaluation(card=candidate_pool_sample[1], score=95.0, lead_boost_pct=170.0, base_slot1_viable=True),
-            CandidateEvaluation(card=candidate_pool_sample[2], score=90.0, lead_boost_pct=200.0, base_slot1_viable=False),
+            CandidateEvaluation(
+                card=candidate_pool_sample[1],
+                score=95.0,
+                lead_boost_pct=170.0,
+                base_slot1_viable=True,
+            ),
+            CandidateEvaluation(
+                card=candidate_pool_sample[2],
+                score=90.0,
+                lead_boost_pct=200.0,
+                base_slot1_viable=False,
+            ),
         ]
 
         mock_client = MagicMock(spec=DokkanAIClient)
@@ -588,7 +678,10 @@ class TestFullTeamRecommendationIntegration:
     """End-to-end integration tests combining DokkanConstraintSolver and Ollama Advisor."""
 
     def test_full_team_recommendation_with_advisor_tie_break(
-        self, sample_leader_200: DokkanCard, candidate_pool_sample: list[DokkanCard], sample_boss_stage: BossStage
+        self,
+        sample_leader_200: DokkanCard,
+        candidate_pool_sample: list[DokkanCard],
+        sample_boss_stage: BossStage,
     ) -> None:
         mock_client = MagicMock(spec=DokkanAIClient)
         mock_client.config = AIConfig(enabled=True)
@@ -643,7 +736,10 @@ class TestFullTeamRecommendationIntegration:
             assert ev.card.id not in team_ids
 
     def test_full_team_recommendation_with_offline_advisor_falls_back(
-        self, sample_leader_200: DokkanCard, candidate_pool_sample: list[DokkanCard], sample_boss_stage: BossStage
+        self,
+        sample_leader_200: DokkanCard,
+        candidate_pool_sample: list[DokkanCard],
+        sample_boss_stage: BossStage,
     ) -> None:
         mock_client = MagicMock(spec=DokkanAIClient)
         mock_client.config = AIConfig(enabled=True)
@@ -717,13 +813,18 @@ class TestTeamBuilderUserBoxAndTableFormatting:
             leader_spec=LeaderSkillSpec(main_category_ids=[17], base_boost_pct=170),
         )
         team = [lead, card_with_newline] + [
-            DokkanCard(id=8000 + i, name=f"Filler {i}", category_ids=[17], categories=["Pure Saiyans"])
+            DokkanCard(
+                id=8000 + i, name=f"Filler {i}", category_ids=[17], categories=["Pure Saiyans"]
+            )
             for i in range(4)
         ]
 
         table = format_team_summary_table(team)
         # Every slot row must be on a single physical line (no literal newline in the name column)
-        assert "Super Saiyan God Goku & Super Saiyan God Vegeta (Divine Warriors with Infinite Power)" in table
+        assert (
+            "Super Saiyan God Goku & Super Saiyan God Vegeta (Divine Warriors with Infinite Power)"
+            in table
+        )
         assert "&\n" not in table
 
     def test_resolve_category_name_fallback_to_global_catalog(self) -> None:
@@ -739,6 +840,7 @@ class TestTeamBuilderUserBoxAndTableFormatting:
 
     def test_dokkan_card_type_colors_and_rich_formatting(self) -> None:
         from rich.text import Text
+
         from dokkan_eza_link_farmer.ai.team_builder import render_team_summary_table_rich
 
         agl_card = DokkanCard(id=1, name="Goku", element=10, element_name="Super AGL")
@@ -772,8 +874,18 @@ class TestTeamBuilderUserBoxAndTableFormatting:
     ) -> None:
         tb = TeamBuilder()
         cands = [
-            CandidateEvaluation(card=candidate_pool_sample[1], score=95.0, lead_boost_pct=170.0, base_slot1_viable=True),
-            CandidateEvaluation(card=candidate_pool_sample[2], score=90.0, lead_boost_pct=200.0, base_slot1_viable=False),
+            CandidateEvaluation(
+                card=candidate_pool_sample[1],
+                score=95.0,
+                lead_boost_pct=170.0,
+                base_slot1_viable=True,
+            ),
+            CandidateEvaluation(
+                card=candidate_pool_sample[2],
+                score=90.0,
+                lead_boost_pct=200.0,
+                base_slot1_viable=False,
+            ),
         ]
 
         mock_client = MagicMock(spec=DokkanAIClient)
@@ -781,8 +893,8 @@ class TestTeamBuilderUserBoxAndTableFormatting:
 
         # Case 1: Markdown code block in content
         mock_client.chat_completion.return_value = (
-            f"```json\n{{\"selected_card_id\": {cands[1].card.id}, \"confidence\": 0.9, \"reasoning\": \"Best guard\"}}\n```",
-            "Thought process here"
+            f'```json\n{{"selected_card_id": {cands[1].card.id}, "confidence": 0.9, "reasoning": "Best guard"}}\n```',
+            "Thought process here",
         )
         chosen, reason = tb.consult_ollama_advisor(
             top_candidates=cands,
@@ -796,7 +908,7 @@ class TestTeamBuilderUserBoxAndTableFormatting:
         # Case 2: Content empty (DeepSeek-R1 token truncation), JSON present in reasoning
         mock_client.chat_completion.return_value = (
             "",
-            f"I think the best card is: {{\"selected_card_id\": {cands[1].card.id}, \"confidence\": 0.85, \"reasoning\": \"Extracted from reasoning\"}}"
+            f'I think the best card is: {{"selected_card_id": {cands[1].card.id}, "confidence": 0.85, "reasoning": "Extracted from reasoning"}}',
         )
         chosen2, reason2 = tb.consult_ollama_advisor(
             top_candidates=cands,
@@ -814,7 +926,7 @@ class TestTeamBuilderUserBoxAndTableFormatting:
         mock_client.is_available.return_value = True
         mock_client.chat_completion.return_value = (
             f'{{"selected_card_id": {candidate_pool_sample[5].id}, "confidence": 0.9, "reasoning": "Solid floater"}}',
-            None
+            None,
         )
 
         tb = TeamBuilder(ai_client=mock_client)
@@ -827,6 +939,3 @@ class TestTeamBuilderUserBoxAndTableFormatting:
         # analyze_team_strategy must NOT be called when generate_tactics=False
         mock_client.analyze_team_strategy.assert_not_called()
         assert "Piano Tattico Deterministico" in rec.tactical_analysis
-
-
-

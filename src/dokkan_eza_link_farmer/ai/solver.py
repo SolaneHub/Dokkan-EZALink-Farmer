@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from dokkan_eza_link_farmer.ai.models import (
     BossPhase,
@@ -148,16 +149,20 @@ class DokkanConstraintSolver:
             or "guards against all attacks" in text
             or "all attacks guarded" in text
             or "guaranteed to guard" in text
-        ):
-            has_guard = True
-        elif card.has_guard:
+        ) or card.has_guard:
             has_guard = True
 
         # Invalidate guard if it is an RNG chance or enemy-oriented
         if re.search(r"chance\s+of\s+guarding", text):
             has_guard = False
-        if "disables enemy" in text and "guard" in text and not (
-            "guards all attacks" in text or "guards against all attacks" in text or "all attacks guarded" in text
+        if (
+            "disables enemy" in text
+            and "guard" in text
+            and not (
+                "guards all attacks" in text
+                or "guards against all attacks" in text
+                or "all attacks guarded" in text
+            )
         ):
             has_guard = False
 
@@ -171,7 +176,9 @@ class DokkanConstraintSolver:
         # Exclude normal-attacks-only DR (e.g. PHY Vegito Blue takes full super attack damage)
         if "damage received from normal attacks" in text:
             clean_text = text.replace("damage received from normal attacks", "")
-            if not any(k in clean_text for k in ("damage reduction", "reduces damage", "damage received -")):
+            if not any(
+                k in clean_text for k in ("damage reduction", "reduces damage", "damage received -")
+            ):
                 dr = 0
 
         # 3. Dodge %
@@ -191,9 +198,10 @@ class DokkanConstraintSolver:
 
         # 4. Slot 1 specific buffs
         slot1_exclusive = (
-            ("1st attacker in a turn" in text or "in the 1st slot" in text or "as the 1st attacker" in text)
-            and ("guard" in text or "damage reduction" in text or "reduces damage" in text)
-        )
+            "1st attacker in a turn" in text
+            or "in the 1st slot" in text
+            or "as the 1st attacker" in text
+        ) and ("guard" in text or "damage reduction" in text or "reduces damage" in text)
 
         if has_guard:
             return True
@@ -201,10 +209,7 @@ class DokkanConstraintSolver:
             return True
         if dodge >= 70:
             return True
-        if slot1_exclusive and (dr >= 30 or has_guard):
-            return True
-
-        return False
+        return bool(slot1_exclusive and (dr >= 30 or has_guard))
 
     def filter_by_leader_skill(
         self,
@@ -243,7 +248,11 @@ class DokkanConstraintSolver:
                     boost = float(spec.base_boost_pct)
                 if boost >= min_pct:
                     eligible.append((card, boost))
-            elif min_pct < 170.0 and sub_elems and (card.element in sub_elems or (card.element % 10) in sub_elems):
+            elif (
+                min_pct < 170.0
+                and sub_elems
+                and (card.element in sub_elems or (card.element % 10) in sub_elems)
+            ):
                 boost = (
                     float(spec.sub_boost_pct)
                     if spec.sub_boost_pct > 0
@@ -347,11 +356,15 @@ class DokkanConstraintSolver:
             is_slot1 = self.is_slot1_viable(card)
             if is_slot1:
                 delta += 15.0
-                counters.append("Slot locking immunity: unit is Slot 1 viable even if locked into position 1")
+                counters.append(
+                    "Slot locking immunity: unit is Slot 1 viable even if locked into position 1"
+                )
             else:
                 if not card.has_guard and card.damage_reduction_percent < 30:
                     delta -= 15.0
-                    penalties.append("Slot Lock Vulnerability: squishy unit lacks defensive kit if locked into Slot 1")
+                    penalties.append(
+                        "Slot Lock Vulnerability: squishy unit lacks defensive kit if locked into Slot 1"
+                    )
 
         return delta, counters, penalties
 
@@ -383,9 +396,7 @@ class DokkanConstraintSolver:
                 score=-1000.0,
                 lead_boost_pct=0.0,
                 base_slot1_viable=self.is_slot1_viable(card),
-                penalty_points=[
-                    "Insufficient Leader Coverage (< 170% or un-enriched leader/card)"
-                ],
+                penalty_points=["Insufficient Leader Coverage (< 170% or un-enriched leader/card)"],
             )
 
         main_cats = set(leader.leader_spec.main_category_ids)
@@ -395,9 +406,7 @@ class DokkanConstraintSolver:
                 score=-1000.0,
                 lead_boost_pct=0.0,
                 base_slot1_viable=self.is_slot1_viable(card),
-                penalty_points=[
-                    "Zero shared categories with Leader main categories"
-                ],
+                penalty_points=["Zero shared categories with Leader main categories"],
             )
 
         is_cov, lead_pct, _ = card.is_covered_by_leader(leader)
@@ -439,7 +448,9 @@ class DokkanConstraintSolver:
         )
         if has_stacking:
             score += 10.0
-            counter_points.append("Permanent DEF stacking on Super Attack provides late-game defense scaling")
+            counter_points.append(
+                "Permanent DEF stacking on Super Attack provides late-game defense scaling"
+            )
 
         # 5. Boss Gimmick Overrides
         gimmick_delta, g_counters, g_penalties = self.evaluate_boss_gimmicks(card, boss_stage)
@@ -561,17 +572,23 @@ class DokkanConstraintSolver:
         unique_pool = list(unique_map.values())
 
         if len(unique_pool) < 6:
-            raise ValueError(f"Need at least 6 distinct cards in candidate pool, found {len(unique_pool)}")
+            raise ValueError(
+                f"Need at least 6 distinct cards in candidate pool, found {len(unique_pool)}"
+            )
 
         # Enforce mission pre-filters on unique_pool
         if mission_batch is not None:
             logs.append(f"Mission Targeting Active: {mission_batch.summary}")
             if getattr(mission_batch, "requires_all_super", False):
                 unique_pool = [c for c in unique_pool if getattr(c, "card_class", "") == "Super"]
-                logs.append(f"Enforced Super Class Only restriction ({len(unique_pool)} cards remaining)")
+                logs.append(
+                    f"Enforced Super Class Only restriction ({len(unique_pool)} cards remaining)"
+                )
             elif getattr(mission_batch, "requires_all_extreme", False):
                 unique_pool = [c for c in unique_pool if getattr(c, "card_class", "") == "Extreme"]
-                logs.append(f"Enforced Extreme Class Only restriction ({len(unique_pool)} cards remaining)")
+                logs.append(
+                    f"Enforced Extreme Class Only restriction ({len(unique_pool)} cards remaining)"
+                )
 
             for req_count, cat_name in getattr(mission_batch, "required_categories", []):
                 if req_count >= 6:
@@ -620,11 +637,7 @@ class DokkanConstraintSolver:
                 if len(eligible) < 5:
                     continue
 
-                boosted_200 = [
-                    o
-                    for o in eligible
-                    if o.is_covered_by_leader(c)[1] >= 200.0
-                ]
+                boosted_200 = [o for o in eligible if o.is_covered_by_leader(c)[1] >= 200.0]
                 count_200 = len(boosted_200)
                 max_boost = float(c.leader_spec.base_boost_pct + c.leader_spec.extra_boost_pct)
 
@@ -723,7 +736,9 @@ class DokkanConstraintSolver:
                             cat_cands = [
                                 c
                                 for c in candidate_subset
-                                if any(c_cat.strip().lower() == c_name_lower for c_cat in c.categories)
+                                if any(
+                                    c_cat.strip().lower() == c_name_lower for c_cat in c.categories
+                                )
                             ]
                             if cat_cands:
                                 candidate_subset = cat_cands
@@ -770,7 +785,9 @@ class DokkanConstraintSolver:
                             current_cnt = sum(
                                 1
                                 for tc in team_cards
-                                if any(c_cat.strip().lower() == c_name_lower for c_cat in tc.categories)
+                                if any(
+                                    c_cat.strip().lower() == c_name_lower for c_cat in tc.categories
+                                )
                             )
                             if current_cnt < req_count and any(
                                 c_cat.strip().lower() == c_name_lower for c_cat in cand.categories

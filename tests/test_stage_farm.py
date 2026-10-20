@@ -231,9 +231,16 @@ class TestStageFarm(unittest.TestCase):
         for lang in ("en", "it"):
             set_language(lang)
             self.assertNotEqual(t("cli.help.desc_stage"), "cli.help.desc_stage")
-            self.assertNotEqual(t("tasks.stage_farm.stamina_depleted"), "tasks.stage_farm.stamina_depleted")
-            self.assertNotEqual(t("tasks.stage_farm.started", runs="∞", boost="AUTO", diff="AUTO"), "tasks.stage_farm.started")
-            self.assertNotEqual(t("cli.stage.summary", runs="∞", boost="ON", diff="SUPER"), "cli.stage.summary")
+            self.assertNotEqual(
+                t("tasks.stage_farm.stamina_depleted"), "tasks.stage_farm.stamina_depleted"
+            )
+            self.assertNotEqual(
+                t("tasks.stage_farm.started", runs="∞", boost="AUTO", diff="AUTO"),
+                "tasks.stage_farm.started",
+            )
+            self.assertNotEqual(
+                t("cli.stage.summary", runs="∞", boost="ON", diff="SUPER"), "cli.stage.summary"
+            )
 
 
 if __name__ == "__main__":

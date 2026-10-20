@@ -75,7 +75,12 @@ class ChallengeMission:
         tag_str = f"[{' | '.join(tags)}]" if tags else "[Standard]"
         clean_name = self.name.replace("\n", " ").strip()
         # Clean extra redundant phrases
-        clean_desc = self.description.replace("\n", " ").replace("* Friends do not count.", "").replace("{cards: by_conditions}", "").strip()
+        clean_desc = (
+            self.description.replace("\n", " ")
+            .replace("* Friends do not count.", "")
+            .replace("{cards: by_conditions}", "")
+            .strip()
+        )
         clean_desc = re.sub(r"\s+", " ", clean_desc)
         if len(clean_desc) > 80:
             clean_desc = clean_desc[:77] + "..."
@@ -210,7 +215,9 @@ class MissionBatch:
         for count_req, cat_name in self.required_categories:
             cat_lower = cat_name.strip().lower()
             actual_count = sum(
-                1 for c in team_cards if any(c_cat.strip().lower() == cat_lower for c_cat in c.categories)
+                1
+                for c in team_cards
+                if any(c_cat.strip().lower() == cat_lower for c_cat in c.categories)
             )
             if actual_count >= count_req:
                 reasons.append(f"✅ Category '{cat_name}': {actual_count}/{count_req} cards")

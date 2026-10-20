@@ -94,7 +94,9 @@ def main() -> int:
         if any(p.locks_slots for p in s.phases):
             gimmicks.append("Locks Slots")
         g_str = f" [{', '.join(gimmicks)}]" if gimmicks else ""
-        print(f"    * {s.stage_id}: {s.event_name} - {s.stage_name} ({len(s.phases)} phases: {phases_str}){g_str}")
+        print(
+            f"    * {s.stage_id}: {s.event_name} - {s.stage_name} ({len(s.phases)} phases: {phases_str}){g_str}"
+        )
 
     assert len(stages) >= 8, f"Expected >= 8 stages, got {len(stages)}"
     broly = get_boss_stage("rz_broly")
@@ -115,13 +117,17 @@ def main() -> int:
         lead_spec = LeaderSkillSpec(
             base_boost_pct=170, extra_boost_pct=30, main_category_ids=[10], extra_category_ids=[20]
         )
-        c1 = make_card(101, "LR AGL Lead", element=0, leader_spec=lead_spec, slot1_viable=True, dr_pct=50)
+        c1 = make_card(
+            101, "LR AGL Lead", element=0, leader_spec=lead_spec, slot1_viable=True, dr_pct=50
+        )
         c2 = make_card(102, "LR TEQ Tank", element=1, slot1_viable=True, has_guard=True, dr_pct=40)
         c3 = make_card(103, "UR PHY DPS", element=4, dr_pct=20)
         c4 = make_card(104, "UR INT Sup", element=2, dr_pct=30)
         c5 = make_card(105, "UR STR Floater", element=3, dr_pct=0)
         c6 = make_card(106, "UR AGL Fill", element=0, dr_pct=20)
-        c7_sub = make_card(107, "LR STR Shield Sub", element=3, slot1_viable=True, has_guard=True, dr_pct=60)
+        c7_sub = make_card(
+            107, "LR STR Shield Sub", element=3, slot1_viable=True, has_guard=True, dr_pct=60
+        )
         c8_sub = make_card(108, "UR TEQ Assist Sub", element=1, dr_pct=40)
 
         cards = [c1, c2, c3, c4, c5, c6, c7_sub, c8_sub]
@@ -135,7 +141,13 @@ def main() -> int:
             phases=[
                 BossPhase(phase_index=1, element=24, element_name="Extreme PHY", hp=15000000),
                 BossPhase(phase_index=2, element=22, element_name="Extreme INT", hp=25000000),
-                BossPhase(phase_index=3, element=21, element_name="Extreme TEQ", hp=45000000, cancels_dodge=True),
+                BossPhase(
+                    phase_index=3,
+                    element=21,
+                    element_name="Extreme TEQ",
+                    hp=45000000,
+                    cancels_dodge=True,
+                ),
             ],
         )
 
@@ -147,7 +159,9 @@ def main() -> int:
 
         recorded_culprit: list[int] = []
 
-        def test_simulator(attempt_num: int, current_team: list[DokkanCard], _target_stage: BossStage):
+        def test_simulator(
+            attempt_num: int, current_team: list[DokkanCard], _target_stage: BossStage
+        ):
             if attempt_num == 1:
                 # Run 1: Game Over at Phase 2 (INT Cell Max) -> Lethal hit on culprit
                 culprit = current_team[4]
@@ -162,7 +176,13 @@ def main() -> int:
                     active_rotation=[current_team[0], current_team[1], culprit],
                 )
                 frames = [
-                    CombatFrame(frame_id=1, active_slot=3, target_card_id=culprit.id, incoming_damage=500000, is_lethal=True)
+                    CombatFrame(
+                        frame_id=1,
+                        active_slot=3,
+                        target_card_id=culprit.id,
+                        incoming_damage=500000,
+                        is_lethal=True,
+                    )
                 ]
                 return ("defeat", snap, frames)
 
@@ -178,7 +198,13 @@ def main() -> int:
                     active_rotation=[current_team[0], current_team[1], current_team[2]],
                 )
                 frames = [
-                    CombatFrame(frame_id=1, active_slot=1, target_card_id=current_team[0].id, incoming_damage=600000, is_lethal=True)
+                    CombatFrame(
+                        frame_id=1,
+                        active_slot=1,
+                        target_card_id=current_team[0].id,
+                        incoming_damage=600000,
+                        is_lethal=True,
+                    )
                 ]
                 return ("defeat", snap, frames)
 
@@ -211,14 +237,18 @@ def main() -> int:
             battle_simulator=test_simulator,
         )
 
-        with patch("dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", side_effect=mock_apply):
+        with patch(
+            "dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", side_effect=mock_apply
+        ):
             res: EndgameResult = runner.run(stage)
 
         print(f"  ✓ Session ended with success={res.success} in {res.attempts} attempts.")
         assert res.success is True
         assert res.attempts == 3
 
-        print(f"  ✓ Run 1 Decision: {res.decisions[0].action} (Replaced: {res.decisions[0].replaced_card_ids} -> {res.decisions[0].new_card_ids})")
+        print(
+            f"  ✓ Run 1 Decision: {res.decisions[0].action} (Replaced: {res.decisions[0].replaced_card_ids} -> {res.decisions[0].new_card_ids})"
+        )
         assert res.decisions[0].action == "SurgicalReplace"
         assert recorded_culprit[0] in res.decisions[0].replaced_card_ids
 
@@ -238,8 +268,12 @@ def main() -> int:
         print("\n[CHECK 3/4] Verifying Step B In-Game Team Formation calls...")
         print(f"  ✓ Total in-game formation operations: {len(formation_applied_teams)}")
         # Applied in Run 1 (initial) and Run 2 (surgical replacement), but NOT Run 3 (Instant Retry)
-        assert len(formation_applied_teams) == 2, f"Expected exactly 2 formation calls, got {len(formation_applied_teams)}"
-        print("  ✓ Check 3 PASSED: Formation invoked on team modification and skipped on InstantRetry.")
+        assert len(formation_applied_teams) == 2, (
+            f"Expected exactly 2 formation calls, got {len(formation_applied_teams)}"
+        )
+        print(
+            "  ✓ Check 3 PASSED: Formation invoked on team modification and skipped on InstantRetry."
+        )
 
     # -------------------------------------------------------------------------
     # CHECK 4: Settings.yaml & CLI Integration
@@ -248,30 +282,43 @@ def main() -> int:
     settings_file = Path("src/dokkan_eza_link_farmer/assets/config/settings.yaml")
     assert settings_file.exists(), "settings.yaml not found"
     import yaml
+
     with open(settings_file, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     assert "ai_teambuilder" in cfg, "ai_teambuilder section missing in settings.yaml"
     ai_tb = cfg["ai_teambuilder"]
-    print(f"  ✓ Found ai_teambuilder config: model={ai_tb.get('ollama_model')}, timeout={ai_tb.get('timeout_seconds')}s, max_attempts={ai_tb.get('max_attempts')}, conf={ai_tb.get('confidence_threshold')}")
+    print(
+        f"  ✓ Found ai_teambuilder config: model={ai_tb.get('ollama_model')}, timeout={ai_tb.get('timeout_seconds')}s, max_attempts={ai_tb.get('max_attempts')}, conf={ai_tb.get('confidence_threshold')}"
+    )
     assert ai_tb.get("timeout_seconds") == 75
     assert ai_tb.get("max_attempts") == 10
     assert ai_tb.get("confidence_threshold") == 0.72
 
     from dokkan_eza_link_farmer.ai.models import AIConfig
+
     parsed_conf = AIConfig.from_dict(ai_tb)
     assert parsed_conf.max_attempts == 10
     assert parsed_conf.confidence_threshold == 0.72
     assert parsed_conf.model_name == "deepseek-r1:7b"
     assert parsed_conf.base_url == "http://localhost:11434/v1"
-    print("  ✓ AIConfig.from_dict seamlessly parsed ollama_model, ollama_url, max_attempts, confidence_threshold.")
+    print(
+        "  ✓ AIConfig.from_dict seamlessly parsed ollama_model, ollama_url, max_attempts, confidence_threshold."
+    )
 
     # Validate CLI arguments parsing (--stage, -s, --dry-run, --max-attempts)
     from dokkan_eza_link_farmer.__main__ import main
+
     with (
         patch("dokkan_eza_link_farmer.ui.cli.TerminalCLI.handle_ai_endgame_run") as mock_cli_run,
-        patch("sys.argv", ["dokkan-farmer", "ai-run", "-s", "20101", "--dry-run", "--max-attempts", "5"]),
-        patch("dokkan_eza_link_farmer.core.system_tools.SingleInstanceMutex.acquire", return_value=True),
+        patch(
+            "sys.argv",
+            ["dokkan-farmer", "ai-run", "-s", "20101", "--dry-run", "--max-attempts", "5"],
+        ),
+        patch(
+            "dokkan_eza_link_farmer.core.system_tools.SingleInstanceMutex.acquire",
+            return_value=True,
+        ),
         patch("dokkan_eza_link_farmer.core.system_tools.SingleInstanceMutex.release"),
     ):
         main()

@@ -372,7 +372,10 @@ class DokkanDBClient:
         try:
             tabs = self.get_area_tabs(region=region, force_refresh=force_refresh)
             for t in tabs:
-                if t.get("id") == 5 or (t.get("name") or "").strip().lower() in ("challenge", "挑戦"):
+                if t.get("id") == 5 or (t.get("name") or "").strip().lower() in (
+                    "challenge",
+                    "挑戦",
+                ):
                     raw_cat_ids = t.get("area_category_ids")
                     if isinstance(raw_cat_ids, str):
                         try:
@@ -404,7 +407,7 @@ class DokkanDBClient:
                 continue
 
             active_status = ev.get("active")
-            is_portal = (active_status == "portal")
+            is_portal = active_status == "portal"
             is_open = False
             if active_status == "normal" or is_portal:
                 is_open = True

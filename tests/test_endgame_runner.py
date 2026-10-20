@@ -104,7 +104,9 @@ def test_box_and_stage(tmp_path: Path):
     )
     c3_dps = create_test_card(103, "UR PHY Trunks DPS", element=4, slot1_viable=False, dr_pct=20)
     c4_sup = create_test_card(104, "UR INT Gohan Support", element=2, slot1_viable=False, dr_pct=30)
-    c5_weak = create_test_card(105, "UR STR Yamcha Floater", element=3, slot1_viable=False, dr_pct=0)
+    c5_weak = create_test_card(
+        105, "UR STR Yamcha Floater", element=3, slot1_viable=False, dr_pct=0
+    )
     c6_fill = create_test_card(106, "UR AGL Krillin", element=0, slot1_viable=False, dr_pct=20)
 
     # Substitute card in box with high defense
@@ -270,7 +272,10 @@ class TestEndgameRunnerFullLifecycle:
             battle_simulator=battle_simulator,
         )
 
-        with patch("dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", side_effect=mock_formation):
+        with patch(
+            "dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game",
+            side_effect=mock_formation,
+        ):
             result: EndgameResult = runner.run(stage)
 
         # 1. Verification of Outcome
@@ -374,7 +379,9 @@ class TestEndgameRunnerEdgeCases:
             battle_simulator=always_die,
         )
 
-        with patch("dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", return_value=True):
+        with patch(
+            "dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", return_value=True
+        ):
             res = runner.run(stage)
 
         assert res.success is False
@@ -422,13 +429,15 @@ class TestEndgameRunnerEdgeCases:
             battle_simulator=instant_win_sim,
         )
 
-        with patch("dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", return_value=True):
+        with patch(
+            "dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", return_value=True
+        ):
             res = runner.run(broly_stage)
 
         assert res.success is True
         assert res.attempts == 1
         assert len(res.winning_team) == 6
-        assert res.stage.stage_id == 10101
+        assert res.stage is not None and res.stage.stage_id == 10101
 
     def test_endgame_runner_friend_leader_immunity(self, test_box_and_stage):
         _cards, stage, box_path, memory_path = test_box_and_stage
@@ -480,7 +489,9 @@ class TestEndgameRunnerEdgeCases:
             battle_simulator=friend_death_then_win,
         )
 
-        with patch("dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", return_value=True):
+        with patch(
+            "dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", return_value=True
+        ):
             res = runner.run(stage)
 
         assert res.success is True
@@ -532,7 +543,10 @@ class TestEndgameRunnerEdgeCases:
         with (
             patch("dokkan_eza_link_farmer.ui.cli.TerminalCLI.handle_ai_endgame_run") as mock_handle,
             patch("sys.argv", ["dokkan-farmer", "ai-run", "--stage", "10101", "--dry-run"]),
-            patch("dokkan_eza_link_farmer.core.system_tools.SingleInstanceMutex.acquire", return_value=True),
+            patch(
+                "dokkan_eza_link_farmer.core.system_tools.SingleInstanceMutex.acquire",
+                return_value=True,
+            ),
             patch("dokkan_eza_link_farmer.core.system_tools.SingleInstanceMutex.release"),
         ):
             main()
@@ -544,7 +558,10 @@ class TestEndgameRunnerEdgeCases:
         with (
             patch("dokkan_eza_link_farmer.ui.cli.TerminalCLI.handle_ai_endgame_run") as mock_handle,
             patch("sys.argv", ["dokkan-farmer", "ai-run", "--dry-run"]),
-            patch("dokkan_eza_link_farmer.core.system_tools.SingleInstanceMutex.acquire", return_value=True),
+            patch(
+                "dokkan_eza_link_farmer.core.system_tools.SingleInstanceMutex.acquire",
+                return_value=True,
+            ),
             patch("dokkan_eza_link_farmer.core.system_tools.SingleInstanceMutex.release"),
         ):
             main()
@@ -558,12 +575,16 @@ class TestEndgameRunnerEdgeCases:
         test_box.write_text(json.dumps(test_payload), encoding="utf-8")
 
         db = DokkanDBClient(cache_dir=str(tmp_path))
-        with patch("dokkan_eza_link_farmer.integrations.dokkandb_client.DEFAULT_USER_BOX_PATH", str(test_box)):
+        with patch(
+            "dokkan_eza_link_farmer.integrations.dokkandb_client.DEFAULT_USER_BOX_PATH",
+            str(test_box),
+        ):
             box_ids = db.get_user_box_card_ids()
             assert 1099991 in box_ids
 
     def test_get_boss_stage_dokkandb_numeric_stage_id(self):
         from unittest.mock import MagicMock
+
         from dokkan_eza_link_farmer.ai.boss_catalog import get_boss_stage
 
         mock_dokkandb = MagicMock()
@@ -596,4 +617,3 @@ class TestEndgameRunnerEdgeCases:
         assert len(stage.phases) == 1
         assert stage.phases[0].element_name == "Super AGL"
         mock_dokkandb.get_stage_boss_info.assert_called_once_with(1737, 17370775)
-

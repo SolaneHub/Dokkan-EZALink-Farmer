@@ -326,8 +326,20 @@ class TestEpisodicMemoryDecisionTree:
     def test_team_and_box(self) -> tuple[list[DokkanCard], list[DokkanCard]]:
         spec = LeaderSkillSpec(main_category_ids=[10], base_boost_pct=170)
         leader = make_card(1001, "LR Super Vegito", element=0, leader_spec=spec, category_ids=[10])
-        core1 = make_card(1002, "Super Gogeta", element=3, category_ids=[10], links=["Super Saiyan", "Kamehameha", "Warrior Gods", "Prepared for Battle"])
-        core2 = make_card(1003, "Gotenks", element=4, category_ids=[10], links=["Super Saiyan", "Kamehameha", "Fusion", "Prepared for Battle"])
+        core1 = make_card(
+            1002,
+            "Super Gogeta",
+            element=3,
+            category_ids=[10],
+            links=["Super Saiyan", "Kamehameha", "Warrior Gods", "Prepared for Battle"],
+        )
+        core2 = make_card(
+            1003,
+            "Gotenks",
+            element=4,
+            category_ids=[10],
+            links=["Super Saiyan", "Kamehameha", "Fusion", "Prepared for Battle"],
+        )
         floater1 = make_card(1004, "Piccolo", element=1, category_ids=[10])
         floater2 = make_card(1005, "Gohan", element=2, category_ids=[10])
         floater3 = make_card(1006, "Krillin", element=3, category_ids=[10])
@@ -336,9 +348,30 @@ class TestEpisodicMemoryDecisionTree:
 
         # Additional box cards
         spec2 = LeaderSkillSpec(main_category_ids=[10], base_boost_pct=170)
-        second_lead = make_card(2001, "LR Beast Gohan", element=3, leader_spec=spec2, category_ids=[10], slot1_viable=True)
-        sub_agl = make_card(2002, "AGL Tank Vegito", element=0, category_ids=[10], has_guard=True, dr_pct=50)
-        sub_high_link = make_card(2003, "Gogeta Blue", element=0, category_ids=[10], links=["Super Saiyan", "Kamehameha", "Warrior Gods", "Prepared for Battle", "Fierce Battle"])
+        second_lead = make_card(
+            2001,
+            "LR Beast Gohan",
+            element=3,
+            leader_spec=spec2,
+            category_ids=[10],
+            slot1_viable=True,
+        )
+        sub_agl = make_card(
+            2002, "AGL Tank Vegito", element=0, category_ids=[10], has_guard=True, dr_pct=50
+        )
+        sub_high_link = make_card(
+            2003,
+            "Gogeta Blue",
+            element=0,
+            category_ids=[10],
+            links=[
+                "Super Saiyan",
+                "Kamehameha",
+                "Warrior Gods",
+                "Prepared for Battle",
+                "Fierce Battle",
+            ],
+        )
 
         box = list(current_team) + [second_lead, sub_agl, sub_high_link]
         return current_team, box
@@ -602,10 +635,18 @@ class TestEpisodicMemoryDecisionTree:
 
         # No single candidate in box has >= 4 links with P (they only share <= 2 links)
         cand_isolated_1 = make_card(
-            4001, "Solo Sub 1", element=0, category_ids=[10], links=["Super Saiyan", "Shocking Speed"]
+            4001,
+            "Solo Sub 1",
+            element=0,
+            category_ids=[10],
+            links=["Super Saiyan", "Shocking Speed"],
         )
         cand_isolated_2 = make_card(
-            4002, "Solo Sub 2", element=3, category_ids=[10], links=["Super Saiyan", "Over in a Flash"]
+            4002,
+            "Solo Sub 2",
+            element=3,
+            category_ids=[10],
+            links=["Super Saiyan", "Over in a Flash"],
         )
 
         # But box HAS a pre-linked synergistic rotation pair (U1, U2) that share 4 links with each other!

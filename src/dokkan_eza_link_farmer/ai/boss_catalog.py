@@ -31,9 +31,7 @@ def get_boss_catalog_path(override_path: str | Path | None = None) -> Path:
         return default_p
 
     # Fallback to local relative assets
-    local_p = (
-        Path(__file__).resolve().parent.parent / "assets" / "config" / "boss_stages.json"
-    )
+    local_p = Path(__file__).resolve().parent.parent / "assets" / "config" / "boss_stages.json"
     if local_p.exists():
         return local_p
 
@@ -204,9 +202,7 @@ def get_boss_stage(
             logger.debug(f"Error searching DokkanDB events for '{key}': {e}")
 
     available = sorted({f"{s.stage_id} ({k})" for k, s in catalog.items()})
-    raise KeyError(
-        f"Boss stage '{stage_identifier}' not found in catalog. Available: {available}"
-    )
+    raise KeyError(f"Boss stage '{stage_identifier}' not found in catalog. Available: {available}")
 
 
 __all__ = [

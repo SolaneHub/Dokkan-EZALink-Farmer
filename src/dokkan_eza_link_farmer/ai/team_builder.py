@@ -503,7 +503,11 @@ class TeamBuilder:
 
     def is_ai_advisor_enabled(self) -> bool:
         """Checks whether the Ollama AI Advisor is enabled in ai_client config or settings.yaml."""
-        if self.ai_client and hasattr(self.ai_client, "config") and self.ai_client.config is not None:
+        if (
+            self.ai_client
+            and hasattr(self.ai_client, "config")
+            and self.ai_client.config is not None
+        ):
             return bool(getattr(self.ai_client.config, "enabled", False))
 
         if os.path.exists(self.settings_path):
@@ -695,7 +699,9 @@ class TeamBuilder:
             for ev in solver_res.shortlist:
                 if len(shortlist) >= 5:
                     break
-                if ev.card.id not in active_ids and not any(s.card.id == ev.card.id for s in shortlist):
+                if ev.card.id not in active_ids and not any(
+                    s.card.id == ev.card.id for s in shortlist
+                ):
                     shortlist.append(ev)
 
         # 3. Build Team Recommendation Plan
@@ -802,7 +808,9 @@ class TeamBuilder:
             f"=== TARGET BOSS STAGE ===\n"
             f"Event: {boss_stage.event_name}\n"
             f"Stage: {boss_stage.stage_name} (Difficulty: {boss_stage.difficulty})\n"
-            f"Phases:\n" + "\n".join(f"- {pd}" for pd in phases_desc) + "\n\n"
+            f"Phases:\n"
+            + "\n".join(f"- {pd}" for pd in phases_desc)
+            + "\n\n"
             + failure_text
             + "=== CURRENT TEAM ROSTER (5 MEMBERS) ===\n"
             + "\n".join(f"- {tn}" for tn in team_names)
@@ -846,7 +854,11 @@ class TeamBuilder:
                 clean_json = match.group(1).strip()
 
         # If clean_json has text outside the outermost JSON object
-        if "{" in clean_json and "}" in clean_json and not (clean_json.startswith("{") and clean_json.endswith("}")):
+        if (
+            "{" in clean_json
+            and "}" in clean_json
+            and not (clean_json.startswith("{") and clean_json.endswith("}"))
+        ):
             match = re.search(r"(\{.*\})", clean_json, re.DOTALL)
             if match:
                 clean_json = match.group(1).strip()
@@ -869,7 +881,9 @@ class TeamBuilder:
             advisor_reason = str(parsed.get("reasoning", "") or "")
         except Exception as e:
             # Fallback A: Extract candidate ID via regex (e.g. card_id: 1029051 or selected_card_id: 1029051)
-            reg_match = re.search(r"(?:selected_card_id|card_id|candidate_id)[\s*:]+(\d+)", clean_json, re.IGNORECASE)
+            reg_match = re.search(
+                r"(?:selected_card_id|card_id|candidate_id)[\s*:]+(\d+)", clean_json, re.IGNORECASE
+            )
             if reg_match:
                 sel_id = int(reg_match.group(1))
                 advisor_reason = clean_json.strip()
@@ -882,7 +896,9 @@ class TeamBuilder:
                         break
 
             if not sel_id:
-                logger.warning(f"Ollama Advisor returned malformed response: {e}. Falling back smoothly.")
+                logger.warning(
+                    f"Ollama Advisor returned malformed response: {e}. Falling back smoothly."
+                )
                 return (
                     fallback_choice,
                     "Algorithmic Solver Top-Ranked Choice (Malformed Response Fallback)",
@@ -1054,9 +1070,7 @@ def format_team_summary_table(
                 ):
                     fl_role = "Floater (Support)"
                 elif fl.has_stacking_def or (
-                    fl.base_form
-                    and fl.base_form.sa_tags
-                    and fl.base_form.sa_tags.stacks_def
+                    fl.base_form and fl.base_form.sa_tags and fl.base_form.sa_tags.stacks_def
                 ):
                     fl_role = "Floater (Stacker)"
                 else:
@@ -1100,7 +1114,9 @@ def format_team_summary_table(
                     for cid in lead.leader_spec.extra_category_ids
                 ]
                 main_str = f"Main: [{', '.join(main_names)}]" if main_names else "Main: Nessuna"
-                extra_str = f"Extra: [{', '.join(extra_names)}]" if extra_names else "Extra: Nessuna"
+                extra_str = (
+                    f"Extra: [{', '.join(extra_names)}]" if extra_names else "Extra: Nessuna"
+                )
                 shared_str = f"{main_str} | {extra_str}"
             else:
                 shared_str = ", ".join(lead.categories[:2]) if lead.categories else "None"
@@ -1112,10 +1128,14 @@ def format_team_summary_table(
                 extra_set = set(lead.leader_spec.extra_category_ids)
 
                 shared_main = [
-                    _resolve_category_name(cid, c, lead) for cid in c.category_ids if cid in main_set
+                    _resolve_category_name(cid, c, lead)
+                    for cid in c.category_ids
+                    if cid in main_set
                 ]
                 shared_extra = [
-                    _resolve_category_name(cid, c, lead) for cid in c.category_ids if cid in extra_set
+                    _resolve_category_name(cid, c, lead)
+                    for cid in c.category_ids
+                    if cid in extra_set
                 ]
 
                 if shared_main:
@@ -1150,9 +1170,7 @@ def format_team_summary_table(
 
         # Tag Difensivi (Guard / DR% / Dodge%)
         has_guard = c.has_guard or bool(
-            c.base_form
-            and c.base_form.passive_tags
-            and c.base_form.passive_tags.has_guard
+            c.base_form and c.base_form.passive_tags and c.base_form.passive_tags.has_guard
         )
         dr_pct = max(
             c.damage_reduction_percent,
@@ -1182,15 +1200,10 @@ def format_team_summary_table(
             ]
         )
 
-    col_widths = [
-        max(len(headers[i]), max(len(r[i]) for r in rows)) for i in range(len(headers))
-    ]
+    col_widths = [max(len(headers[i]), max(len(r[i]) for r in rows)) for i in range(len(headers))]
     header_line = " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers))
     divider_line = "-+-".join("-" * col_widths[i] for i in range(len(headers)))
-    data_lines = [
-        " | ".join(col.ljust(col_widths[i]) for i, col in enumerate(row))
-        for row in rows
-    ]
+    data_lines = [" | ".join(col.ljust(col_widths[i]) for i, col in enumerate(row)) for row in rows]
 
     return "\n".join([header_line, divider_line] + data_lines)
 
@@ -1257,9 +1270,7 @@ def render_team_summary_table_rich(
                 ):
                     fl_role = "Floater (Support)"
                 elif fl.has_stacking_def or (
-                    fl.base_form
-                    and fl.base_form.sa_tags
-                    and fl.base_form.sa_tags.stacks_def
+                    fl.base_form and fl.base_form.sa_tags and fl.base_form.sa_tags.stacks_def
                 ):
                     fl_role = "Floater (Stacker)"
                 else:
@@ -1285,8 +1296,12 @@ def render_team_summary_table_rich(
                     boost_style = "bold green" if boost_val >= 200 else "bold cyan"
                     boost_text = Text(f"{int(boost_val)}% (Lead)", style=boost_style)
                 elif lead.leader_spec:
-                    boost_style = "bold green" if lead.leader_spec.base_boost_pct >= 200 else "bold cyan"
-                    boost_text = Text(f"{lead.leader_spec.base_boost_pct}% (Lead)", style=boost_style)
+                    boost_style = (
+                        "bold green" if lead.leader_spec.base_boost_pct >= 200 else "bold cyan"
+                    )
+                    boost_text = Text(
+                        f"{lead.leader_spec.base_boost_pct}% (Lead)", style=boost_style
+                    )
                 else:
                     boost_text = Text("Leader", style="bold cyan")
             else:
@@ -1328,9 +1343,7 @@ def render_team_summary_table_rich(
 
         # Tag Difensivi
         has_guard = c.has_guard or bool(
-            c.base_form
-            and c.base_form.passive_tags
-            and c.base_form.passive_tags.has_guard
+            c.base_form and c.base_form.passive_tags and c.base_form.passive_tags.has_guard
         )
         dr_pct = max(
             c.damage_reduction_percent,

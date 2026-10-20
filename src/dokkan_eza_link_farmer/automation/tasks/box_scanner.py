@@ -110,12 +110,9 @@ class BoxScannerTask(BaseTask):
                         self.scanned_cards[int(item["id"])] = item
                     elif isinstance(item, int):
                         self.scanned_cards[item] = {"id": item, "copies": 1}
-                logger.info(
-                    f"Loaded {len(self.scanned_cards)} existing cards from {target_path}"
-                )
+                logger.info(f"Loaded {len(self.scanned_cards)} existing cards from {target_path}")
             except Exception as e:
                 logger.warning(f"Could not load existing box from {target_path}: {e}")
-
 
     def _save_box(self, enrich: bool = True) -> None:
         """Persists discovered cards to output_file, optionally enriching with DokkanDB details and best linking partners."""

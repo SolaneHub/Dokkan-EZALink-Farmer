@@ -115,9 +115,17 @@ class StageFarmTask(BaseTask):
         self.runs_completed = 0
         self.stamina_depleted = False
 
-        runs_display = str(self.runs_target) if self.runs_target is not None else t("cli.stage.runs_unlimited")
-        boost_display = "ON" if self.use_boost is True else ("OFF" if self.use_boost is False else "AUTO")
-        diff_display = self.preferred_difficulty.upper() if self.preferred_difficulty else t("cli.stage.diff_auto")
+        runs_display = (
+            str(self.runs_target) if self.runs_target is not None else t("cli.stage.runs_unlimited")
+        )
+        boost_display = (
+            "ON" if self.use_boost is True else ("OFF" if self.use_boost is False else "AUTO")
+        )
+        diff_display = (
+            self.preferred_difficulty.upper()
+            if self.preferred_difficulty
+            else t("cli.stage.diff_auto")
+        )
 
         self.log(
             t(
@@ -179,7 +187,11 @@ class StageFarmTask(BaseTask):
                     battle_seen = False
                     tot_display = self.runs_target if self.runs_target is not None else "∞"
                     self.log(
-                        t("tasks.stage_farm.run_completed", curr=self.runs_completed, tot=tot_display)
+                        t(
+                            "tasks.stage_farm.run_completed",
+                            curr=self.runs_completed,
+                            tot=tot_display,
+                        )
                     )
                     self.on_run_complete(
                         self.runs_completed, self.runs_target if self.runs_target is not None else 0
@@ -202,7 +214,11 @@ class StageFarmTask(BaseTask):
                     battle_seen = False
                     tot_display = self.runs_target if self.runs_target is not None else "∞"
                     self.log(
-                        t("tasks.stage_farm.run_completed", curr=self.runs_completed, tot=tot_display)
+                        t(
+                            "tasks.stage_farm.run_completed",
+                            curr=self.runs_completed,
+                            tot=tot_display,
+                        )
                     )
                     self.on_run_complete(
                         self.runs_completed, self.runs_target if self.runs_target is not None else 0
@@ -255,21 +271,25 @@ class StageFarmTask(BaseTask):
                     battle_seen = False
                     tot_display = self.runs_target if self.runs_target is not None else "∞"
                     self.log(
-                        t("tasks.stage_farm.run_completed", curr=self.runs_completed, tot=tot_display)
+                        t(
+                            "tasks.stage_farm.run_completed",
+                            curr=self.runs_completed,
+                            tot=tot_display,
+                        )
                     )
                     self.on_run_complete(
                         self.runs_completed, self.runs_target if self.runs_target is not None else 0
                     )
 
                     if self.runs_target is not None and self.runs_completed >= self.runs_target:
-                        self.log(t("tasks.stage_farm.runs_target_reached", curr=self.runs_completed))
+                        self.log(
+                            t("tasks.stage_farm.runs_target_reached", curr=self.runs_completed)
+                        )
                         self.dismiss_results_and_popups(w, h, meta, prefer_again=False)
                         self.stop()
                         break
 
-                prefer_again = (
-                    self.runs_target is None or self.runs_completed < self.runs_target
-                )
+                prefer_again = self.runs_target is None or self.runs_completed < self.runs_target
                 self.dismiss_results_and_popups(w, h, meta, prefer_again=prefer_again)
                 self.wait_check(1.2)
 
@@ -283,7 +303,11 @@ class StageFarmTask(BaseTask):
                     battle_seen = False
                     tot_display = self.runs_target if self.runs_target is not None else "∞"
                     self.log(
-                        t("tasks.stage_farm.run_completed", curr=self.runs_completed, tot=tot_display)
+                        t(
+                            "tasks.stage_farm.run_completed",
+                            curr=self.runs_completed,
+                            tot=tot_display,
+                        )
                     )
                     self.on_run_complete(
                         self.runs_completed, self.runs_target if self.runs_target is not None else 0
@@ -309,10 +333,18 @@ class StageFarmTask(BaseTask):
             else:
                 unknown_counter += 1
                 if "ok_button" in meta:
-                    self.log(t("tasks.base.ok_clicked", x=meta["ok_button"][0], y=meta["ok_button"][1]))
+                    self.log(
+                        t("tasks.base.ok_clicked", x=meta["ok_button"][0], y=meta["ok_button"][1])
+                    )
                     self.adb.tap(*meta["ok_button"], delay_after=1.5)
                 elif "close_button" in meta:
-                    self.log(t("tasks.base.close_clicked", x=meta["close_button"][0], y=meta["close_button"][1]))
+                    self.log(
+                        t(
+                            "tasks.base.close_clicked",
+                            x=meta["close_button"][0],
+                            y=meta["close_button"][1],
+                        )
+                    )
                     self.adb.tap(*meta["close_button"], delay_after=1.5)
                 elif "cancel_button" in meta:
                     self.adb.tap(*meta["cancel_button"], delay_after=1.5)

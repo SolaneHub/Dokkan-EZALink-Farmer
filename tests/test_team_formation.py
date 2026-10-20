@@ -113,7 +113,11 @@ class TestTeamFormation:
         box_data = {
             "cards": [
                 {"id": 2001, "swipe_page": 0, "grid_slot": 0},  # Col 0, Row 0
-                {"id": 2002, "swipe_page": 1, "grid_slot": 7},  # Col 2, Row 1 (Page 1 -> requires 1 swipe)
+                {
+                    "id": 2002,
+                    "swipe_page": 1,
+                    "grid_slot": 7,
+                },  # Col 2, Row 1 (Page 1 -> requires 1 swipe)
             ]
         }
         box_file.write_text(json.dumps(box_data), encoding="utf-8")

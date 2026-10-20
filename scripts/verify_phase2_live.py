@@ -43,7 +43,9 @@ def main():
         assert downloaded == 1, "Expected 1 thumbnail downloaded"
         target_path = os.path.join(syncer.thumbs_dir, f"card_{thumb_id}_thumb.png")
         assert os.path.exists(target_path) and os.path.getsize(target_path) > 1000
-        print(f"  [OK] Thumbnail saved successfully: {target_path} ({os.path.getsize(target_path)} bytes)")
+        print(
+            f"  [OK] Thumbnail saved successfully: {target_path} ({os.path.getsize(target_path)} bytes)"
+        )
 
     print("\n=== 2. VERIFY LIVE DOKKANDB CHUNKS & UR/LR FILTERING ===")
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -71,15 +73,21 @@ def main():
 
         # Build card as EZA
         eza_card = syncer.build_dokkan_card(detail, is_eza=True, is_seza=False, is_rainbow=True)
+        assert eza_card.base_form is not None and eza_card.base_form.passive_tags is not None
+        assert eza_card.leader_spec is not None
         print(f"  [EZA] Leader: {eza_card.leader_skill[:60]}...")
         print(f"  [EZA] Passive: {eza_card.passive_skill[:60]}...")
         print(f"  [EZA] DR %: {eza_card.base_form.passive_tags.dr_base_percent}%")
         print(f"  [EZA] Guard: {eza_card.base_form.passive_tags.has_guard}")
         print(f"  [EZA] Slot 1 Viable: {eza_card.base_form.passive_tags.slot1_viable}")
-        print(f"  [EZA] Leader Spec: main_cats={eza_card.leader_spec.main_category_ids}, boost={eza_card.leader_spec.base_boost_pct}%")
+        print(
+            f"  [EZA] Leader Spec: main_cats={eza_card.leader_spec.main_category_ids}, boost={eza_card.leader_spec.base_boost_pct}%"
+        )
         assert len(eza_card.transformations) >= 1
         assert eza_card.transformations[0].form_name == "Super Vegito"
-        print(f"  [EZA] Transformed Form: {eza_card.transformations[0].form_name} (ID: {eza_card.transformations[0].form_id})")
+        print(
+            f"  [EZA] Transformed Form: {eza_card.transformations[0].form_name} (ID: {eza_card.transformations[0].form_id})"
+        )
 
     print("\n=== 4. VERIFY BOX SCANNER DEFAULT PATH & METADATA COORDINATES ===")
     print(f"  [OK] Default user_box path: {DEFAULT_USER_BOX_PATH}")
@@ -119,7 +127,9 @@ def main():
     stage_json = stage.to_dict()
     assert stage_json["phases"][0]["cancels_dodge"] is True
     assert stage_json["phases"][0]["has_aoe"] is True
-    print(f"  [OK] BossStage '{stage.stage_name}' with BossPhase {phase.phase_index} (cancels_dodge={phase.cancels_dodge}, has_aoe={phase.has_aoe})")
+    print(
+        f"  [OK] BossStage '{stage.stage_name}' with BossPhase {phase.phase_index} (cancels_dodge={phase.cancels_dodge}, has_aoe={phase.has_aoe})"
+    )
 
     print("\n🎉 ALL PHASE 2 VERIFICATIONS PASSED SUCCESSFULLY!")
 

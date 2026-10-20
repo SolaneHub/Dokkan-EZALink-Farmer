@@ -2,17 +2,11 @@ from __future__ import annotations
 
 import contextlib
 import io
+import logging
 import os
 import sys
 import time
 from typing import TYPE_CHECKING, Any
-
-if sys.platform == "win32":
-    with contextlib.suppress(Exception):
-        if isinstance(sys.stdout, io.TextIOWrapper):
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        if isinstance(sys.stderr, io.TextIOWrapper):
-            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from rich.console import Console
 from rich.panel import Panel
@@ -29,6 +23,15 @@ if TYPE_CHECKING:
     from dokkan_eza_link_farmer.core.bot_engine import BotEngine
 
 from dokkan_eza_link_farmer.core.i18n import get_available_languages, get_language, set_language, t
+
+logger = logging.getLogger(__name__)
+
+if sys.platform == "win32":
+    with contextlib.suppress(Exception):
+        if isinstance(sys.stdout, io.TextIOWrapper):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if isinstance(sys.stderr, io.TextIOWrapper):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 class TerminalCLI:
@@ -507,9 +510,7 @@ class TerminalCLI:
         self.console.print(
             f"[bold green]{t('cli.stage.summary', runs=runs_display, boost=boost_label, diff=diff_label)}[/bold green]"
         )
-        self.console.print(
-            f"[dim cyan]{t('cli.stage.hint_navigate')}[/dim cyan]"
-        )
+        self.console.print(f"[dim cyan]{t('cli.stage.hint_navigate')}[/dim cyan]")
 
         self.engine.start_stage_farm(
             runs=runs,
@@ -913,14 +914,17 @@ class TerminalCLI:
                     for ev in events:
                         ev_name = (ev.get("name") or "").lower()
                         ev_id = ev.get("id")
-                        if query in ev_name or query == str(ev_id):
-                            det = self.engine.dokkandb.get_event_details(ev_id)
+                        if ev_id is not None and (query in ev_name or query == str(ev_id)):
+                            ev_id_int = int(ev_id)
+                            det = self.engine.dokkandb.get_event_details(ev_id_int)
                             if det and det.get("quests"):
                                 stages_arr = det["quests"][0].get("stages", [])
                                 if stages_arr:
                                     st_id = stages_arr[0].get("stage_id")
                                     if st_id:
-                                        b_info = self.engine.dokkandb.get_stage_boss_info(ev_id, st_id)
+                                        b_info = self.engine.dokkandb.get_stage_boss_info(
+                                            ev_id_int, int(st_id)
+                                        )
                                         if b_info and b_info.get("phases"):
                                             stage = BossStage.from_dokkandb(b_info)
                                             break
@@ -928,10 +932,14 @@ class TerminalCLI:
                     pass
 
                 if not stage:
-                    self.console.print(f"[bold red]Stage '{target_stage}' not found in catalog or DokkanDB.[/bold red]")
+                    self.console.print(
+                        f"[bold red]Stage '{target_stage}' not found in catalog or DokkanDB.[/bold red]"
+                    )
                     self.console.print("[yellow]Available catalog presets:[/yellow]")
                     for s in list_boss_stages():
-                        self.console.print(f"  • [cyan]{s.stage_id}[/cyan]: {s.event_name} - {s.stage_name}")
+                        self.console.print(
+                            f"  • [cyan]{s.stage_id}[/cyan]: {s.event_name} - {s.stage_name}"
+                        )
                     return
         else:
             # Interactive selection from DokkanDB Challenge category
@@ -944,7 +952,11 @@ class TerminalCLI:
 
         dry_badge = " [bold magenta][DRY-RUN SIMULATION][/bold magenta]" if dry_run else ""
         force_badge = " [bold red][FORCE-SOLVE][/bold red]" if force_solve else ""
-        mission_line = f"\n[bold yellow]Target Missions:[/bold yellow] [green]{mission_batch.summary}[/green]" if mission_batch else ""
+        mission_line = (
+            f"\n[bold yellow]Target Missions:[/bold yellow] [green]{mission_batch.summary}[/green]"
+            if mission_batch
+            else ""
+        )
         self.console.print(
             Panel.fit(
                 f"[bold cyan]⚔️ Dokkan AI Endgame Autonomous Runner[/bold cyan]{dry_badge}{force_badge}\n"
@@ -1012,6 +1024,7 @@ class TerminalCLI:
         """
         import questionary
         from rich.prompt import Prompt
+
         from dokkan_eza_link_farmer.ai.boss_catalog import get_boss_stage, list_boss_stages
         from dokkan_eza_link_farmer.ai.models import BossStage
 
@@ -1019,7 +1032,10 @@ class TerminalCLI:
         events = self.engine.dokkandb.get_challenge_events(active_only=active_only)
 
         choices = [
-            questionary.Choice("⭐ [Preset Catalog] Classic Bosses (Broly, Cell Max, Beast Gohan...)", value="preset"),
+            questionary.Choice(
+                "⭐ [Preset Catalog] Classic Bosses (Broly, Cell Max, Beast Gohan...)",
+                value="preset",
+            ),
             questionary.Separator("── DokkanDB Challenge Events ──"),
         ]
 
@@ -1039,6 +1055,7 @@ class TerminalCLI:
             )
         choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value=None))
 
+        selected: Any = None
         try:
             selected = questionary.select(
                 t("cli.challenge.select_event"),
@@ -1048,7 +1065,9 @@ class TerminalCLI:
             ).ask()
         except Exception:
             self.console.print(f"\n[bold cyan]{t('cli.challenge.select_event')}[/bold cyan]")
-            self.console.print("  [green] 1[/green]. ⭐ Classic Catalog Bosses (Broly, Cell Max, Beast Gohan...)")
+            self.console.print(
+                "  [green] 1[/green]. ⭐ Classic Catalog Bosses (Broly, Cell Max, Beast Gohan...)"
+            )
             for idx, e in enumerate(events[:25], 2):
                 clean_t = (e.get("name") or "").replace("\n", " ").strip()
                 self.console.print(f"  [green]{idx:2d}[/green]. {clean_t} (ID: {e.get('id')})")
@@ -1092,7 +1111,9 @@ class TerminalCLI:
         quests.sort(key=lambda q: int(q.get("quest_id", 0)))
 
         if not quests:
-            self.console.print(f"[yellow]No stages found for event '{ev_name}' (ID: {ev_id}).[/yellow]")
+            self.console.print(
+                f"[yellow]No stages found for event '{ev_name}' (ID: {ev_id}).[/yellow]"
+            )
             return None
 
         stage_choices = []
@@ -1131,7 +1152,8 @@ class TerminalCLI:
             return BossStage(
                 stage_id=target_stage_id,
                 event_id=ev_id,
-                stage_name=chosen_stage.get("stage_name") or f"Stage {chosen_stage.get('stage_num')}",
+                stage_name=chosen_stage.get("stage_name")
+                or f"Stage {chosen_stage.get('stage_num')}",
                 event_name=ev_name,
                 difficulty=4,
                 phases=[],
@@ -1145,7 +1167,8 @@ class TerminalCLI:
         missions specific to the chosen stage. Returns a consolidated MissionBatch or None.
         """
         import questionary
-        from dokkan_eza_link_farmer.ai.mission_solver import MissionParser, MissionBundler
+
+        from dokkan_eza_link_farmer.ai.mission_solver import MissionBundler, MissionParser
 
         ev_id = getattr(stage, "event_id", 0)
         st_id = getattr(stage, "stage_id", 0)
@@ -1166,12 +1189,13 @@ class TerminalCLI:
         stage_num: int | None = None
         if str(st_id).startswith(str(ev_id)) and len(str(st_id)) > len(str(ev_id)) + 1:
             try:
-                stage_num = int(str(st_id)[len(str(ev_id)):-1])
+                stage_num = int(str(st_id)[len(str(ev_id)) : -1])
             except ValueError:
                 stage_num = None
 
         if stage_num is None:
             import re
+
             m = re.search(r"Stage\s*(\d+)", st_name, re.IGNORECASE)
             if m:
                 stage_num = int(m.group(1))
@@ -1213,7 +1237,9 @@ class TerminalCLI:
             return None
 
         if not selected:
-            self.console.print("[dim]No specific mission selected. Building standard optimal team...[/dim]")
+            self.console.print(
+                "[dim]No specific mission selected. Building standard optimal team...[/dim]"
+            )
             return None
 
         batch = MissionBundler.create_batch_from_selection(selected)
@@ -1245,7 +1271,9 @@ class TerminalCLI:
                 return f"[bold yellow]{en}[/bold yellow]"
             return en
 
-        phases_str = " -> ".join(_fmt_phase(p) for p in stage.phases) if stage.phases else "Standard Boss"
+        phases_str = (
+            " -> ".join(_fmt_phase(p) for p in stage.phases) if stage.phases else "Standard Boss"
+        )
         gimmicks = []
         if any(p.cancels_dodge for p in stage.phases):
             gimmicks.append("Cancels Dodge")
@@ -1270,13 +1298,17 @@ class TerminalCLI:
 
         candidate_pool = self.engine.team_builder.load_user_box()
         if len(candidate_pool) < 6:
-            self.console.print("[dim]User box has < 6 cards, loading DokkanDB catalog fallback...[/dim]")
+            self.console.print(
+                "[dim]User box has < 6 cards, loading DokkanDB catalog fallback...[/dim]"
+            )
             catalog = self.engine.dokkandb.get_cards_catalog()
             candidate_pool = [DokkanCard.from_dokkandb(raw) for raw in catalog[:400]]
 
         shortlist = None
         try:
-            with self.console.status("[bold cyan]Synthesizing optimal team with AI Solver & Advisor...", spinner="dots"):
+            with self.console.status(
+                "[bold cyan]Synthesizing optimal team with AI Solver & Advisor...", spinner="dots"
+            ):
                 rec, shortlist = self.engine.team_builder.select_best_team_for_boss(
                     candidate_pool=candidate_pool,
                     boss_stage=stage,
@@ -1284,7 +1316,9 @@ class TerminalCLI:
                     mission_batch=mission_batch,
                 )
         except Exception as e:
-            self.console.print(f"[yellow]Algorithmic solver notice: {e}. Building best synergy plan...[/yellow]")
+            self.console.print(
+                f"[yellow]Algorithmic solver notice: {e}. Building best synergy plan...[/yellow]"
+            )
             rec = self.engine.team_builder.build_team_plan(
                 candidate_pool[:6],
                 language=get_language(),
@@ -1304,6 +1338,7 @@ class TerminalCLI:
     ):
         """Displays rich team representation with Dokkan typing colors for all cards."""
         from rich.table import Table
+
         from dokkan_eza_link_farmer.ai.team_builder import render_team_summary_table_rich
 
         # 0. Mission Completion Banner if targeted
@@ -1328,7 +1363,9 @@ class TerminalCLI:
         t_team.add_column("Character")
         t_team.add_column("Notes", style="dim")
 
-        t_team.add_row("Leader", rec.leader.rich_formatted_name(), rec.leader.leader_skill[:60] + "...")
+        t_team.add_row(
+            "Leader", rec.leader.rich_formatted_name(), rec.leader.leader_skill[:60] + "..."
+        )
         t_team.add_row(
             "Rotation A (Slot 1)",
             rec.rotation_a.slot1.rich_formatted_name(),
@@ -1356,7 +1393,9 @@ class TerminalCLI:
 
         # 3. Top-5 Substitutes Shortlist with Dokkan Colors
         if shortlist:
-            t_short = Table(title="🔄 Top-5 Recommended Substitutes (Shortlist)", border_style="cyan")
+            t_short = Table(
+                title="🔄 Top-5 Recommended Substitutes (Shortlist)", border_style="cyan"
+            )
             t_short.add_column("Rank", style="bold cyan", justify="center")
             t_short.add_column("Candidate Character")
             t_short.add_column("Score", justify="right", style="yellow")
@@ -1423,7 +1462,9 @@ class TerminalCLI:
 
         choices = [
             questionary.Choice(title=t("cli.ai.opt_build"), value="build"),
-            questionary.Choice(title="⚔️ Run AI Endgame Loop (Red Zone / SMB / Challenge)", value="endgame"),
+            questionary.Choice(
+                title="⚔️ Run AI Endgame Loop (Red Zone / SMB / Challenge)", value="endgame"
+            ),
             questionary.Choice(title=t("cli.ai.opt_partner"), value="partner"),
             questionary.Choice(title=t("cli.ai.opt_status"), value="status"),
             questionary.Choice(title=t("cli.ai.opt_config"), value="config"),
@@ -1556,8 +1597,13 @@ class TerminalCLI:
             build_mode = questionary.select(
                 "Select Team Building target:",
                 choices=[
-                    questionary.Choice("🎯 Build & Optimize Team for a Challenge Event (DokkanDB)", value="challenge"),
-                    questionary.Choice("👤 Build Team around a Specific Leader Character", value="leader"),
+                    questionary.Choice(
+                        "🎯 Build & Optimize Team for a Challenge Event (DokkanDB)",
+                        value="challenge",
+                    ),
+                    questionary.Choice(
+                        "👤 Build Team around a Specific Leader Character", value="leader"
+                    ),
                     questionary.Choice(t("cli.ai.opt_cancel"), value=None),
                 ],
             ).ask()

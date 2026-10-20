@@ -27,6 +27,7 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
     Parses tactical tags from passive skill text, identifying defensive viability,
     damage reduction %, dodge chance %, guard, revive, taunt, and support.
     """
+    _ = sa_tags
     text = (passive_text or "").lower()
 
     # 1. Guard
@@ -41,8 +42,14 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
     # Invalidate if RNG chance or enemy guard disabling
     if re.search(r"chance\s+of\s+guarding", text):
         has_guard = False
-    if "disables enemy" in text and "guard" in text and not (
-        "guards all attacks" in text or "guards against all attacks" in text or "all attacks guarded" in text
+    if (
+        "disables enemy" in text
+        and "guard" in text
+        and not (
+            "guards all attacks" in text
+            or "guards against all attacks" in text
+            or "all attacks guarded" in text
+        )
     ):
         has_guard = False
 
@@ -132,17 +139,18 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
 
     # 5. Slot 1 Viability
     slot1_exclusive = (
-        ("1st attacker in a turn" in text or "in the 1st slot" in text or "as the 1st attacker" in text)
-        and ("guard" in text or "damage reduction" in text or "reduces damage" in text)
-    )
+        "1st attacker in a turn" in text
+        or "in the 1st slot" in text
+        or "as the 1st attacker" in text
+    ) and ("guard" in text or "damage reduction" in text or "reduces damage" in text)
     slot1_viable = False
-    if has_guard:
-        slot1_viable = True
-    elif dr_base >= 50:
-        slot1_viable = True
-    elif dodge_chance >= 70:
-        slot1_viable = True
-    elif slot1_exclusive and (dr_base >= 30 or has_guard):
+    if (
+        has_guard
+        or dr_base >= 50
+        or dodge_chance >= 70
+        or slot1_exclusive
+        and (dr_base >= 30 or has_guard)
+    ):
         slot1_viable = True
 
     return PassiveTags(
@@ -239,9 +247,7 @@ def parse_leader_spec(
         with contextlib.suppress(ValueError):
             base_pct = int(match_atk_def.group(1))
     else:
-        match_stat = re.search(
-            r"(?:atk|def)\s*\+\s*(\d{2,3})%", base_part, re.IGNORECASE
-        )
+        match_stat = re.search(r"(?:atk|def)\s*\+\s*(\d{2,3})%", base_part, re.IGNORECASE)
         if match_stat:
             with contextlib.suppress(ValueError):
                 base_pct = int(match_stat.group(1))
@@ -303,11 +309,15 @@ def parse_leader_spec(
                 main_category_ids.append(cid_int)
 
             # Check extra part: quoted match first, then word-boundary fallback
-            if extra_part and (
-                c_name_lower in extra_quoted
-                or not extra_quoted
-                and re.search(rf"\b{re.escape(c_name_lower)}\s+category\b", extra_part.lower())
-            ) and cid_int not in extra_category_ids:
+            if (
+                extra_part
+                and (
+                    c_name_lower in extra_quoted
+                    or not extra_quoted
+                    and re.search(rf"\b{re.escape(c_name_lower)}\s+category\b", extra_part.lower())
+                )
+                and cid_int not in extra_category_ids
+            ):
                 extra_category_ids.append(cid_int)
 
     # Detect sub-elements and classes
@@ -619,10 +629,16 @@ class DokkanSyncer:
                         alt_code = int(cid_str[:-1] + fallback_last)
                         alt_url = f"{self.API_BASE}/card?code={alt_code}"
                         try:
-                            alt_resp = requests.get(alt_url, headers=self.DEFAULT_HEADERS, timeout=8)
+                            alt_resp = requests.get(
+                                alt_url, headers=self.DEFAULT_HEADERS, timeout=8
+                            )
                             if alt_resp.status_code == 200:
                                 alt_data = alt_resp.json()
-                                cand = alt_data[0] if isinstance(alt_data, list) and alt_data else (alt_data if isinstance(alt_data, dict) else None)
+                                cand = (
+                                    alt_data[0]
+                                    if isinstance(alt_data, list) and alt_data
+                                    else (alt_data if isinstance(alt_data, dict) else None)
+                                )
                                 if cand:
                                     card_info = dict(cand)
                                     card_info["id"] = card_id
@@ -778,14 +794,14 @@ class DokkanSyncer:
 
                 t_sa_text = " | ".join(str(s) for s in t_sa_list if s)
                 t_sa_tags = parse_sa_tags(t_sa_text)
-                t_pass_tags = parse_passive_tags(t_pass, sa_tags=t_sa_tags)
+                t_pass_tags = parse_passive_tags(str(t_pass or ""), sa_tags=t_sa_tags)
 
                 trans_form = CardForm(
                     form_id=tid,
                     form_index=idx + 1,
                     form_name=tname,
                     element=telem,
-                    passive_skill_text=t_pass,
+                    passive_skill_text=str(t_pass or ""),
                     super_attack_text=t_sa_text,
                     passive_tags=t_pass_tags,
                     sa_tags=t_sa_tags,

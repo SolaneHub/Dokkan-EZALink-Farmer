@@ -400,10 +400,28 @@ class TestDokkanAI:
     def test_dokkandb_challenge_events_and_details(self):
         client = DokkanDBClient()
         mock_events = [
-            {"id": 1775, "category": 20, "name": "Supreme Magnificent Battle", "event_priority": 2609148, "active": "normal"},
-            {"id": 1728, "category": 20, "name": "Union Master", "event_priority": 2610203, "active": "normal"},
+            {
+                "id": 1775,
+                "category": 20,
+                "name": "Supreme Magnificent Battle",
+                "event_priority": 2609148,
+                "active": "normal",
+            },
+            {
+                "id": 1728,
+                "category": 20,
+                "name": "Union Master",
+                "event_priority": 2610203,
+                "active": "normal",
+            },
             {"id": 501, "category": 5, "name": "Get STR Awakening Medals!", "active": "normal"},
-            {"id": 999, "category": 20, "name": "Dummy Event", "banner_image_path": "banners/en/dummy_image/dummy_image.png", "active": "normal"},
+            {
+                "id": 999,
+                "category": 20,
+                "name": "Dummy Event",
+                "banner_image_path": "banners/en/dummy_image/dummy_image.png",
+                "active": "normal",
+            },
             {"id": 100, "category": 1, "name": "Story Quest", "active": "normal"},
         ]
         mock_details = [
@@ -820,8 +838,8 @@ class TestDokkanAI:
         )
 
     def test_cli_ai_interactive_challenge_event_selection(self):
-        from dokkan_eza_link_farmer.ui.cli import TerminalCLI
         from dokkan_eza_link_farmer.ai.models import BossStage
+        from dokkan_eza_link_farmer.ui.cli import TerminalCLI
 
         engine = MagicMock()
         engine.adb.is_connected.return_value = True
@@ -853,7 +871,9 @@ class TestDokkanAI:
             "phases": [
                 {
                     "phase": 1,
-                    "bosses": [{"name": "Super Garlic Jr.", "type_name": "Extreme AGL", "mechanics": []}],
+                    "bosses": [
+                        {"name": "Super Garlic Jr.", "type_name": "Extreme AGL", "mechanics": []}
+                    ],
                 }
             ],
         }
@@ -864,7 +884,15 @@ class TestDokkanAI:
             # 1st select: choose mock_event, 2nd select: choose stage dict
             mock_select.side_effect = [
                 MagicMock(ask=MagicMock(return_value=mock_event)),
-                MagicMock(ask=MagicMock(return_value={"stage_num": 1, "stage_id": 17280244, "stage_name": "Joined Forces [5 Required]"})),
+                MagicMock(
+                    ask=MagicMock(
+                        return_value={
+                            "stage_num": 1,
+                            "stage_id": 17280244,
+                            "stage_name": "Joined Forces [5 Required]",
+                        }
+                    )
+                ),
             ]
             boss_stage = cli._select_challenge_boss_stage()
 

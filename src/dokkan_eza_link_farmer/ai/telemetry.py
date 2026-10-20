@@ -357,9 +357,7 @@ class EpisodicMemory:
     Persisted atomically in ~/.dokkan-farmer/cache/ai_memory.json.
     """
 
-    def __init__(
-        self, cache_path: str | Path | None = None, ephemeral: bool = False
-    ) -> None:
+    def __init__(self, cache_path: str | Path | None = None, ephemeral: bool = False) -> None:
         self.cache_path = Path(cache_path or DEFAULT_MEMORY_CACHE_PATH)
         self.ephemeral = ephemeral
         self._data: dict[str, Any] = {"updated_at": "", "stages": {}}
@@ -525,9 +523,7 @@ class EpisodicMemory:
         for c in eligible_leaders:
             l_score = 0.0
             if c.leader_spec:
-                l_score += (
-                    c.leader_spec.base_boost_pct * 0.2 + c.leader_spec.extra_boost_pct * 0.1
-                )
+                l_score += c.leader_spec.base_boost_pct * 0.2 + c.leader_spec.extra_boost_pct * 0.1
             else:
                 if "200%" in c.leader_skill:
                     l_score += 40.0
