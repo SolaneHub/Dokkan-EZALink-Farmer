@@ -9,10 +9,14 @@ import cv2
 import numpy as np
 import yaml
 
+from dokkan_eza_link_farmer.ai import AIConfig, DokkanAIClient, TeamBuilder
 from dokkan_eza_link_farmer.automation.game_state import GameState, StateDetector
 from dokkan_eza_link_farmer.automation.tasks.base_task import BaseTask
+from dokkan_eza_link_farmer.automation.tasks.box_scanner import BoxScannerTask
+from dokkan_eza_link_farmer.automation.tasks.challenge_task import ChallengeTask
 from dokkan_eza_link_farmer.automation.tasks.eza_farm import EZAFarmTask
 from dokkan_eza_link_farmer.automation.tasks.link_level_farm import LinkLevelFarmTask
+from dokkan_eza_link_farmer.automation.tasks.stage_farm import StageFarmTask
 from dokkan_eza_link_farmer.automation.vision import Vision
 from dokkan_eza_link_farmer.core.i18n import set_language, t
 from dokkan_eza_link_farmer.core.system_tools import ToolLocator, get_config_path
@@ -40,6 +44,14 @@ class BotEngine:
         )
         self.detector = StateDetector(self.vision)
         self.dokkandb = DokkanDBClient()
+
+        # Initialize AI components (Qwen / DeepSeek-R1)
+        self.ai_config = AIConfig.from_dict(
+            self.config.get("ai_teambuilder") or self.config.get("ai")
+        )
+        self.ai_client = DokkanAIClient(self.ai_config)
+        self.team_builder = TeamBuilder(dokkandb=self.dokkandb, ai_client=self.ai_client)
+
         self.current_task: BaseTask | None = None
         self._task_thread: threading.Thread | None = None
 
@@ -200,6 +212,194 @@ class BotEngine:
         )
         self._start_task_thread()
         return True
+
+    def start_stage_farm(
+        self,
+        runs: int | None = None,
+        use_boost: bool | None = None,
+        preferred_difficulty: str | None = None,
+    ) -> bool:
+        """Starts repeated clearing of currently selected stage until stamina runs out."""
+        if self.is_task_running():
+            self.emit_log(t("tasks.task_already_running"))
+            return False
+
+        self.current_task = StageFarmTask(
+            self.adb,
+            self.vision,
+            self.config,
+            runs=runs,
+            use_boost=use_boost,
+            preferred_difficulty=preferred_difficulty,
+            on_status=self.emit_log,
+            on_run_complete=self.emit_run,
+        )
+        self._start_task_thread()
+        return True
+
+    def start_challenge_farm(
+        self,
+        target_event: dict[str, Any],
+        stage_num: int = 1,
+        stage_id: int | None = None,
+        stage_name: str | None = None,
+        max_retries_per_batch: int = 5,
+    ) -> bool:
+        """Starts autonomous Challenge & Mission solver task."""
+        if self.is_task_running():
+            self.emit_log(t("tasks.task_already_running"))
+            return False
+
+        self.current_task = ChallengeTask(
+            self.adb,
+            self.vision,
+            self.config,
+            dokkandb=self.dokkandb,
+            ai_client=self.ai_client,
+            target_event=target_event,
+            stage_num=stage_num,
+            stage_id=stage_id,
+            stage_name=stage_name,
+            max_retries_per_batch=max_retries_per_batch,
+            on_status=self.emit_log,
+            on_run_complete=self.emit_run,
+        )
+        self._start_task_thread()
+        return True
+
+    def start_box_scanner(
+        self,
+        output_file: str | None = None,
+        max_cards_to_scan: int | None = None,
+    ) -> bool:
+        """Starts autonomous Character Box scanner with DokkanDB enrichment."""
+        if self.is_task_running():
+            self.emit_log(t("tasks.task_already_running"))
+            return False
+
+        from dokkan_eza_link_farmer.automation.tasks.box_scanner import DEFAULT_USER_BOX_PATH
+
+        target_out = output_file if output_file is not None else DEFAULT_USER_BOX_PATH
+        self.current_task = BoxScannerTask(
+            self.adb,
+            self.vision,
+            self.config,
+            dokkandb=self.dokkandb,
+            output_file=target_out,
+            max_cards_to_scan=max_cards_to_scan,
+            on_status=self.emit_log,
+            on_run_complete=self.emit_run,
+        )
+        self._start_task_thread()
+        return True
+
+    def start_ai_endgame(
+        self,
+        stage_identifier: int | str = 10101,
+        max_attempts: int | None = None,
+        dry_run: bool = False,
+        force_solve: bool = False,
+        mission_batch: Any | None = None,
+    ) -> bool:
+        """Starts autonomous AI Endgame Trial & Error runner task in background."""
+        if self.is_task_running():
+            self.emit_log(t("tasks.task_already_running"))
+            return False
+
+        from dokkan_eza_link_farmer.ai.boss_catalog import get_boss_stage
+        from dokkan_eza_link_farmer.ai.endgame_runner import EndgameRunner
+        from dokkan_eza_link_farmer.ai.models import BossStage
+
+        try:
+            target_stage = (
+                stage_identifier
+                if isinstance(stage_identifier, BossStage)
+                else get_boss_stage(stage_identifier, dokkandb=self.dokkandb)
+            )
+        except Exception as e:
+            self.emit_log(f"Stage '{stage_identifier}' not found in catalog: {e}")
+            return False
+
+        attempts = (
+            max_attempts
+            or self.config.get("ai_teambuilder", {}).get("max_attempts")
+            or getattr(self.ai_config, "max_attempts", 10)
+        )
+        runner = EndgameRunner(
+            adb=self.adb,
+            vision=self.vision,
+            detector=self.detector,
+            dokkandb=self.dokkandb,
+            ai_client=self.ai_client,
+            team_builder=self.team_builder,
+            boss_stage=target_stage,
+            max_attempts=attempts,
+            dry_run=dry_run,
+            force_solve=force_solve,
+            mission_batch=mission_batch,
+            on_status=self.emit_log,
+            on_run_complete=self.emit_run,
+        )
+
+        class EndgameRunnerTask(BaseTask):
+            def __init__(self, r: EndgameRunner, eng: BotEngine):
+                super().__init__(eng.adb, eng.vision, eng.config, eng.emit_log, eng.emit_run)
+                self.runner = r
+
+            def run(self):
+                self.is_running = True
+                try:
+                    self.runner.run()
+                finally:
+                    self.is_running = False
+
+            def stop(self):
+                self.runner.stop()
+                super().stop()
+
+        self.current_task = EndgameRunnerTask(runner, self)
+        self._start_task_thread()
+        return True
+
+    def run_ai_endgame_sync(
+        self,
+        stage_identifier: int | str = 10101,
+        max_attempts: int | None = None,
+        dry_run: bool = False,
+        force_solve: bool = False,
+        mission_batch: Any | None = None,
+    ) -> Any:
+        """Runs AI Endgame Trial & Error synchronously (for direct CLI execution)."""
+        from dokkan_eza_link_farmer.ai.boss_catalog import get_boss_stage
+        from dokkan_eza_link_farmer.ai.endgame_runner import EndgameRunner
+        from dokkan_eza_link_farmer.ai.models import BossStage
+
+        target_stage = (
+            stage_identifier
+            if isinstance(stage_identifier, BossStage)
+            else get_boss_stage(stage_identifier, dokkandb=self.dokkandb)
+        )
+        attempts = (
+            max_attempts
+            or self.config.get("ai_teambuilder", {}).get("max_attempts")
+            or getattr(self.ai_config, "max_attempts", 10)
+        )
+        runner = EndgameRunner(
+            adb=self.adb,
+            vision=self.vision,
+            detector=self.detector,
+            dokkandb=self.dokkandb,
+            ai_client=self.ai_client,
+            team_builder=self.team_builder,
+            boss_stage=target_stage,
+            max_attempts=attempts,
+            dry_run=dry_run,
+            force_solve=force_solve,
+            mission_batch=mission_batch,
+            on_status=self.emit_log,
+            on_run_complete=self.emit_run,
+        )
+        return runner.run()
 
     def stop_task(self):
         """Stops active automation task."""

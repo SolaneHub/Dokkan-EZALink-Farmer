@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import socket
@@ -12,6 +13,8 @@ import numpy as np
 
 from dokkan_eza_link_farmer.core.system_tools import ToolLocator
 from dokkan_eza_link_farmer.core.updater import sanitize_process_env
+
+logger = logging.getLogger(__name__)
 
 
 class ADBClient:
@@ -44,6 +47,10 @@ class ADBClient:
         self.serial = serial
         self._screen_size: tuple[int, int] | None = None
         self._scrcpy_proc: subprocess.Popen[Any] | None = None
+
+    def is_connected(self) -> bool:
+        """Returns True if a device is currently selected and screen size resolved."""
+        return self.serial is not None and self._screen_size is not None
 
     def _build_cmd(self, args: list[str]) -> list[str]:
         cmd = [self.adb_path]
@@ -190,6 +197,23 @@ class ADBClient:
 
     def screencap(self) -> np.ndarray:
         """Captures device screen directly into an OpenCV BGR image without disk I/O."""
+        # Fast raw screencap (up to 3x faster than PNG compression on mobile CPU)
+        try:
+            cmd = self._build_cmd(["exec-out", "screencap"])
+            proc = subprocess.run(cmd, capture_output=True, env=sanitize_process_env(), timeout=8)
+            raw = proc.stdout
+            if proc.returncode == 0 and len(raw) >= 16:
+                w, h, _fmt = np.frombuffer(raw[:12], dtype=np.int32)
+                expected_bytes = int(w) * int(h) * 4
+                if len(raw) >= 16 + expected_bytes and w > 0 and h > 0:
+                    img_raw = np.frombuffer(raw[16 : 16 + expected_bytes], dtype=np.uint8).reshape(
+                        (int(h), int(w), 4)
+                    )
+                    return cv2.cvtColor(img_raw, cv2.COLOR_RGBA2BGR)
+        except Exception as e:
+            logger.debug(f"Fast raw screencap failed, falling back to PNG: {e}")
+
+        # Fallback to standard PNG screencap
         cmd = self._build_cmd(["exec-out", "screencap", "-p"])
         proc = subprocess.run(cmd, capture_output=True, env=sanitize_process_env())
         if proc.returncode != 0 or not proc.stdout:

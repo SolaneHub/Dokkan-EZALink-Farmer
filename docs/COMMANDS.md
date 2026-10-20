@@ -4,12 +4,11 @@
 
 # 🎮 Dokkan-EZALink-Farmer - Commands & Usage Guide
 
-> ⚠️ **IMPORTANT SCOPE NOTICE:**  
-> This tool is **strictly specialized** for two endgame routines:
+> ⚠️ **SPECIALIZED ENDGAME CAPABILITIES:**  
 > 1. **Extreme Z-Battle (EZA Lv. 999):** Auto-climbing and infinite Platinum Hercule Statue (Zeni) farming.
-> 2. **Chamber of Spirit and Time:** Event-based Link Level grinding with automatic team deck replenishment.
->
-> It does **NOT** farm Story Quest mode, summon, or clear generic story/growth events.
+> 2. **Chamber of Spirit and Time / Quest Link Leveling:** High-speed Link Level grinding with automatic team deck replenishment.
+> 3. **Autonomous Character Box Scanner:** Full on-device RapidOCR box cataloging into `config/box.json` with DokkanDB sync.
+> 4. **AI Team Builder & Challenge Solver:** DeepSeek/Qwen strategic mission solving and mathematically optimal rotation planning.
 
 ---
 
@@ -49,8 +48,12 @@ You can pass arguments directly to the executable to perform specific tasks with
 | `--devices` | *none* | Displays all connected Android devices (USB or Wi-Fi) |
 | `--eza` | `[level=999]` | Automatically navigates to EZA Events, scrolls to the bottom, finds the first uncompleted EZA (< 999), and farms up to the target level (default: `999`) |
 | `--link` | `[runs]` | Starts Link Level farming for N runs (or until stamina depleted if omitted). Prompts for stage (Area 39-3, Area 35-1, Chamber) if not preset. Auto-loops using "Attempt Again" and configures filters on Run 1 only |
+| `--stage` | `[stage_id\|runs]` | Sets target stage for AI Endgame run (e.g. `10101`, `rz_broly`) or runs repeated farming |
 | `--ur` | *none* | Filters character box for UR rarity unmaxed cards during Link Level farming (can combine with `--lr`) |
 | `--lr` | *none* | Filters character box for LR rarity unmaxed cards during Link Level farming (can combine with `--ur`) |
+| `--scan-box` | `[max_cards]` | Autonomously scans character box using on-device RapidOCR, enriches metadata via DokkanDB, and saves to `~/.dokkan-farmer/cache/user_box.json` |
+| `--ai-run` | `[stage_id]` | Starts autonomous Trial & Error loop with episodic memory against Red Zone and Blue Zone challenge bosses (default: `10101` Broly) |
+| `--challenge` | `[event_name]` | Analyzes challenge event missions using AI and builds optimal team compositions from `config/box.json` |
 | `--boost` / `--no-boost` | *none* | Enables (`--boost`) or disables (`--no-boost`) using Boost energy charges during Link Level farming |
 | `--scrcpy` | *none* | Opens the zero-latency screen mirroring window |
 | `--discord` | *none* | Runs the bot as a background service controlled remotely via Discord |
@@ -58,6 +61,17 @@ You can pass arguments directly to the executable to perform specific tasks with
 
 ### Quick Examples:
 ```bash
+# Full box synchronization and scan with DokkanDB enrichment:
+dokkan-farmer scan-box
+
+# Start AI Trial & Error loop against Red Zone Broly:
+dokkan-farmer ai-run --stage 10101
+# or using string slug:
+dokkan-farmer ai-run --stage rz_broly
+
+# Start AI Trial & Error loop against Beast Gohan (Blue Zone / SMB):
+dokkan-farmer ai-run --stage 20101
+
 # Run system doctor in English (default):
 ./Launch-Dokkan-EZALink --doctor
 
@@ -72,6 +86,9 @@ You can pass arguments directly to the executable to perform specific tasks with
 
 # Farm Link Leveling with only LR cards:
 ./Launch-Dokkan-EZALink --link --lr
+
+# Scan the first 100 character cards:
+./Launch-Dokkan-EZALink --scan-box 100
 
 # Launch phone screen mirroring window:
 ./Launch-Dokkan-EZALink --scrcpy
@@ -96,6 +113,10 @@ Running the executable without extra arguments enters the interactive Rich termi
 | `shot` | `shot [name.png]` | Takes and saves a screenshot of the current screen |
 | `eza` | `eza [level\|auto]` | Opens interactive DokkanDB selector (arrow keys & search) or starts directly if specified |
 | `link` | `link [runs] [--ur] [--lr] [--boost]` | Opens interactive stage selection dropdown (Area 39 Stage 3, Area 35 Stage 1, Chamber of Spirit and Time). Supports cumulative `--ur` and `--lr` rarity flags. Loops directly via "Attempt Again" and configures box filters on Run 1 only |
+| `stage` / `farm` | `stage [runs] [--boost]` | Repeatedly clears manually selected stage in-game until stamina runs out (or for N runs). Re-runs stage using "Attempt Again" and automatically exits when stamina is depleted |
+| `scan-box` | `scan-box [max]` | Scans character box in automated swipe cycles, detecting titles, rainbow stars, copies, and saves to `~/.dokkan-farmer/cache/user_box.json` with DokkanDB enrichment |
+| `ai-run` | `ai-run [stage_id]` | Starts autonomous Trial & Error loop with combat telemetry against Red Zone and Blue Zone challenge bosses (e.g. `10101`, `20101`, `rz_broly`) |
+| `challenge` / `ai-team` | `challenge [event]` | Synthesizes optimal team compositions and rotations for event missions using AI and scanned box |
 | `discord` | `discord [setup\|start]` | Starts the interactive configuration wizard (`discord setup`) or runs the bot listener (`discord start`) |
 | `status` | `status` | Shows current bot status, statistics, and running tasks |
 | `lang` | `lang [en\|it]` | Shows or dynamically changes the bot language at runtime |
@@ -107,7 +128,46 @@ Running the executable without extra arguments enters the interactive Rich termi
 
 ---
 
-## 🤖 4. Remote Control via Discord
+## 🧠 4. AI Autonomous Endgame Runner & Box Scanner (Red Zone / Blue Zone)
+
+Dokkan-EZALink-Farmer integrates a local LLM inference engine (Ollama DeepSeek-R1 / Qwen) with mathematical constraint solving and episodic memory to autonomously conquer Dokkan Battle's hardest endgame stages:
+
+### 1. Character Box Scan (`scan-box`):
+Performs on-device RapidOCR scans of your character box, queries DokkanDB to enrich passives, leader skills, and link skills, and saves the inventory to `~/.dokkan-farmer/cache/user_box.json`.
+```bash
+dokkan-farmer scan-box
+```
+
+### 2. Endgame Boss Catalog (`boss_stages.json`):
+Contains iconic challenge stages with full sequential phases, elements, and real gimmicks:
+* **Red Zone: Movie Edition - Broly (`10101` / `rz_broly`):** 4 phases (AGL -> TEQ -> STR AoE -> AGL Cancels Dodge).
+* **Red Zone: Red Ribbon Army - Cell Max (`10102` / `rz_cell_max`):** 3 phases (PHY -> INT -> TEQ AoE + Cancels Dodge + Locks Slots).
+* **Red Zone: Dismal Future - Fusion Zamasu (`10103` / `rz_zamasu`):** 2 phases (INT AoE -> PHY Locks Slots).
+* **Red Zone: Majin Buu Saga - Kid Buu (`10104` / `rz_kid_buu`):** 2 phases (TEQ -> PHY Cancels Dodge).
+* **Red Zone: GT Edition - Omega Shenron (`10105` / `rz_omega`):** 3 phases (AGL -> STR AoE -> INT Locks Slots + Cancels Dodge).
+* **Supreme Magnificent Battle (Blue Zone): Beast Gohan (`20101` / `smb_beast_gohan`):** 3 phases (TEQ -> PHY Locks Slots -> STR Cancels Dodge + Locks Slots).
+* **Supreme Magnificent Battle (Blue Zone): Super Gogeta (`20102` / `smb_gogeta`):** 3 phases (AGL -> STR AoE -> PHY Cancels Dodge).
+* **Supreme Magnificent Battle (Blue Zone): Evo Blue Vegeta & UI Goku (`20103` / `smb_evo_ui`):** 3 phases (INT -> AGL -> TEQ Cancels Dodge + Locks Slots).
+
+### 3. 4-Step Gameplay Loop State Machine (`ai-run`):
+* **Step A (Initialization):** Loads `user_box.json` and `ai_memory.json`, then synthesizes the best initial team via `TeamBuilder` and constraint solver.
+* **Step B (Formation):** If recommended team differs from equipped team, automatically applies team formation in-game via ADB.
+* **Step C (Launch & Telemetry):** Selects Friend Leader (refreshing if needed), clicks start, verifies Auto-Battle is ON (`btn_auto_battle_on.png`), and starts telemetry loop (4-frame pre-KO rolling FIFO buffer).
+* **Step D (Outcome):**
+  * **Victory (`button_ok.png`):** Registers team as *Winning Team* in `ai_memory.json` and exits with success.
+  * **Defeat (`button_attempt_again.png`):** Generates `FailureReport` and executes adaptive decision tree:
+    1. `InstantRetry`: Boss HP < 20% in final phase or Friend Leader defeat (Slot 7).
+    2. `SurgicalSwap` (`SurgicalReplace`): Surgical single-card replacement with orphan link check (< 3 links) or Pair Swap.
+    3. `LeaderSwitch` (`DemoteLeader`): Demotes leader to 2nd best leader after 3 consecutive Turn 1-2 defeats.
+
+```bash
+# Example invocation:
+dokkan-farmer ai-run --stage 10101
+```
+
+---
+
+## 🤖 5. Remote Control via Discord
 
 Dokkan-EZALink-Farmer comes with an integrated Discord bot allowing you to fully monitor and control farming sessions remotely using Slash Commands (`/status`, `/screenshot`, `/eza`, `/link`, etc.).
 
@@ -150,6 +210,27 @@ Once configured, run the Discord bot anytime:
 - `/stop`: Aborts the current running task remotely and safely.
 - `/pause` / `/resume`: Pauses or resumes automation.
 - `/scrcpy [start/stop]`: Controls the screen mirroring window on the host computer.
+
+---
+
+## 🧠 5. AI Team & Mission Solver (Universal Models)
+
+Dokkan-EZALink-Farmer integrates local and remote LLM reasoning to solve challenge event missions (Red Zone, Supreme Magnificent Battle) and optimize team rotations.
+
+### 🌟 Officially Supported Universal Models (PC & Mac):
+
+| Model Name | Model Family | Key Capabilities | Best For |
+|---|---|---|---|
+| **`deepseek-r1:7b`** | `deepseek_r1` | Full step-by-step Chain of Thought (`<think>`) reasoning, multi-phase boss mechanics analysis | **Recommended for PC (RTX 3060 Ti) & Mac (Apple Silicon M2)** |
+| **`qwen2.5:7b`** | `qwen` | Direct structured Markdown output, immediate tactical breakdown | High-speed direct analysis on PC & Mac |
+| **`qwen2.5:3b`** | `qwen` | Ultra-compact (2GB VRAM), zero CPU/battery pressure | MacBook Air M2 on battery saving mode |
+
+### 🛠️ Switching Models via CLI:
+From the interactive console:
+```text
+dokkan-farmer> ai switch
+```
+Select between the 3 universal models or enter a custom model name.
 
 ---
 

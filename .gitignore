@@ -45,3 +45,12 @@ cache/
 !assets/**/*.png
 !docs/**/*.*
 !src/dokkan_eza_link_farmer/assets/**/*.*
+# Local User Configurations & Box Caches
+config/
+*.json.bak
+
+# Internal Agent Teamwork
+.agents/
+
+# API Dumps & Temporary Query Fixtures
+api-dokkandb-*.json

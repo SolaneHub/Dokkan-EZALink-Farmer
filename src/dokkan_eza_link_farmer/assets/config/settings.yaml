@@ -1,43 +1,53 @@
-# Configuration for Dokkan Battle Automation Bot
-
-# UI Language: "en" (English, default) or "it" (Italian)
-language: "en"
-
+ai:
+  api_key: ollama
+  base_url: http://localhost:11434/v1
+  enabled: true
+  model_family: deepseek_r1
+  model_name: deepseek-r1:7b
+  provider: ollama
+  temperature: 0.6
+ai_teambuilder:
+  confidence_threshold: 0.72
+  enabled: true
+  max_attempts: 10
+  ollama_model: deepseek-r1:7b
+  ollama_url: http://localhost:11434
+  timeout_seconds: 75
+bot:
+  auto_restart_app: true
+  loop_delay: 1.5
+  max_unknown_screens: 15
+  tap_delay: 0.8
 device:
-  serial: "" # Leave blank to auto-detect the first connected device
-  package_name: "com.bandainamcogames.dbzdokkanww" # Global Dokkan package
-  scrcpy_path: "scrcpy"
-  adb_path: "adb"
-
+  adb_path: adb
+  package_name: com.bandainamcogames.dbzdokkanww
+  scrcpy_path: scrcpy
+  serial: ''
+discord:
+  allowed_user_ids: []
+  channel_id: 0
+  token: ''
+farming:
+  eza_target_level: 999
+  friend_refresh_coords:
+  - 0.82
+  - 0.18
+  friend_selection_mode: refresh
+  stamina_refill_mode: none
+language: en
+link_leveling:
+  box_confirm_coords:
+  - 0.88
+  - 0.88
+  ensure_filter_every_run: false
+  preferred_difficulty: super
+  protected_slots: []
+  rebuild_team_every_run: true
+  target_event: spirit_and_time
+  target_stage: saiyan_training
+  use_attempt_again: true
+  use_boost: false
 vision:
   confidence_threshold: 0.78
-  template_dir: "templates/glb"
-  debug_save_screens: false # Save unrecognized screens for debugging/template creation
-
-bot:
-  loop_delay: 1.5 # Seconds between screen state evaluations
-  tap_delay: 0.8 # Delay after sending a tap input
-  max_unknown_screens: 15 # Warn if screen is unrecognized for consecutive cycles
-  auto_restart_app: true # Relaunch Dokkan if not running
-
-farming:
-  stamina_refill_mode: "none" # "none", "meat", "stones"
-  friend_selection_mode: "refresh" # "refresh" (auto-assigns friend via refresh button)
-  friend_refresh_coords: [0.82, 0.18] # (rx, ry) for refresh/auto-assign button on friend screen
-  eza_target_level: 999 # Continuous climbing up to max level 999
-
-link_leveling:
-  target_event: "spirit_and_time" # "spirit_and_time" (Chamber of Spirit and Time / Stanza dello Spirito e del Tempo)
-  target_stage: "saiyan_training" # Target stage: "saiyan_training" (1. Saiyan Training / Allenamento Saiyan)
-  preferred_difficulty: "super" # Difficulty: "super" (40 STA)
-  use_boost: false # Flag: true to use Boost when available, false to keep Boost OFF
-  rebuild_team_every_run: true # If true, removes all cards and inserts top 6 cards (Released + Level Up Possible) before every stage start
-  ensure_filter_every_run: false # If false, verifies filter on screen and only opens filter dialog if missing; if true, re-opens filter dialog every run
-  protected_slots: [] # Empty list = all slots (including Leader) can be replaced!
-  box_confirm_coords: [0.88, 0.88] # (rx, ry) for modern red confirm button in team formation
-  use_attempt_again: true # If true, taps 'Attempt Again' on stage clear screen to loop directly via team management
-
-discord:
-  token: "" # Paste your Discord bot token here
-  channel_id: 0 # Default channel to send alerts & screenshots
-  allowed_user_ids: [] # Discord user IDs allowed to run commands (empty = anyone in channel)
+  debug_save_screens: false
+  template_dir: templates/glb

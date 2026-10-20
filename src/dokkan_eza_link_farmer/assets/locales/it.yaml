@@ -29,6 +29,12 @@ cli:
     desc_shot: "Salva uno screenshot del gioco su disco"
     desc_eza: "Avvia EZA Farming (seleziona da DokkanDB o auto-farm rapido)"
     desc_link: "Avvia il Link Level farming (selezione stage da menu e filtro rarità UR/LR)"
+    desc_stage: "Ripete il clear dello stage selezionato manualmente finché non finisce la stamina"
+    desc_challenge: "Challenge Solver autonomo (Red Zone, SMB, accorpamento missioni & loop a tentativi)"
+    desc_scan_box: "Scanner OCR del Box Personale (legge le carte in-game e salva in ~/.dokkan-farmer/cache/user_box.json)"
+    desc_enrich_box: "Arricchisce il JSON della box con categorie, abilità da leader e tag passivi da DokkanDB"
+    desc_ai_run: "Loop autonomo AI Trial & Error contro boss Red/Blue Zone (con telemetria e retry)"
+    desc_ai: "AI Team Builder & Tactical Advisor (Qwen 2.5 / DeepSeek-R1)"
     desc_discord: "Configura (setup) o avvia il controllo remoto con Bot Discord"
     desc_doctor: "Esegue la diagnostica di scrcpy, adb, OS e dispositivi"
     desc_status: "Mostra lo stato del bot e il progresso dell'attività in corso"
@@ -37,6 +43,41 @@ cli:
     desc_pause: "Mette in pausa l'attività"
     desc_resume: "Riprende l'attività in pausa"
     desc_exit: "Chiude il programma"
+
+  challenge:
+    menu_title: "⚔️ Seleziona Evento Challenge (Red Zone / Supreme Magnificent Battle)"
+    loading: "Caricamento eventi Challenge da DokkanDB..."
+    no_events: "Nessun evento Challenge trovato."
+    select_event: "Scegli l'evento da completare:"
+    select_stage: "Scegli lo stage dell'evento da affrontare:"
+    all_stages: "Tutti gli Stage (Completamento Totale Evento)"
+    stage_boss_info_title: "🛡️ Boss Telemetry & Informazioni Stage"
+    stage_missions_found: "🎯 Stage {stage}: {total} missioni combacianti raggruppate in {batches} run!"
+    missions_found: "Trovate {total} missioni. L'ottimizzatore le ha raggruppate in {batches} run!"
+    savings_badge: "🔥 Risparmiate {saved} run completando più missioni contemporaneamente!"
+    start_confirm: "Avviare la risoluzione autonoma dell'evento a tentativi?"
+    starting: "Avvio Challenge Solver su '{name}' ({stage})..."
+
+  ai:
+    menu_title: "🤖 Dokkan Battle AI Team Builder & Advisor"
+    opt_build: "Costruisci Team & Analisi Tattica (DokkanDB + AI)"
+    opt_partner: "Trova i Migliori Linking Partner per una Carta"
+    opt_status: "Verifica Connessione AI (Qwen / DeepSeek-R1)"
+    opt_config: "Configura Modello AI (Qwen 2.5 vs DeepSeek-R1)"
+    opt_cancel: "Annulla"
+    searching: "Ricerca carte in corso..."
+    select_leader: "Seleziona la carta Leader:"
+    query_prompt: "Inserisci il nome del personaggio da cercare (es. Gohan, Goku, Broly):"
+    no_cards_found: "Nessuna carta trovata con la query '{query}'."
+    status_title: "Stato Connessione AI"
+    online: "ONLINE ✓"
+    offline: "OFFLINE ✗ (Verifica che Ollama o LM Studio siano attivi su {url})"
+    current_model: "Modello attivo: {model} (Famiglia: {family})"
+    reasoning_title: "Catena di Pensiero (DeepSeek-R1 Reasoning)"
+    tactical_title: "Guida Tattica & Rotazioni"
+    switch_family_prompt: "Seleziona la famiglia del modello AI:"
+    switch_model_name_prompt: "Nome del modello (es. qwen2.5:7b, deepseek-r1:8b, deepseek-r1:14b):"
+    config_saved: "Configurazione AI salvata con successo!"
 
   devices:
     title: "Dispositivi Rilevati"
@@ -122,6 +163,15 @@ cli:
     event_info: "⚡ [Link Level] Evento: {name} {status}"
     summary_info: "Runs programmate: {runs} | Difficoltà: SUPER (40 STA) | {boost} | Auto-Team (Released + Level Up Possible)"
     event_not_found_fallback: "⚠️ Evento Spirito del Tempo non trovato in DokkanDB. Avvio con parametri predefiniti ({runs}, {boost})..."
+
+  stage:
+    hint_navigate: "Suggerimento: Entra nello stage desiderato in-game (Selezione Difficoltà, Selezione Amico o Conferma Team)."
+    summary: "Auto-Clear Stage | Run: {runs} | Boost: {boost} | Difficoltà: {diff}"
+    runs_unlimited: "fino a esaurimento stamina"
+    boost_on: "ATTIVO"
+    boost_off: "DISATTIVO"
+    boost_default: "non modificato"
+    diff_auto: "Auto"
 
   discord:
     starting: "Avvio del bot Discord in corso (premi CTRL+C per tornare alla console)..."
@@ -274,6 +324,18 @@ tasks:
     filter_first_run_init: "⚙️ Inizializzazione filtri box (Run 1): Impostazione 'Released', '{rarities}' e 'Level Up Possible'..."
     filter_reused: "⚡ Filtri del box già attivi dalla Run 1: salto il controllo filtri e procedo direttamente con le carte..."
 
+  stage_farm:
+    started: "Avvio farming continuo dello stage: {runs} previste (Boost: {boost}, Difficoltà: {diff})."
+    stamina_depleted: "⚡ Stamina esaurita! Farming dello stage completato con successo."
+    run_completed: "Stage completato con successo! [{curr}/{tot}]"
+    runs_target_reached: "Obiettivo di {curr} run raggiunto!"
+    game_over: "Sconfitta rilevata (Game Over)! Annullamento rinascita e interruzione task."
+    select_diff: "Selezione difficoltà {diff}..."
+    tap_stage_card: "Tocco della card stage/difficoltà per entrare..."
+    waiting_action: "In attesa sulla schermata (ciclo {cycles})..."
+    home_screen_notice: "Schermata Home rilevata: entra manualmente nello stage desiderato."
+    farming_finished: "Farming dello stage terminato: {curr} run eseguite."
+
 discord:
   not_authorized: "❌ Non sei autorizzato a usare questo comando."
   bot_ready: "🟢 **Dokkan Battle Bot online e pronto ai comandi!**"
@@ -291,6 +353,7 @@ discord:
   task_conflict: "⚠️ Impossibile avviare: un'attività è già in esecuzione."
   eza_started: "⚔️ **EZA Farming avviato:** scalata continua fino al Livello {level}!"
   link_started: "🔗 **Link Level farming avviato:** {runs} run impostate."
+  stage_started: "⚡ **Auto-Clear Stage avviato:** ripetizione continua fino a esaurimento stamina ({runs})!"
   task_stopped: "🛑 **Attività fermata con successo.**"
   task_paused: "⏸️ **Attività in pausa.**"
   task_resumed: "▶️ **Attività ripresa.**"

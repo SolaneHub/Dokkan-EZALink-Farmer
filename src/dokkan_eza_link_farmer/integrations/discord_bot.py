@@ -233,6 +233,39 @@ class DiscordBotClient(commands.Bot):
             else:
                 await interaction.response.send_message(t("discord.task_conflict"))
 
+        @self.tree.command(
+            name="stage",
+            description="Repeats clearing current stage until stamina is depleted",
+        )
+        @app_commands.describe(
+            runs="Number of runs (optional: leave empty to farm until stamina runs out)",
+            boost="Activate stamina boost",
+        )
+        async def cmd_stage(
+            interaction: discord.Interaction,
+            runs: int | None = None,
+            boost: bool | None = None,
+        ):
+            if not self._is_user_allowed(interaction.user.id):
+                await interaction.response.send_message(t("discord.not_authorized"), ephemeral=True)
+                return
+
+            if isinstance(interaction.channel, discord.abc.Messageable):
+                self._main_channel = interaction.channel
+            actual_runs = runs if (runs is not None and runs > 0) else None
+            ok = self.engine.start_stage_farm(runs=actual_runs, use_boost=boost)
+            if ok:
+                runs_label = (
+                    str(actual_runs)
+                    if actual_runs is not None
+                    else t("cli.stage.runs_unlimited")
+                )
+                await interaction.response.send_message(
+                    t("discord.stage_started", runs=runs_label)
+                )
+            else:
+                await interaction.response.send_message(t("discord.task_conflict"))
+
         @self.tree.command(name="stop", description="Stops currently active automation task")
         async def cmd_stop(interaction: discord.Interaction):
             if not self._is_user_allowed(interaction.user.id):

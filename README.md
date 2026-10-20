@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/SolaneHub/Dokkan-EZALink-Farmer/releases"><img src="https://img.shields.io/badge/release-v1.0.5-blue.svg" alt="Release"></a>
+  <a href="https://github.com/SolaneHub/Dokkan-EZALink-Farmer/releases"><img src="https://img.shields.io/badge/release-v1.1.0-blue.svg" alt="Release"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python"></a>
   <a href="https://www.microsoft.com/windows"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg" alt="Platform"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code Style: Ruff"></a>
@@ -59,6 +59,16 @@
     - **Cumulative Card Rarity Filters (`--ur` & `--lr`)**: Filter and unmax UR and LR cards independently or together (e.g. `link --ur --lr`).
     - **"Attempt Again" Rapid Restart Looping**: Automatically detects the red "Attempt Again" button and confirms stamina deduction to restart stages instantly without navigating back through menus.
     - **Single-Setup Filter Optimization**: Box sorting (*Released*, *Level Up Possible*, rarity filters) is verified and configured **only on Run 1**; subsequent runs immediately clear and insert cards from the pre-filtered box for ultra-fast cycles.
+  - **3. Autonomous Character Box Scanner & DokkanDB Knowledge Base**:
+    - **RapidOCR On-Device Title Recognition**: Reads character subnames and epithets (e.g. *[Warrior Beyond the Limits]*) directly from card thumbnails with zero cloud latency.
+    - **Calibrated Physical Row Pitch & Micro-Alignment**: Exact `253.0px` row spacing and multi-anchor tracking to guarantee 0 missed or duplicated cards across hundreds of swipe cycles.
+    - **Rainbow Star & Hidden Potential Detection**: Chromatic HSV/RGB analysis detects 100% Rainbow stars and tracks multiple character copies.
+    - **Card Skin & Special Effect Tolerance**: Robust against animated skins, Survival Passive frames, and corner chromatic aura effects.
+    - **DokkanDB Metadata & Synergy Enrichment**: Automatically fetches leader skills, passive details, categories, link skills, and optimal linking partner scores with exponential backoff retry into `config/box.json`.
+  - **4. AI-Powered Team Builder & Challenge Mission Solver**:
+    - **Multi-Provider LLM Integration**: Leverages DeepSeek (R1 / V3) or Qwen (2.5) via Ollama or OpenAI-compatible endpoints, complete with `<think>` tag extraction and heuristic fallback solver.
+    - **Smart Slot 1 Tank Detection & Rotation Optimizer**: Evaluates guard, damage reduction, stacking DEF, dodge, and Ki link synergies to build mathematically optimal main rotations (Slots 1 & 2) and floaters (Slot 3).
+    - **Multi-Mission Bundling**: Automatically parses event mission constraints (e.g. Category restrictions, Rainbow typing, itemless clears) and compiles teams from the player's scanned `config/box.json`.
 - **Dual-Engine Operation (Local CLI & Discord Bot)**:
   - Operate entirely via local terminal commands or deploy the Discord bot daemon to start, pause, inspect, and receive completion alerts remotely on mobile.
 - **Autonomous ToolLocator Discovery**:
@@ -82,10 +92,17 @@ The bot detects and operates in both **English** and **Italian** game clients se
 | **Link Leveling (Quest 39-3)** | Quest Story Area 39 Stage 3 | 5 Auto-Battles, drops Green Incredible Gems | 25-40 STA | Cumulative `--ur`/`--lr` filters, swaps maxed units, loops via Attempt Again |
 | **Link Leveling (Quest 35-1)** | Quest Story Area 35 Stage 1 | 4 Auto-Battles, drops Blue Incredible Gems | 25-40 STA | Cumulative `--ur`/`--lr` filters, swaps maxed units, loops via Attempt Again |
 | **Link Leveling (Chamber)** | *Chamber of Spirit and Time* (Event) | Clears *1. Saiyan Training* (SUPER) | 40 STA | Enforces *Released* + *Level Up Possible* & auto-refills |
+| **Character Box Scanner** | Character List (Box) | Automated grid scrolling, RapidOCR recognition & DokkanDB sync | **0 STA** | Catalogues hundreds of cards, rainbow stars & copies into `config/box.json` |
+| **AI Team & Mission Solver** | Red Zone / Supreme Battle Spectacle / EZA | Strategic team synthesis from scanned box | **0 STA** | Slot 1 tank selection, link synergy rotation builder & multi-mission bundling |
 | **Boost Support** | Link Level Stages | Toggles Boost on/off (`--boost` / `--no-boost`) | Normal | Maximizes link skill level-up chance |
 | **Emergency Stops** | Any Mode | Stops safely on Game Over, full box, or limit | - | Alerts user via CLI & Discord |
 
 > [!TIP]
+> **Universal AI Models for PC & Mac**: The AI Team & Mission Solver supports 3 native universal models via Ollama:
+> 1. `deepseek-r1:7b` — Deep tactical Chain-of-Thought reasoning (Recommended for PC NVIDIA RTX & Mac Apple Silicon M2).
+> 2. `qwen2.5:7b` — Direct, high-speed structured responses and rotation tables.
+> 3. `qwen2.5:3b` — Ultra-lightweight and battery-efficient for MacBook Air M2.
+>
 > **Zero Latency Phone Mirroring**: Connect your physical Android phone with USB Debugging enabled and run `.\dist\Launch-Dokkan-EZALink.exe --scrcpy` (or `uv run Launch-Dokkan-EZALink --scrcpy`) to project your phone's screen directly onto your desktop monitor with zero latency.
 
 ---
@@ -106,8 +123,11 @@ The bot detects and operates in both **English** and **Italian** game clients se
 | `--devices` | Lists all detected ADB serials, device models, and connection states | - |
 | `--eza [LVL]` | Starts continuous EZA climbing up to target level | `999` |
 | `--link [N]` | Starts Link Level farming for N runs (or until stamina depleted if omitted) | Unlimited |
+| `--stage [N]` / `--farm` | Repeatedly clears manually selected stage until stamina is depleted (or N runs) | Unlimited |
 | `--ur` | Filters box for UR rarity units during Link Level farming | Active (both) |
 | `--lr` | Filters box for LR rarity units during Link Level farming | Active (both) |
+| `--scan-box [N]` | Scans character box up to N cards (or full box if omitted) and enriches `config/box.json` | Full Box |
+| `--challenge [EVT]`| Solves challenge event missions and builds optimal team from `config/box.json` | - |
 | `--boost` / `--no-boost` | Enables or disables Boost Energy multiplier for Link Level runs | Config |
 | `--scrcpy` | Launches zero-latency Android screen mirroring window on PC | - |
 | `--discord` | Launches Discord Bot daemon for remote mobile control | - |
@@ -132,17 +152,27 @@ src/dokkan_eza_link_farmer/
 │   ├── system_tools.py       # ToolLocator (ADB/scrcpy), paths, and SingleInstanceMutex
 │   └── updater.py            # Cryptographic updater, SHA-256 verifier & process isolator
 │
+├── ai/                       # AI Strategy & Optimization Engine
+│   ├── ai_client.py          # Multi-LLM provider client (DeepSeek-R1/V3, Qwen 2.5, Ollama)
+│   ├── dokkan_models.py      # Character card, link synergy, and team data models
+│   ├── mission_solver.py     # Event mission parser and constraint bundler
+│   ├── rotation_optimizer.py # Mathematical Slot 1/2 rotation & floater optimizer
+│   └── team_builder.py       # Strategic team builder synthesizing box & synergy models
+│
 ├── automation/               # Game state detection, computer vision & tasks
 │   ├── game_state.py         # State machine enum & multi-scale UI detector
 │   ├── vision.py             # OpenCV template matching, fuzzy matching & OCR helpers
 │   └── tasks/                # Automation task implementations
 │       ├── base_task.py      # Abstract thread-safe task base class
+│       ├── box_scanner.py    # Autonomous Character Box Scanner & DokkanDB sync
+│       ├── challenge_task.py # AI Challenge & Mission team solver task
 │       ├── eza_farm.py       # EZA 999 Zeni climbing task
-│       └── link_level_farm.py# Chamber of Spirit & Time link leveling task
+│       ├── link_level_farm.py# Multi-stage Link Leveling & deck rotation task
+│       └── stage_farm.py     # Continuous stage auto-clearing until stamina depleted
 │
 ├── integrations/             # External services & protocols
 │   ├── adb_client.py         # High-speed ADB socket wrapper & screencap decoder
-│   ├── dokkandb_client.py    # DokkanDB REST API client & banner image cache
+│   ├── dokkandb_client.py    # DokkanDB REST API client, partner analysis & caching
 │   └── discord_bot.py        # Discord.py bot with slash commands & image streaming
 │
 ├── ui/                       # Presentation layer

@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.1.1] - 2026-10-19
+
+### Added
+- **Manual Stage Auto-Clear until Stamina Depleted (`StageFarmTask`)**:
+  - Automatically loops through a manually selected stage in Dokkan Battle until stamina is completely exhausted.
+  - Seamless state detection across `STAGE_SELECT`, `FRIEND_SELECT`, `TEAM_CONFIRM`, `MAP_SCREEN`, `BATTLE_SCREEN`, and `RESULTS_SCREEN`.
+  - Integrates fast-replay via 'Attempt Again' (Ripeti) and automatically confirms the stamina consumption modal dialog.
+  - Terminates cleanly upon encountering `GameState.STAMINA_EMPTY` (Restore STA popup), dismissing the modal without consuming Dragon Stones or Meat.
+  - Supports optional maximum runs target (e.g. `stage 10`) and Boost energy toggle (`--boost` / `--no-boost`).
+  - Added interactive CLI command `stage` / `farm` (`stage`, `farm`, `repeat`, `clear`).
+  - Added standalone CLI flags `--stage [N]` and `--farm [N]`.
+  - Added Discord slash command `/stage [runs] [boost]`.
+  - Full bilingual localization (English & Italian) and unit test coverage (`tests/test_stage_farm.py`).
+
+---
+
+## [v1.1.0] - 2026-10-02
+
+### Added
+- **Autonomous Character Box Scanner (`BoxScannerTask`)**:
+  - **On-Device RapidOCR Title Recognition**: Automatically reads card epithets/subnames (e.g. *[Warrior Beyond the Limits]*) directly from character icon thumbnails with zero cloud latency.
+  - **Calibrated Physical Row Pitch & Dynamic Micro-Alignment**: Exact `253.0px` row spacing combined with visual anchor matching eliminates pixel drift, guaranteeing zero missed or duplicate cards across hundreds of swipe cycles.
+  - **Multi-Anchor Shift Tracking**: Top-row and mid-row anchor persistence to flawlessly stitch rows across swipe boundaries.
+  - **Rainbow Star & Copy Tracking**: Chromatic HSV/RGB color analysis reliably detects 100% Hidden Potential rainbow stars and tracks multiple character copies.
+  - **Skin & Special Effect Tolerance**: Custom crop isolation and title masking to cleanly recognize cards with animated backgrounds, corner effects (blue, red, pink, rainbow), and Survival Passive frames.
+  - **DokkanDB Metadata & Partner Enrichment**: Fetches card IDs, typing, leader skills, passives, categories, link skills, and top linking partner synergies with HTTP 429 exponential backoff retry into `config/box.json`.
+  - **CLI Command `--scan-box`**: New command (`--scan-box [N]` or `scan-box` in interactive console) to scan and enrich character boxes autonomously.
+- **AI Strategy, Rotation Optimizer & Team Builder Engine (`dokkan_eza_link_farmer.ai`)**:
+  - **Multi-Provider LLM Integration**: Support for DeepSeek (R1/V3) and Qwen (2.5) with `<think>` tag extraction and robust fallback to heuristic algorithmic solvers.
+  - **Slot 1 Tank Detection & Rotation Optimizer**: Evaluates guard, damage reduction, DEF stacking, dodge, and Ki links to generate optimal main rotations (Slots 1 & 2) and floaters (Slot 3).
+  - **Mission Solver & Bundler**: Automatically parses event mission constraints (e.g. Category restrictions, Rainbow typing, itemless clears) and compiles teams from the player's scanned `config/box.json`.
+  - **Challenge Task (`ChallengeTask`)**: Automates mission team synthesis and deployment for endgame challenge events.
+- **Unified Testing & Quality Assurance**:
+  - Unified test suite in `tests/test_box_scanner.py` (7 comprehensive tests) and `tests/test_ai.py` (11 tests).
+  - Formal `rapidocr-onnxruntime>=1.3.0` dependency added to `pyproject.toml`.
+
+---
+
 ## [v1.0.5] - 2026-09-30
 
 ### Added
