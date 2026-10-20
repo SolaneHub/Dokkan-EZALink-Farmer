@@ -20,6 +20,11 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
+try:
+    import questionary
+except ImportError:
+    questionary = None  # type: ignore
+
 if TYPE_CHECKING:
     from dokkan_eza_link_farmer.core.bot_engine import BotEngine
 
@@ -1139,6 +1144,7 @@ class TerminalCLI:
         Interactively prompts the user via a checkbox multi-selector to select one or more
         missions specific to the chosen stage. Returns a consolidated MissionBatch or None.
         """
+        import questionary
         from dokkan_eza_link_farmer.ai.mission_solver import MissionParser, MissionBundler
 
         ev_id = getattr(stage, "event_id", 0)
