@@ -470,40 +470,73 @@ class DokkanSyncer:
 
         return self._categories_catalog
 
-    def sync_catalog(self, force: bool = False) -> list[dict[str, Any]]:
+    def sync_catalog(
+        self,
+        force: bool = False,
+        include_ssr: bool = False,
+        rarities: tuple[int, ...] | None = None,
+    ) -> list[dict[str, Any]]:
         """
-        Synchronizes the 2 chunks of DokkanDB catalog (/api/cards-catalog-with-transformations?chunk=1 & 2),
-        filtering exclusively UR (rarity: 4) and LR (rarity: 5) characters.
+        Synchronizes DokkanDB catalog chunks (/api/cards-catalog-with-transformations?chunk=N),
+        dynamically fetching until exhausted, filtering UR (4), LR (5), and optionally SSR (3) characters.
         """
+        # Filter rarities: default UR (4) and LR (5); include SSR (3) if requested
+        if rarities is not None:
+            allowed_rarities = set(rarities)
+        elif include_ssr:
+            allowed_rarities = {3, 4, 5}
+        else:
+            allowed_rarities = {4, 5}
+
         if not force and os.path.exists(self.catalog_cache_file):
             try:
                 with open(self.catalog_cache_file, encoding="utf-8") as f:
                     data = json.load(f)
                 if isinstance(data, list) and len(data) >= 800:
-                    logger.info(f"Loaded {len(data)} UR/LR cards from catalog cache.")
-                    return data
+                    cached_rarities = {c.get("rarity") for c in data if isinstance(c, dict)}
+                    # If caller needs SSR (rarity 3) but cache lacks SSRs, fetch chunks from API
+                    if 3 in allowed_rarities and 3 not in cached_rarities:
+                        pass
+                    else:
+                        filtered = [
+                            c for c in data if isinstance(c, dict) and c.get("rarity") in allowed_rarities
+                        ]
+                        if filtered:
+                            logger.info(
+                                f"Loaded {len(filtered)} cards from catalog cache (rarities: {allowed_rarities})."
+                            )
+                            return filtered
             except Exception as e:
                 logger.warning(f"Error loading catalog cache: {e}")
 
         logger.info(
-            "Downloading catalog chunk 1 (1000 cards) and chunk 2 (436 cards) from DokkanDB..."
+            "Downloading catalog chunks from DokkanDB until exhausted..."
         )
         combined: list[dict[str, Any]] = []
-        for chunk_id in [1, 2]:
+        chunk_id = 1
+        while chunk_id <= 20:
             url = f"{self.API_BASE}/cards-catalog-with-transformations?chunk={chunk_id}"
             try:
                 resp = requests.get(url, headers=self.DEFAULT_HEADERS, timeout=25)
+                if resp.status_code == 404:
+                    break
                 resp.raise_for_status()
                 data = resp.json()
-                if isinstance(data, list):
-                    combined.extend(data)
+                if not data or not isinstance(data, list):
+                    break
+                combined.extend(data)
                 logger.info(
-                    f"Downloaded chunk {chunk_id}: {len(data) if isinstance(data, list) else 0} cards."
+                    f"Downloaded chunk {chunk_id}: {len(data)} cards."
                 )
+                chunk_id += 1
             except Exception as e:
-                logger.error(f"Failed to fetch chunk {chunk_id} from {url}: {e}")
+                if chunk_id > 2:
+                    logger.debug(f"Finished downloading catalog at chunk {chunk_id}: {e}")
+                else:
+                    logger.error(f"Failed to fetch chunk {chunk_id} from {url}: {e}")
+                break
 
-        # Filter UR (4) and LR (5)
+
         filtered_cards: list[dict[str, Any]] = []
         seen_ids: set[int] = set()
 
@@ -512,7 +545,7 @@ class DokkanSyncer:
                 continue
             cid = card.get("id")
             rarity = card.get("rarity")
-            if rarity in (4, 5) and cid and int(cid) not in seen_ids:
+            if rarity in allowed_rarities and cid and int(cid) not in seen_ids:
                 seen_ids.add(int(cid))
                 filtered_cards.append(card)
 
@@ -521,7 +554,7 @@ class DokkanSyncer:
             json.dump(filtered_cards, f, ensure_ascii=False, indent=2)
 
         logger.info(
-            f"Successfully synced catalog: total raw {len(combined)}, UR/LR filtered {len(filtered_cards)}."
+            f"Successfully synced catalog: total raw {len(combined)}, filtered {len(filtered_cards)} (rarities: {allowed_rarities})."
         )
         return filtered_cards
 

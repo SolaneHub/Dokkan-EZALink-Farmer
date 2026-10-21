@@ -20,9 +20,60 @@ from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_USER_BOX_PATH = os.path.join(
+CANONICAL_BOX_PATH = "config/box.json"
+CACHE_BOX_PATH = os.path.join(
     os.path.expanduser("~"), ".dokkan-farmer", "cache", "user_box.json"
 )
+DEFAULT_USER_BOX_PATH = CACHE_BOX_PATH
+
+
+def resolve_box_path(preferred_path: str | None = None) -> str:
+    """Resolves canonical user box path.
+    If preferred_path is an explicit custom path (not default cache/canonical), return it.
+    Otherwise prefer canonical config/box.json if exists; then cache user_box.json if exists.
+    """
+    if preferred_path and preferred_path not in (
+        DEFAULT_USER_BOX_PATH,
+        CACHE_BOX_PATH,
+        CANONICAL_BOX_PATH,
+    ):
+        return preferred_path
+    if os.path.exists(CANONICAL_BOX_PATH):
+        return CANONICAL_BOX_PATH
+    if os.path.exists(CACHE_BOX_PATH):
+        return CACHE_BOX_PATH
+    return preferred_path or CANONICAL_BOX_PATH
+
+
+def sync_box_cache(source_path: str, target_path: str | None = None) -> None:
+    """Synchronizes source box file to target paths (keeping config/box.json and cache mirror in sync)."""
+    import shutil
+
+    if not source_path or not os.path.exists(source_path):
+        return
+
+    # Only sync if the source is one of the standard box paths or target is explicitly given
+    if target_path:
+        destinations = [target_path]
+    elif os.path.abspath(source_path) == os.path.abspath(CANONICAL_BOX_PATH):
+        destinations = [CACHE_BOX_PATH]
+    elif os.path.abspath(source_path) == os.path.abspath(CACHE_BOX_PATH):
+        destinations = [CANONICAL_BOX_PATH]
+    else:
+        return  # Custom test/isolated file; do not overwrite global config/cache
+
+    source_real = os.path.abspath(source_path)
+    for dest in destinations:
+        if not dest:
+            continue
+        dest_real = os.path.abspath(dest)
+        if source_real != dest_real:
+            try:
+                os.makedirs(os.path.dirname(dest_real), exist_ok=True)
+                shutil.copy2(source_path, dest_real)
+                logger.debug("Synchronized box file from %s to %s", source_path, dest_real)
+            except Exception as exc:
+                logger.debug("Failed to sync box from %s to %s: %s", source_path, dest_real, exc)
 
 
 def _normalize_title(text: str) -> str:
@@ -48,6 +99,32 @@ class BoxScannerTask(BaseTask):
     TITLE_CROP_Y = (0.058, 0.375)  # 140..900
     TITLE_CROP_X = (0.777, 0.926)  # 840..1000
 
+    @staticmethod
+    def _compute_screen_diff(
+        img1: np.ndarray | None,
+        img2: np.ndarray | None,
+        roi: tuple[int, int, int, int] | None = None,
+    ) -> float:
+        """Computes mean absolute pixel difference between two screens to detect lack of motion.
+        Returns 0.0 for identical frames.
+        """
+        if img1 is None or img2 is None:
+            return 999.0
+        if not isinstance(img1, np.ndarray) or not isinstance(img2, np.ndarray):
+            return 999.0
+        if img1.shape != img2.shape or img1.size == 0 or img2.size == 0:
+            return 999.0
+        if roi:
+            y1, y2, x1, x2 = roi
+            g1 = img1[y1:y2, x1:x2]
+            g2 = img2[y1:y2, x1:x2]
+        else:
+            h, w = img1.shape[:2]
+            g1 = img1[int(h * 0.22) : int(h * 0.75), :]
+            g2 = img2[int(h * 0.22) : int(h * 0.75), :]
+        diff = cv2.absdiff(g1, g2)
+        return float(np.mean(diff))
+
     def __init__(
         self,
         adb: ADBClient,
@@ -68,6 +145,11 @@ class BoxScannerTask(BaseTask):
         self.output_file = output_file if output_file is not None else DEFAULT_USER_BOX_PATH
         self.max_cards_to_scan = max_cards_to_scan
         self.pure_grid_mode = config.get("pure_grid_mode", False)
+        self.include_ssr = bool(
+            config.get("include_ssr", False)
+            or (max_cards_to_scan and max_cards_to_scan > 500)
+        )
+        self._last_registered_card_id: int | None = None
 
         # Initialize OCR engine
         self._ocr = None
@@ -92,13 +174,7 @@ class BoxScannerTask(BaseTask):
 
     def _load_existing_box(self) -> None:
         """Loads previously scanned cards so scans are incremental and resumeable."""
-        target_path = self.output_file
-        if (
-            not os.path.exists(target_path)
-            and self.output_file == DEFAULT_USER_BOX_PATH
-            and os.path.exists("config/box.json")
-        ):
-            target_path = "config/box.json"
+        target_path = resolve_box_path(self.output_file)
 
         if os.path.exists(target_path):
             try:
@@ -147,27 +223,37 @@ class BoxScannerTask(BaseTask):
         }
         with open(self.output_file, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
+        # Synchronize with canonical config/box.json or cache mirror
+        sync_box_cache(self.output_file)
 
     def ensure_box_filters(self) -> bool:
         """
-        Verifies that Character Box filters are set to UR + LR and sorted by Released.
-        Uses existing templates:
+        Verifies that Character Box filters are set appropriately and sorted by Released.
+        If include_ssr is False, verifies UR + LR filters:
         - assets/templates/glb/filters/btn_lr_selected.png
         - assets/templates/glb/filters/btn_ur_selected.png
         - assets/templates/glb/filters/tag_sort_released.png
+        If include_ssr is True (full box scan), verifies Sort by Released.
         """
         if not self.vision:
             return True
 
         screen = self.adb.screencap()
+        sort_ok = bool(
+            self.vision.find_template(screen, "filters/tag_sort_released.png", threshold=0.75)
+            or (hasattr(self.vision, "is_sort_released") and self.vision.is_sort_released(screen))
+        )
+        if self.include_ssr:
+            self.log(f"Full box scan (SSR+UR+LR). In-game sort status: SortReleased={sort_ok}")
+            return sort_ok
+
         lr_ok = bool(
             self.vision.find_template(screen, "filters/btn_lr_selected.png", threshold=0.75)
+            or (hasattr(self.vision, "is_filter_lr_selected") and self.vision.is_filter_lr_selected(screen))
         )
         ur_ok = bool(
             self.vision.find_template(screen, "filters/btn_ur_selected.png", threshold=0.75)
-        )
-        sort_ok = bool(
-            self.vision.find_template(screen, "filters/tag_sort_released.png", threshold=0.75)
+            or (hasattr(self.vision, "is_filter_ur_selected") and self.vision.is_filter_ur_selected(screen))
         )
 
         self.log(f"In-game box filters status: LR={lr_ok}, UR={ur_ok}, SortReleased={sort_ok}")
@@ -178,7 +264,7 @@ class BoxScannerTask(BaseTask):
         self.log("Fetching card database catalog from DokkanDB...")
         if self.syncer:
             try:
-                self._catalog = self.syncer.sync_catalog()
+                self._catalog = self.syncer.sync_catalog(include_ssr=self.include_ssr)
             except Exception as e:
                 logger.warning(f"Error syncing catalog via DokkanSyncer: {e}")
         if not self._catalog:
@@ -215,32 +301,33 @@ class BoxScannerTask(BaseTask):
 
         char_json_path = os.path.join(self.dokkandb.cache_dir, "dokkan_characters.json")
         char_map: dict[int, dict[str, Any]] = {}
+        allowed_rarities = (3, 4, 5) if self.include_ssr else (4, 5)
 
-        # 1. Index all UR and LR cards from DokkanDB catalog (and their awakening forms)
+        # 1. Index cards from DokkanDB catalog (and their awakening forms)
         for c in self._catalog:
             cid = c.get("id")
             rarity = c.get("rarity")
-            if rarity in (4, 5) and cid:
+            if rarity in allowed_rarities and cid:
                 tid = int(str(cid)[:-1] + "0")
                 char_map[tid] = {
                     "id": int(cid),
                     "name": c.get("name"),
                     "subname": c.get("subname"),
-                    "rarity": "LR" if rarity == 5 else "UR",
+                    "rarity": "LR" if rarity == 5 else ("UR" if rarity == 4 else "SSR"),
                     "type": c.get("element"),
                     "has_survival_passive": bool(c.get("has_survival_passive")),
                 }
             for awk in c.get("awakening_data") or []:
                 aid = awk.get("id")
                 arar = awk.get("rarity")
-                if arar in (4, 5) and aid:
+                if arar in allowed_rarities and aid:
                     atid = int(str(aid)[:-1] + "0")
                     if atid not in char_map:
                         char_map[atid] = {
                             "id": int(aid),
                             "name": awk.get("name"),
                             "subname": awk.get("subname"),
-                            "rarity": "LR" if arar == 5 else "UR",
+                            "rarity": "LR" if arar == 5 else ("UR" if arar == 4 else "SSR"),
                             "type": awk.get("element"),
                             "has_survival_passive": bool(awk.get("has_survival_passive")),
                         }
@@ -254,7 +341,7 @@ class BoxScannerTask(BaseTask):
                         tid = c.get("thumbId")
                         if tid and int(tid) not in char_map:
                             rar = c.get("rarity")
-                            if rar in ("UR", "LR"):
+                            if rar in ("SSR", "UR", "LR") if self.include_ssr else rar in ("UR", "LR"):
                                 char_map[int(tid)] = c
             except Exception as e:
                 logger.warning(f"Error reading dokkan_characters.json: {e}")
@@ -279,6 +366,8 @@ class BoxScannerTask(BaseTask):
         type_map = {"AGI": "AGL", "TEC": "TEQ", "INT": "INT", "PUI": "STR", "END": "PHY"}
         blacklisted_thumbs = {1002910, 1024090, 1002300}
 
+        valid_rarities = ("SSR", "UR", "LR") if self.include_ssr else ("UR", "LR")
+
         for f in thumb_files:
             fp = os.path.join(cache_dir, f)
             parts = f.replace("card_", "").replace("_thumb.png", "")
@@ -291,7 +380,7 @@ class BoxScannerTask(BaseTask):
                 continue
 
             char_rarity = info.get("rarity")
-            if char_rarity and char_rarity not in ("UR", "LR"):
+            if char_rarity and char_rarity not in valid_rarities:
                 continue
 
             im = cv2.imread(fp, cv2.IMREAD_UNCHANGED)
@@ -332,7 +421,7 @@ class BoxScannerTask(BaseTask):
                         "card_id": card_id,
                         "name": info.get("name") or f"Card_{card_id}",
                         "subname": info.get("subname") or "",
-                        "rarity": 5 if char_rarity == "LR" else 4,
+                        "rarity": 5 if char_rarity == "LR" else (4 if char_rarity == "UR" else 3),
                         "type": elem_norm,
                         "has_survival_passive": has_surv,
                         "face_patch": face_patch,
@@ -420,6 +509,26 @@ class BoxScannerTask(BaseTask):
                 delta = best_s - second_ms
 
         return best_cand, best_s, delta
+
+    def _get_second_candidate(
+        self, crop: np.ndarray
+    ) -> tuple[dict[str, Any] | None, float]:
+        """Returns the second best thumbnail match candidate and its score for anti-collision evaluation."""
+        if not self._loaded_thumbs or crop is None or crop.size == 0:
+            return None, 0.0
+
+        scores: list[tuple[float, dict[str, Any]]] = []
+        for t in self._loaded_thumbs:
+            res = cv2.matchTemplate(crop, t["face_patch"], cv2.TM_CCOEFF_NORMED)
+            score = float(cv2.minMaxLoc(res)[1])
+            if score >= 0.25:
+                scores.append((score, t))
+
+        if len(scores) < 2:
+            return None, 0.0
+
+        scores.sort(key=lambda x: x[0], reverse=True)
+        return scores[1][1], scores[1][0]
 
     def _execute_ocr_fallback(self, cx: int, cy: int) -> dict[str, Any] | None:
         """
@@ -689,15 +798,18 @@ class BoxScannerTask(BaseTask):
             is_seza = bool(cat_card.get("eza_leader_skill_set_id_pre"))
             pot_pct = 100 if is_rainbow else 0
 
-            # Check if this card was already scanned at nearly the same row cy (e.g. overlap re-scan)
+            # Check if this card was already scanned at nearly the same position (overlap re-scan)
             if not hasattr(self, "_recently_scanned_positions"):
                 self._recently_scanned_positions = {}
-            prev_cy = self._recently_scanned_positions.get(cid)
-            if prev_cy is not None and abs(prev_cy - cy) < 180.0:
-                self._recently_scanned_positions[cid] = cy
-                return True
-
-            self._recently_scanned_positions[cid] = cy
+            prev_pos = self._recently_scanned_positions.get(cid)
+            if prev_pos is not None:
+                if isinstance(prev_pos, (tuple, list)) and len(prev_pos) >= 2:
+                    p_cy, p_cx = prev_pos[0], prev_pos[1]
+                else:
+                    p_cy, p_cx = prev_pos, cx
+                if abs(p_cx - cx) < 60.0 and abs(p_cy - cy) < 180.0:
+                    self._recently_scanned_positions[cid] = (cy, cx)
+                    return True
 
             if cid not in self.scanned_cards:
                 self.scanned_cards[cid] = {
@@ -715,14 +827,28 @@ class BoxScannerTask(BaseTask):
                     "grid_slot": grid_slot,
                     "scanned_at": datetime.now(timezone.utc).isoformat(),
                 }
-                rarity_str = "LR" if rarity == 5 else "UR"
+                self._last_registered_card_id = cid
+                self._recently_scanned_positions[cid] = (cy, cx)
+                rarity_str = "LR" if rarity == 5 else ("UR" if rarity == 4 else "SSR")
                 star_str = "★ Rainbow" if is_rainbow else "★"
                 self.log(
                     f"  [NEW] [{score:.2f}] #{len(self.scanned_cards)}: "
                     f"[{cid}] {cname} - '{csub}' ({rarity_str} {star_str}) [p:{swipe_page}, s:{grid_slot}]"
                 )
             else:
+                # Mandatory Adjacency validation for DUPE increment
+                if (
+                    self._last_registered_card_id is not None
+                    and self._last_registered_card_id != cid
+                ):
+                    self.log(
+                        f"  [ANTI-COLLISION] Skipping non-adjacent DUPE registration for [{cid}] "
+                        f"(last registered: {self._last_registered_card_id})."
+                    )
+                    return False
                 self.scanned_cards[cid]["copies"] = self.scanned_cards[cid].get("copies", 1) + 1
+                self._last_registered_card_id = cid
+                self._recently_scanned_positions[cid] = (cy, cx)
                 self.log(
                     f"  [DUPE] [{score:.2f}] Card [{cid}] {cname}: copy #{self.scanned_cards[cid]['copies']}"
                 )
@@ -739,18 +865,20 @@ class BoxScannerTask(BaseTask):
         """
         Matches a 5-card row with dynamic vertical micro-alignment (-50px to +50px).
         Evaluates delta and executes RapidOCR fallback when score < 0.72 or delta < 0.05.
+        Applies Mandatory Adjacency Anti-Collision rule to eliminate false duplicates.
         """
         h, w = grid_img.shape[:2]
 
         test_cands: list[float] = []
         for c_idx in [0, 2]:
-            cx = col_xs[c_idx]
-            crop = grid_img[
-                max(0, int(cy - half_h)) : min(h, int(cy + half_h)),
-                max(0, cx - half_w) : min(w, cx + half_w),
-            ]
-            _, s, _ = self._match_slot_thumbnail_with_delta(crop)
-            test_cands.append(s)
+            if c_idx < len(col_xs):
+                cx = col_xs[c_idx]
+                crop = grid_img[
+                    max(0, int(cy - half_h)) : min(h, int(cy + half_h)),
+                    max(0, cx - half_w) : min(w, cx + half_w),
+                ]
+                _, s, _ = self._match_slot_thumbnail_with_delta(crop)
+                test_cands.append(s)
 
         base_metric = max(test_cands) if test_cands else 0.0
         best_dy = 0.0
@@ -763,13 +891,14 @@ class BoxScannerTask(BaseTask):
                     continue
                 test_ys: list[float] = []
                 for c_idx in [0, 2]:
-                    cx = col_xs[c_idx]
-                    crop = grid_img[
-                        max(0, int(adj_cy - half_h)) : min(h, int(adj_cy + half_h)),
-                        max(0, cx - half_w) : min(w, cx + half_w),
-                    ]
-                    _, s, _ = self._match_slot_thumbnail_with_delta(crop)
-                    test_ys.append(s)
+                    if c_idx < len(col_xs):
+                        cx = col_xs[c_idx]
+                        crop = grid_img[
+                            max(0, int(adj_cy - half_h)) : min(h, int(adj_cy + half_h)),
+                            max(0, cx - half_w) : min(w, cx + half_w),
+                        ]
+                        _, s, _ = self._match_slot_thumbnail_with_delta(crop)
+                        test_ys.append(s)
                 cand_metric = max(test_ys) if test_ys else 0.0
                 if cand_metric > best_metric:
                     best_metric = cand_metric
@@ -787,12 +916,70 @@ class BoxScannerTask(BaseTask):
             ]
             cand, score, delta = self._match_slot_thumbnail_with_delta(crop)
 
+            # Check if this card was already scanned at nearly the same position (overlap re-scan)
+            prev_pos = getattr(self, "_recently_scanned_positions", {}).get(
+                int(cand["card_id"]) if cand else -1
+            )
+            is_overlap_rescan = False
+            if prev_pos is not None:
+                if isinstance(prev_pos, (tuple, list)) and len(prev_pos) >= 2:
+                    p_cy, p_cx = prev_pos[0], prev_pos[1]
+                else:
+                    p_cy, p_cx = prev_pos, cx
+                is_overlap_rescan = abs(p_cx - cx) < 60.0 and abs(p_cy - final_cy) < 180.0
+
+            # Requirement 2.1: Anti-Collision Rule on [DUPE] (Mandatory Adjacency)
+            # Under fixed in-game sorting (Sort: Released or Rarity), true duplicates
+            # of the same card are strictly adjacent.
+            if cand and int(cand["card_id"]) in self.scanned_cards and not is_overlap_rescan:
+                cid = int(cand["card_id"])
+                is_adjacent = (
+                    self._last_registered_card_id is not None
+                    and self._last_registered_card_id == cid
+                )
+                if not is_adjacent:
+                    self.log(
+                        f"  [ANTI-COLLISION] Slot ({int(final_cy)}, {cx}) candidate [{cid}] {cand.get('name')} "
+                        f"already seen non-adjacently (last registered: {self._last_registered_card_id}). Rejecting false DUPE!"
+                    )
+                    cand2, s2 = self._get_second_candidate(crop)
+                    if (
+                        cand2
+                        and s2 >= 0.70
+                        and (
+                            int(cand2["card_id"]) not in self.scanned_cards
+                            or int(cand2["card_id"]) == self._last_registered_card_id
+                        )
+                    ):
+                        self.log(
+                            f"  [ANTI-COLLISION] Selected 2nd candidate [{cand2['card_id']}] {cand2.get('name')} (score: {s2:.2f})"
+                        )
+                        cand = cand2
+                        score = s2
+                    elif not self.pure_grid_mode:
+                        fallback_cand = self._execute_ocr_fallback(cx, int(final_cy))
+                        if fallback_cand:
+                            cand = fallback_cand
+                            score = 1.0
+                        else:
+                            cand = None
+                            score = 0.0
+                    else:
+                        cand = None
+                        score = 0.0
+
             # Fallback OCR triggered when confidence < 0.72 or delta margin < 0.05
-            if (cand is None or score < 0.72 or delta < 0.05) and not self.pure_grid_mode:
+            if (cand is None or score < 0.72 or delta < 0.05) and not self.pure_grid_mode and score > 0.0:
                 fallback_cand = self._execute_ocr_fallback(cx, int(final_cy))
                 if fallback_cand:
                     cand = fallback_cand
                     score = 1.0
+
+            # Synchronize last registered card id per slot so subsequent slots in row know adjacency
+            if cand and score >= 0.72 and not is_overlap_rescan:
+                self._last_registered_card_id = int(cand["card_id"])
+            elif not is_overlap_rescan and (cand is None or score < 0.55):
+                self._last_registered_card_id = None
 
             row_results.append((cand, score, crop, cx, c_idx))
 
@@ -828,6 +1015,7 @@ class BoxScannerTask(BaseTask):
         if not hasattr(self, "scanned_cards") or self.scanned_cards is None:
             self.scanned_cards = {}
         self._recently_scanned_positions = {}
+        self._last_registered_card_id = None
         ROW_PITCH = 253.0
         half_w = int(w * 0.088)  # 95px
         half_h = 125
@@ -852,7 +1040,13 @@ class BoxScannerTask(BaseTask):
                 )
             last_scanned_cy = float(aligned_cy)
 
-        consecutive_no_scroll = 0
+        # Requirement 2.3: 3-row slow anti-inertia swipe with 2 rows guaranteed overlap
+        SWIPE_ROWS = 3
+        SWIPE_DELTA_Y = int(SWIPE_ROWS * ROW_PITCH)  # ~759px
+        start_y = int(h * 0.65)
+        end_y = start_y - SWIPE_DELTA_Y
+
+        consecutive_stationary_swipes = 0
         swipe_count = 0
 
         while not self.is_stopped():
@@ -863,10 +1057,9 @@ class BoxScannerTask(BaseTask):
                 self.log(f"Reached target scan limit of {self.max_cards_to_scan} cards.")
                 break
 
-            start_y = int(h * 0.58)
-            end_y = start_y - 492
+            pre_swipe = curr_grid
             self.adb.swipe(
-                int(w * 0.50), start_y, int(w * 0.50), end_y, duration_ms=1000, delay_after=0.8
+                int(w * 0.50), start_y, int(w * 0.50), end_y, duration_ms=800, delay_after=1.0
             )
 
             next_grid = self.adb.screencap()
@@ -878,14 +1071,18 @@ class BoxScannerTask(BaseTask):
                 )
                 next_grid = self.adb.screencap()
 
-            shift = self._track_vertical_shift(curr_grid, next_grid, last_scanned_cy)
-            logger.debug(f"Swipe #{swipe_count}: detected shift={shift}")
+            # Requirement 2.2: Fine-scroll termination based strictly on direct pixel diff.
+            # Never stop for '0 new IDs' (screen could contain only duplicates or re-scanned rows).
+            screen_diff = self._compute_screen_diff(pre_swipe, next_grid)
+            logger.debug(f"Swipe #{swipe_count}: pixel diff = {screen_diff:.2f}")
 
-            if shift is None or shift < 25.0:
-                consecutive_no_scroll += 1
-                self.log(f"No vertical scroll detected ({consecutive_no_scroll}/2)...")
-
-                if consecutive_no_scroll >= 2:
+            if screen_diff < 3.0:
+                consecutive_stationary_swipes += 1
+                self.log(
+                    f"No vertical scroll detected via pixel diff ({screen_diff:.2f} < 3.0, "
+                    f"{consecutive_stationary_swipes}/2 stationary swipes)..."
+                )
+                if consecutive_stationary_swipes >= 2:
                     remaining_rows = []
                     next_cy = last_scanned_cy + ROW_PITCH
                     while next_cy <= max_visible_y:
@@ -912,15 +1109,19 @@ class BoxScannerTask(BaseTask):
                                     grid_slot=slot,
                                 )
 
-                    self.log("✅ Reached bottom of Character List. Full Box scan completed!")
+                    self.log("✅ Reached bottom of Character List (pixel diff verified). Full Box scan completed!")
                     break
 
                 curr_grid = next_grid
                 continue
+            else:
+                consecutive_stationary_swipes = 0
 
-            consecutive_no_scroll = 0
+            shift = self._track_vertical_shift(curr_grid, next_grid, last_scanned_cy)
+            if shift is None or shift < 25.0:
+                shift = float(SWIPE_DELTA_Y)
+
             new_anchor_cy = last_scanned_cy - shift
-
             new_rows = []
             k = 1
             while True:
@@ -971,3 +1172,4 @@ class BoxScannerTask(BaseTask):
             f"✅ Box Scan Completed! Stored {total_instances} total cards ({len(self.scanned_cards)} unique) in '{self.output_file}'."
         )
         self.is_running = False
+

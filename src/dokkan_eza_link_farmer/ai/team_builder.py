@@ -940,12 +940,9 @@ class TeamBuilder:
         """
         del dokkandb
         from dokkan_eza_link_farmer.ai.syncer import DokkanSyncer
+        from dokkan_eza_link_farmer.automation.tasks.box_scanner import resolve_box_path
 
-        if box_path is None:
-            default_user_box = os.path.join(
-                os.path.expanduser("~"), ".dokkan-farmer", "cache", "user_box.json"
-            )
-            box_path = default_user_box if os.path.exists(default_user_box) else "config/box.json"
+        box_path = resolve_box_path(box_path)
 
         if not os.path.exists(box_path):
             logger.warning(f"Box file {box_path} not found.")

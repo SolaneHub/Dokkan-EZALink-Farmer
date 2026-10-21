@@ -75,6 +75,41 @@ class TestDokkanSyncer:
             assert 1004 not in ids
             assert os.path.exists(syncer.catalog_cache_file)
 
+    def test_catalog_cache_respects_include_ssr(self):
+        """Verifies that catalog cache detects missing SSR cards and re-fetches when include_ssr=True."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            syncer = DokkanSyncer(cache_dir=tmpdir)
+
+            # Pre-populate cache with only UR/LR cards (850 cards)
+            cached_cards = [{"id": 1000 + i, "name": f"UR {i}", "rarity": 4} for i in range(850)]
+            with open(syncer.catalog_cache_file, "w", encoding="utf-8") as f:
+                json.dump(cached_cards, f)
+
+            # Calling with include_ssr=False should return cached UR cards without network call
+            with patch("requests.get") as mock_get:
+                cat_no_ssr = syncer.sync_catalog(include_ssr=False)
+                assert len(cat_no_ssr) == 850
+                mock_get.assert_not_called()
+
+            # Calling with include_ssr=True must detect missing SSRs and fetch from API
+            raw_chunks = [
+                [
+                    {"id": 2001, "name": "LR Beast", "rarity": 5},
+                    {"id": 2002, "name": "SSR Pan", "rarity": 3},
+                ]
+            ]
+            with patch("requests.get") as mock_get:
+                mock_resp1 = MagicMock(status_code=200)
+                mock_resp1.json.return_value = raw_chunks[0]
+                mock_resp2 = MagicMock(status_code=200)
+                mock_resp2.json.return_value = []
+                mock_get.side_effect = [mock_resp1, mock_resp2]
+
+                cat_ssr = syncer.sync_catalog(include_ssr=True)
+                assert len(cat_ssr) == 2
+                assert any(c["rarity"] == 3 for c in cat_ssr)
+                assert mock_get.called
+
     def test_sync_thumbnails(self):
         """Tests concurrent thumbnail downloading from Supabase mirror into cache/thumbs/."""
         with tempfile.TemporaryDirectory() as tmpdir:

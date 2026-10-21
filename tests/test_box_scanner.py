@@ -353,3 +353,78 @@ class TestBoxScanner:
             assert syncer.sync_catalog.called
             assert len(scanner._catalog) == 1
             assert 1012901 in scanner._id_index
+
+    def test_anti_collision_dupe_mandatory_adjacency(self):
+        """Verifies that non-adjacent duplicates are rejected as false collisions."""
+        adb = MagicMock()
+        vision = MagicMock()
+        scanner = BoxScannerTask(adb=adb, vision=vision, config={"pure_grid_mode": False})
+        dummy_crop = np.zeros((100, 100, 3), dtype=np.uint8)
+
+        card_a = {"card_id": 1001, "name": "Goku A", "rarity": 4}
+        card_b = {"card_id": 2002, "name": "Vegeta B", "rarity": 4}
+        card_c = {"card_id": 3003, "name": "Trunks C", "rarity": 4}
+
+        # 1. Slot 1 registers Card A (New)
+        ok1 = scanner._register_card(card_a, score=0.90, crop=dummy_crop, cy=600.0, cx=110)
+        assert ok1 is True
+        assert scanner.scanned_cards[1001]["copies"] == 1
+        assert scanner._last_registered_card_id == 1001
+
+        # 2. Slot 2 is adjacent: registers Card A (Dupe)
+        ok2 = scanner._register_card(card_a, score=0.88, crop=dummy_crop, cy=600.0, cx=325)
+        assert ok2 is True
+        assert scanner.scanned_cards[1001]["copies"] == 2
+        assert scanner._last_registered_card_id == 1001
+
+        # 3. Slot 3 is Card B (New)
+        ok3 = scanner._register_card(card_b, score=0.91, crop=dummy_crop, cy=600.0, cx=540)
+        assert ok3 is True
+        assert scanner.scanned_cards[2002]["copies"] == 1
+        assert scanner._last_registered_card_id == 2002
+
+        # 4. Direct non-adjacent DUPE registration of Card A is rejected
+        ok4 = scanner._register_card(card_a, score=0.89, crop=dummy_crop, cy=600.0, cx=755)
+        assert ok4 is False
+        assert scanner.scanned_cards[1001]["copies"] == 2  # Copies NOT incremented
+
+        # 5. Test _match_row_with_alignment anti-collision with candidate 2 selection
+        grid_frame = np.zeros((2400, 1080, 3), dtype=np.uint8)
+        # Mock slot matcher to return Card A (seen non-adjacent) as cand1
+        scanner._match_slot_thumbnail_with_delta = MagicMock(
+            return_value=(card_a, 0.85, 0.10)
+        )
+        # Mock second candidate to return Card C (not seen)
+        scanner._get_second_candidate = MagicMock(return_value=(card_c, 0.78))
+
+        _, row_res = scanner._match_row_with_alignment(
+            grid_frame, cy=600.0, col_xs=[755], half_w=95, half_h=125
+        )
+        matched_cand, matched_score, _, _, _ = row_res[0]
+        assert matched_cand["card_id"] == 3003  # Candidate 2 selected!
+        assert matched_score == 0.78
+
+    def test_screen_diff_computation(self):
+        """Tests pixel difference MSE / MAE calculation for fine-scroll stop detection."""
+        img1 = np.ones((2400, 1080, 3), dtype=np.uint8) * 100
+        img2 = np.ones((2400, 1080, 3), dtype=np.uint8) * 100
+        assert BoxScannerTask._compute_screen_diff(img1, img2) == 0.0
+
+        img3 = np.ones((2400, 1080, 3), dtype=np.uint8) * 150
+        diff = BoxScannerTask._compute_screen_diff(img1, img3)
+        assert abs(diff - 50.0) < 1.0
+
+        assert BoxScannerTask._compute_screen_diff(None, img2) == 999.0
+
+    def test_ensure_box_filters_include_ssr(self):
+        """Tests that full box scan (include_ssr=True) requires only Sort: Released."""
+        adb = MagicMock()
+        vision = MagicMock()
+        vision.find_template.side_effect = lambda _screen, tmpl, **_kw: (
+            (500, 500) if "tag_sort_released" in tmpl else None
+        )
+        vision.is_sort_released.return_value = True
+
+        scanner = BoxScannerTask(adb=adb, vision=vision, config={"include_ssr": True})
+        assert scanner.include_ssr is True
+        assert scanner.ensure_box_filters() is True

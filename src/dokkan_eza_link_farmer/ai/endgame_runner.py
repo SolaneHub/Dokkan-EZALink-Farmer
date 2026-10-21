@@ -194,18 +194,11 @@ class EndgameRunner:
     # =========================================================================
 
     def load_user_box(self) -> list[DokkanCard]:
-        """Loads cards from user_box.json or falls back to local box / DokkanDB."""
-        candidate_paths = [
-            self.user_box_path,
-            Path(DEFAULT_USER_BOX_PATH),
-            Path("config/box.json"),
-        ]
+        """Loads cards from user_box.json or falls back to canonical config/box.json."""
+        from dokkan_eza_link_farmer.automation.tasks.box_scanner import resolve_box_path
 
-        resolved_path: Path | None = None
-        for p in candidate_paths:
-            if p and p.exists():
-                resolved_path = p
-                break
+        resolved = resolve_box_path(str(self.user_box_path) if self.user_box_path else None)
+        resolved_path: Path | None = Path(resolved) if resolved and Path(resolved).exists() else None
 
         loaded_cards: list[DokkanCard] = []
 
@@ -342,6 +335,7 @@ class EndgameRunner:
             team_cards=self.current_team,
             user_box_path=str(self.user_box_path),
             dry_run=self.dry_run,
+            previous_team_ids=self.equipped_team_ids,
         )
         if ok:
             self.equipped_team_ids = list(current_ids)
