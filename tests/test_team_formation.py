@@ -347,7 +347,9 @@ class TestTeamFormation:
         mock_vision.is_filter_lr_selected.return_value = False
         mock_vision.find_ok_button.return_value = (540, 2040)
 
-        card = make_test_card(1012901, "SSJ Goku", rarity=4, element=0, element_name="Super AGL", card_class="Super")
+        card = make_test_card(
+            1012901, "SSJ Goku", rarity=4, element=0, element_name="Super AGL", card_class="Super"
+        )
         mock_adb.screencap.return_value = np.zeros((2400, 1080, 3), dtype=np.uint8)
 
         ok = apply_surgical_filter(mock_adb, mock_vision, card, 1080, 2400)

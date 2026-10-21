@@ -38,17 +38,17 @@ class TestDokkanSyncer:
         assert "https://enaskhebnjtktdfszdcb.supabase.co" in url
 
     def test_catalog_chunks_download_and_ur_lr_filter(self):
-        """Verifies chunk 1 and 2 retrieval, filtering only UR (4) and LR (5), and disk caching."""
+        """Verifies chunk 1 and 2 retrieval, accepting {3, 4, 5} by default, and disk caching."""
         with tempfile.TemporaryDirectory() as tmpdir:
             syncer = DokkanSyncer(cache_dir=tmpdir)
 
             chunk1 = [
                 {"id": 1001, "name": "LR Goku", "rarity": 5},
                 {"id": 1002, "name": "UR Vegeta", "rarity": 4},
-                {"id": 1003, "name": "SR Raditz", "rarity": 3},  # Excluded
+                {"id": 1003, "name": "SSR Raditz", "rarity": 3},  # Included by default {3, 4, 5}
             ]
             chunk2 = [
-                {"id": 1004, "name": "R Saibaman", "rarity": 2},  # Excluded
+                {"id": 1004, "name": "R Saibaman", "rarity": 2},  # Excluded (< 3)
                 {"id": 1005, "name": "LR Gohan", "rarity": 5},
             ]
 
@@ -65,33 +65,37 @@ class TestDokkanSyncer:
 
             with patch("requests.get", side_effect=mock_get):
                 catalog = syncer.sync_catalog(force=True)
+                assert len(catalog) == 4
+                ids = [c["id"] for c in catalog]
+                assert 1001 in ids
+                assert 1002 in ids
+                assert 1003 in ids
+                assert 1005 in ids
+                assert 1004 not in ids
+                assert os.path.exists(syncer.catalog_cache_file)
 
-            assert len(catalog) == 3
-            ids = [c["id"] for c in catalog]
-            assert 1001 in ids
-            assert 1002 in ids
-            assert 1005 in ids
-            assert 1003 not in ids
-            assert 1004 not in ids
-            assert os.path.exists(syncer.catalog_cache_file)
+                # When rarities=(4, 5) is explicitly passed, SSR (3) is excluded
+                catalog_ur_lr = syncer.sync_catalog(force=True, rarities=(4, 5))
+                assert len(catalog_ur_lr) == 3
+                assert 1003 not in [c["id"] for c in catalog_ur_lr]
 
     def test_catalog_cache_respects_include_ssr(self):
-        """Verifies that catalog cache detects missing SSR cards and re-fetches when include_ssr=True."""
+        """Verifies that catalog cache detects missing SSR cards and re-fetches when {3, 4, 5} are required."""
         with tempfile.TemporaryDirectory() as tmpdir:
             syncer = DokkanSyncer(cache_dir=tmpdir)
 
-            # Pre-populate cache with only UR/LR cards (850 cards)
+            # Pre-populate cache with only UR/LR cards (rarity 4 and 5)
             cached_cards = [{"id": 1000 + i, "name": f"UR {i}", "rarity": 4} for i in range(850)]
             with open(syncer.catalog_cache_file, "w", encoding="utf-8") as f:
                 json.dump(cached_cards, f)
 
-            # Calling with include_ssr=False should return cached UR cards without network call
+            # Calling with explicit rarities=(4, 5) should return cached UR cards without network call
             with patch("requests.get") as mock_get:
-                cat_no_ssr = syncer.sync_catalog(include_ssr=False)
+                cat_no_ssr = syncer.sync_catalog(rarities=(4, 5))
                 assert len(cat_no_ssr) == 850
                 mock_get.assert_not_called()
 
-            # Calling with include_ssr=True must detect missing SSRs and fetch from API
+            # Calling default (or include_ssr=True) requires {3, 4, 5}, detects missing SSRs and fetches from API
             raw_chunks = [
                 [
                     {"id": 2001, "name": "LR Beast", "rarity": 5},
@@ -105,7 +109,7 @@ class TestDokkanSyncer:
                 mock_resp2.json.return_value = []
                 mock_get.side_effect = [mock_resp1, mock_resp2]
 
-                cat_ssr = syncer.sync_catalog(include_ssr=True)
+                cat_ssr = syncer.sync_catalog()
                 assert len(cat_ssr) == 2
                 assert any(c["rarity"] == 3 for c in cat_ssr)
                 assert mock_get.called

@@ -271,15 +271,20 @@ class BotEngine:
         self,
         output_file: str | None = None,
         max_cards_to_scan: int | None = None,
+        log_file: str | None = None,
     ) -> bool:
-        """Starts autonomous Character Box scanner with DokkanDB enrichment."""
+        """Starts autonomous Character Box scanner with DokkanDB enrichment and debug logging."""
         if self.is_task_running():
             self.emit_log(t("tasks.task_already_running"))
             return False
 
-        from dokkan_eza_link_farmer.automation.tasks.box_scanner import DEFAULT_USER_BOX_PATH
+        from dokkan_eza_link_farmer.automation.tasks.box_scanner import (
+            DEFAULT_BOX_SCAN_LOG_PATH,
+            DEFAULT_USER_BOX_PATH,
+        )
 
         target_out = output_file if output_file is not None else DEFAULT_USER_BOX_PATH
+        target_log = log_file if log_file is not None else DEFAULT_BOX_SCAN_LOG_PATH
         self.current_task = BoxScannerTask(
             self.adb,
             self.vision,
@@ -287,6 +292,7 @@ class BotEngine:
             dokkandb=self.dokkandb,
             output_file=target_out,
             max_cards_to_scan=max_cards_to_scan,
+            log_file=target_log,
             on_status=self.emit_log,
             on_run_complete=self.emit_run,
         )

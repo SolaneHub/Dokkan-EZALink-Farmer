@@ -144,6 +144,12 @@ def main() -> None:
         help="Directly start autonomous Character Box scanner to build ~/.dokkan-farmer/cache/user_box.json",
     )
     parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Optional debug log file destination (defaults to ~/.dokkan-farmer/box_scan.log for box scans)",
+    )
+    parser.add_argument(
         "subcommand",
         nargs="?",
         default=None,
@@ -310,7 +316,7 @@ def main() -> None:
             except Exception as e:
                 print(f"[Warning] Device connection: {e}")
             cli = TerminalCLI(engine)
-            cli.handle_box_scan_interactive(args.subcommand_args)
+            cli.handle_box_scan_interactive(args.subcommand_args, log_file=args.log_file)
             if engine.is_task_running():
                 cli.run()
             return

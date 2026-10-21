@@ -6,7 +6,11 @@ import os
 import tempfile
 from unittest.mock import MagicMock, patch
 
-from dokkan_eza_link_farmer.ai.box_scanner import CANONICAL_BOX_PATH, DEFAULT_USER_BOX_PATH
+from dokkan_eza_link_farmer.ai.box_scanner import (
+    CANONICAL_BOX_PATH,
+    DEFAULT_BOX_SCAN_LOG_PATH,
+    DEFAULT_USER_BOX_PATH,
+)
 from dokkan_eza_link_farmer.ai.models import (
     BossEnemy,
     BossMechanic,
@@ -58,15 +62,23 @@ def test_catalog_chunks_and_rarity_filtering():
             resp1.json.return_value = sample_chunk
             resp2 = MagicMock(status_code=200)
             resp2.json.return_value = []
-            mock_get.side_effect = [resp1, resp2]
+            resp3 = MagicMock(status_code=200)
+            resp3.json.return_value = sample_chunk
+            resp4 = MagicMock(status_code=200)
+            resp4.json.return_value = []
+            mock_get.side_effect = [resp1, resp2, resp3, resp4]
 
             catalog = syncer.sync_catalog(force=True)
-            assert len(catalog) == 2
+            assert len(catalog) == 3
             ids = [c["id"] for c in catalog]
             assert 1001 in ids
             assert 1002 in ids
-            assert 1003 not in ids
+            assert 1003 in ids
             assert 1004 not in ids
+
+            catalog_ur_lr = syncer.sync_catalog(force=True, rarities=(4, 5))
+            assert len(catalog_ur_lr) == 2
+            assert 1003 not in [c["id"] for c in catalog_ur_lr]
 
 
 def test_sample_card_tactical_parsing():
@@ -86,7 +98,9 @@ def test_sample_card_tactical_parsing():
             "category_ids": [10, 20],
         }
 
-        eza_card = syncer.build_dokkan_card(mock_detail, is_eza=True, is_seza=False, is_rainbow=True)
+        eza_card = syncer.build_dokkan_card(
+            mock_detail, is_eza=True, is_seza=False, is_rainbow=True
+        )
         assert eza_card.base_form is not None
         assert eza_card.base_form.passive_tags is not None
         assert eza_card.base_form.passive_tags.has_guard is True
@@ -95,9 +109,10 @@ def test_sample_card_tactical_parsing():
 
 
 def test_box_scanner_paths():
-    """Verify canonical and default box paths."""
+    """Verify canonical, default box and debug log paths."""
     assert DEFAULT_USER_BOX_PATH.endswith(os.path.join(".dokkan-farmer", "cache", "user_box.json"))
     assert CANONICAL_BOX_PATH == "config/box.json"
+    assert DEFAULT_BOX_SCAN_LOG_PATH.endswith(os.path.join(".dokkan-farmer", "box_scan.log"))
 
 
 def test_boss_stage_and_boss_phase_telemetry():

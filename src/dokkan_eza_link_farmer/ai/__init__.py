@@ -5,7 +5,10 @@ from dokkan_eza_link_farmer.ai.boss_catalog import (
     list_boss_stages,
     load_boss_catalog,
 )
-from dokkan_eza_link_farmer.ai.box_scanner import BoxScanner
+from dokkan_eza_link_farmer.ai.box_scanner import (
+    DEFAULT_BOX_SCAN_LOG_PATH,
+    BoxScanner,
+)
 from dokkan_eza_link_farmer.ai.client import DokkanAIClient
 from dokkan_eza_link_farmer.ai.endgame_runner import (
     BattleSimulatorFn,
@@ -35,6 +38,11 @@ from dokkan_eza_link_farmer.ai.models import (
     SATags,
     SupportedAIModel,
     TeamRecommendation,
+)
+from dokkan_eza_link_farmer.ai.solver import (
+    CandidateEvaluation,
+    ConstraintSolverResult,
+    DokkanConstraintSolver,
 )
 from dokkan_eza_link_farmer.ai.syncer import (
     DokkanSyncer,
@@ -67,16 +75,20 @@ __all__ = [
     "BossPhase",
     "BossStage",
     "BoxScanner",
+    "CandidateEvaluation",
     "CardForm",
     "ChallengeMission",
     "CombatFrame",
     "CombatRingBuffer",
     "CombatTelemetryTracker",
+    "ConstraintSolverResult",
     "CulpritAttribution",
     "DEFAULT_BOSS_CATALOG_PATH",
+    "DEFAULT_BOX_SCAN_LOG_PATH",
     "DEFAULT_MEMORY_CACHE_PATH",
     "DokkanAIClient",
     "DokkanCard",
+    "DokkanConstraintSolver",
     "DokkanSyncer",
     "EndgameResult",
     "EndgameRunner",

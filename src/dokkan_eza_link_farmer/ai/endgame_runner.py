@@ -172,6 +172,7 @@ class EndgameRunner:
         self.equipped_team_ids: list[int] = []
         self.decisions_history: list[PostDefeatDecision] = []
         self.failure_reports_history: list[FailureReport] = []
+        self.pending_target_slot: int | None = None
         self._stopped = False
 
     def log(self, message: str) -> None:
@@ -198,7 +199,9 @@ class EndgameRunner:
         from dokkan_eza_link_farmer.automation.tasks.box_scanner import resolve_box_path
 
         resolved = resolve_box_path(str(self.user_box_path) if self.user_box_path else None)
-        resolved_path: Path | None = Path(resolved) if resolved and Path(resolved).exists() else None
+        resolved_path: Path | None = (
+            Path(resolved) if resolved and Path(resolved).exists() else None
+        )
 
         loaded_cards: list[DokkanCard] = []
 
@@ -314,7 +317,7 @@ class EndgameRunner:
     # STEP B: IN-GAME TEAM FORMATION
     # =========================================================================
 
-    def step_b_apply_formation_if_needed(self) -> bool:
+    def step_b_apply_formation_if_needed(self, target_slot: int | None = None) -> bool:
         """Applies current_team in-game via team_formation.py if different from equipped."""
         self.current_state = EndgameRunnerState.STEP_B_FORMATION
         current_ids = [c.id for c in self.current_team]
@@ -326,7 +329,7 @@ class EndgameRunner:
             return True
 
         self.log(
-            f"[Step B] Team modified ({[c.name for c in self.current_team]}). Applying team formation in-game..."
+            f"[Step B] Team modified ({[c.name for c in self.current_team]}). Applying team formation in-game (target_slot={target_slot})..."
         )
         ok = apply_team_in_game(
             adb=self.adb,
@@ -335,6 +338,7 @@ class EndgameRunner:
             team_cards=self.current_team,
             user_box_path=str(self.user_box_path),
             dry_run=self.dry_run,
+            target_slot=target_slot,
             previous_team_ids=self.equipped_team_ids,
         )
         if ok:
@@ -618,13 +622,24 @@ class EndgameRunner:
                 in ("SurgicalReplace", "SurgicalSwap", "DemoteLeader", "LeaderSwitch")
                 and decision.team
             ):
+                # Check for single culprit slot replacement
+                culprit_slot = getattr(decision, "culprit_slot", None)
+                if culprit_slot is None and len(decision.replaced_card_ids) == 1:
+                    replaced_id = decision.replaced_card_ids[0]
+                    for idx, c in enumerate(self.current_team):
+                        if c.id == replaced_id:
+                            culprit_slot = idx + 1
+                            break
+                self.pending_target_slot = culprit_slot
+
                 self.current_team = list(decision.team)
                 self.log(
-                    f"[Step D] Adapted Team for next attempt: {[c.name for c in self.current_team]}"
+                    f"[Step D] Adapted Team for next attempt: {[c.name for c in self.current_team]} (target_slot={self.pending_target_slot})"
                 )
                 table_str = format_team_summary_table(self.current_team)
                 self.log(f"\n[Step D] Adapted Team Summary Table for next attempt:\n{table_str}\n")
             elif decision.action in ("InstantRetry", "instant_retry"):
+                self.pending_target_slot = None
                 self.log(
                     "[Step D] Tactical RNG / Friend Leader defeat: Retrying with unchanged team."
                 )
@@ -683,7 +698,8 @@ class EndgameRunner:
             self.current_attempt += 1
 
             # Step B: Apply formation in-game if team changed
-            self.step_b_apply_formation_if_needed()
+            self.step_b_apply_formation_if_needed(target_slot=self.pending_target_slot)
+            self.pending_target_slot = None
 
             # Step C: Select Friend Leader, start, ensure auto-battle, run telemetry
             outcome, _snap, _frames = self.step_c_start_and_observe(

@@ -31,7 +31,7 @@ cli:
     desc_link: "Avvia il Link Level farming (selezione stage da menu e filtro rarità UR/LR)"
     desc_stage: "Ripete il clear dello stage selezionato manualmente finché non finisce la stamina"
     desc_challenge: "Challenge Solver autonomo (Red Zone, SMB, accorpamento missioni & loop a tentativi)"
-    desc_scan_box: "Scanner OCR del Box Personale (legge le carte in-game e salva in ~/.dokkan-farmer/cache/user_box.json)"
+    desc_scan_box: "Scanner OCR del Box Personale (legge le carte in-game, salva in ~/.dokkan-farmer/cache/user_box.json e log in ~/.dokkan-farmer/box_scan.log)"
     desc_enrich_box: "Arricchisce il JSON della box con categorie, abilità da leader e tag passivi da DokkanDB"
     desc_ai_run: "Loop autonomo AI Trial & Error contro boss Red/Blue Zone (con telemetria e retry)"
     desc_ai: "AI Team Builder & Tactical Advisor (Qwen 2.5 / DeepSeek-R1)"

@@ -203,7 +203,9 @@ def test_scenario_b_surgical_replacement():
         assert 1007 in decision.new_card_ids
 
         new_card = next(c for c in decision.team if c.id == 1007)
-        assert new_card.element == 0 or new_card.has_guard or new_card.damage_reduction_percent >= 60
+        assert (
+            new_card.element == 0 or new_card.has_guard or new_card.damage_reduction_percent >= 60
+        )
 
         is_cov, boost_pct, _ = new_card.is_covered_by_leader(c_lead)
         assert is_cov and boost_pct >= 170.0

@@ -81,13 +81,17 @@ def test_endgame_runner_3_run_lifecycle_and_step_b(tmp_path: Path):
     lead_spec = LeaderSkillSpec(
         base_boost_pct=170, extra_boost_pct=30, main_category_ids=[10], extra_category_ids=[20]
     )
-    c1 = make_card(101, "LR AGL Lead", element=0, leader_spec=lead_spec, slot1_viable=True, dr_pct=50)
+    c1 = make_card(
+        101, "LR AGL Lead", element=0, leader_spec=lead_spec, slot1_viable=True, dr_pct=50
+    )
     c2 = make_card(102, "LR TEQ Tank", element=1, slot1_viable=True, has_guard=True, dr_pct=40)
     c3 = make_card(103, "UR PHY DPS", element=4, dr_pct=20)
     c4 = make_card(104, "UR INT Sup", element=2, dr_pct=30)
     c5 = make_card(105, "UR STR Floater", element=3, dr_pct=0)
     c6 = make_card(106, "UR AGL Fill", element=0, dr_pct=20)
-    c7_sub = make_card(107, "LR STR Shield Sub", element=3, slot1_viable=True, has_guard=True, dr_pct=60)
+    c7_sub = make_card(
+        107, "LR STR Shield Sub", element=3, slot1_viable=True, has_guard=True, dr_pct=60
+    )
     c8_sub = make_card(108, "UR TEQ Assist Sub", element=1, dr_pct=40)
 
     cards = [c1, c2, c3, c4, c5, c6, c7_sub, c8_sub]

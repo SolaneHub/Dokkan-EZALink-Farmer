@@ -1211,6 +1211,66 @@ class DokkanDBClient:
         if passive:
             enriched["passive_skill"] = passive
 
+        # Transformations & forms (standby, active skill, transforms)
+        if "transformations" not in enriched:
+            trans_list: list[dict[str, Any]] = []
+            trans_data = card_data.get("transformation_data")
+            if isinstance(trans_data, list) and trans_data:
+                for idx, trans in enumerate(trans_data, start=1):
+                    if isinstance(trans, dict):
+                        trans_list.append(
+                            {
+                                "form_id": int(trans.get("id") or 0),
+                                "form_index": idx,
+                                "form_name": str(trans.get("name") or f"Transform_{idx}"),
+                                "element": int(trans.get("element") or card_data.get("element", 0)),
+                                "links": [
+                                    str(trans.get(f"link_skill_name_{i}"))
+                                    for i in range(1, 8)
+                                    if trans.get(f"link_skill_name_{i}")
+                                ],
+                                "link_ids": [
+                                    int(lid)
+                                    for lid in (trans.get("link_ids") or [])
+                                    if lid is not None
+                                ],
+                                "passive_skill_text": trans.get("passive_skill_description") or "",
+                                "super_attack_text": " | ".join(
+                                    str(s) for s in (trans.get("special_descriptions") or []) if s
+                                ),
+                                "min_turn": int(trans.get("min_turn", idx + 2)),
+                            }
+                        )
+            elif card_data.get("transformation_names") or card_data.get("transformation_ids"):
+                t_names = card_data.get("transformation_names") or []
+                t_ids = card_data.get("transformation_ids") or []
+                t_elems = card_data.get("transformation_elements") or []
+                count = max(len(t_names), len(t_ids))
+                for idx in range(count):
+                    tid = int(t_ids[idx]) if idx < len(t_ids) else 0
+                    tname = str(t_names[idx]) if idx < len(t_names) else f"Transform_{idx + 1}"
+                    telem = (
+                        int(t_elems[idx])
+                        if idx < len(t_elems)
+                        else int(card_data.get("element", 0))
+                    )
+                    trans_list.append(
+                        {
+                            "form_id": tid,
+                            "form_index": idx + 1,
+                            "form_name": tname,
+                            "element": telem,
+                            "min_turn": idx + 3,
+                        }
+                    )
+            elif isinstance(card_data.get("transformations"), list):
+                trans_list = [
+                    t if isinstance(t, dict) else t.to_dict() for t in card_data["transformations"]
+                ]
+
+            if trans_list:
+                enriched["transformations"] = trans_list
+
         return enriched
 
     def enrich_box(

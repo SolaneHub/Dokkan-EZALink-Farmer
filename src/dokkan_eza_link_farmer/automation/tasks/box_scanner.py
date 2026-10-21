@@ -21,10 +21,9 @@ from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 logger = logging.getLogger(__name__)
 
 CANONICAL_BOX_PATH = "config/box.json"
-CACHE_BOX_PATH = os.path.join(
-    os.path.expanduser("~"), ".dokkan-farmer", "cache", "user_box.json"
-)
+CACHE_BOX_PATH = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache", "user_box.json")
 DEFAULT_USER_BOX_PATH = CACHE_BOX_PATH
+DEFAULT_BOX_SCAN_LOG_PATH = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "box_scan.log")
 
 
 def resolve_box_path(preferred_path: str | None = None) -> str:
@@ -136,6 +135,7 @@ class BoxScannerTask(BaseTask):
         on_run_complete: Callable[[int, int], None] | None = None,
         output_file: str | None = None,
         max_cards_to_scan: int | None = None,
+        log_file: str | None = DEFAULT_BOX_SCAN_LOG_PATH,
     ):
         super().__init__(adb, vision, config, on_status, on_run_complete)
         self.dokkandb = dokkandb or DokkanDBClient()
@@ -145,10 +145,10 @@ class BoxScannerTask(BaseTask):
         self.output_file = output_file if output_file is not None else DEFAULT_USER_BOX_PATH
         self.max_cards_to_scan = max_cards_to_scan
         self.pure_grid_mode = config.get("pure_grid_mode", False)
-        self.include_ssr = bool(
-            config.get("include_ssr", False)
-            or (max_cards_to_scan and max_cards_to_scan > 500)
-        )
+        self.include_ssr = bool(config.get("include_ssr", False))
+        self.log_file = log_file if log_file is not None else DEFAULT_BOX_SCAN_LOG_PATH
+        self._file_handler: logging.Handler | None = None
+        self._setup_file_logger()
         self._last_registered_card_id: int | None = None
 
         # Initialize OCR engine
@@ -171,6 +171,65 @@ class BoxScannerTask(BaseTask):
         # Owned cards map: {card_id: card_dict}
         self.scanned_cards: dict[int, dict[str, Any]] = {}
         self._load_existing_box()
+
+    def _setup_file_logger(self) -> None:
+        """Sets up a debug file handler saving all box scanner events to ~/.dokkan-farmer/box_scan.log."""
+        if not self.log_file:
+            return
+
+        try:
+            target_path = os.path.abspath(self.log_file)
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+
+            pkg_logger = logging.getLogger("dokkan_eza_link_farmer")
+
+            # Check if this exact handler is already attached
+            for h in pkg_logger.handlers:
+                if (
+                    isinstance(h, logging.FileHandler)
+                    and os.path.abspath(getattr(h, "baseFilename", "")) == target_path
+                ):
+                    self._file_handler = h
+                    return
+
+            handler = logging.FileHandler(target_path, mode="a", encoding="utf-8")
+            formatter = logging.Formatter(
+                "%(asctime)s [%(levelname)-7s] [%(name)s] %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+            handler.setFormatter(formatter)
+            handler.setLevel(logging.DEBUG)
+
+            pkg_logger.addHandler(handler)
+            if pkg_logger.level == logging.NOTSET or pkg_logger.level > logging.DEBUG:
+                pkg_logger.setLevel(logging.DEBUG)
+
+            self._file_handler = handler
+        except Exception as e:
+            logger.warning(
+                f"Could not initialize box scanner debug log file at {self.log_file}: {e}"
+            )
+
+    def _close_file_logger(self) -> None:
+        """Flushes and detaches file handler for box scan logging."""
+        if self._file_handler:
+            try:
+                pkg_logger = logging.getLogger("dokkan_eza_link_farmer")
+                self._file_handler.flush()
+                pkg_logger.removeHandler(self._file_handler)
+                self._file_handler.close()
+            except Exception:
+                pass
+            finally:
+                self._file_handler = None
+
+    def __del__(self) -> None:
+        self._close_file_logger()
+
+    def log(self, message: str) -> None:
+        """Emits a log message to the registered status callback and debug file logger."""
+        logger.info(message)
+        super().log(message)
 
     def _load_existing_box(self) -> None:
         """Loads previously scanned cards so scans are incremental and resumeable."""
@@ -229,35 +288,85 @@ class BoxScannerTask(BaseTask):
     def ensure_box_filters(self) -> bool:
         """
         Verifies that Character Box filters are set appropriately and sorted by Released.
-        If include_ssr is False, verifies UR + LR filters:
-        - assets/templates/glb/filters/btn_lr_selected.png
-        - assets/templates/glb/filters/btn_ur_selected.png
-        - assets/templates/glb/filters/tag_sort_released.png
-        If include_ssr is True (full box scan), verifies Sort by Released.
+        1. Checks Sort by Released on main grid.
+        2. Checks tag_filter_on.png on main grid.
+        3. If UR+LR filters are not confirmed active, opens filter popup, ensures UR and LR buttons
+           are selected (clicking unselected if needed), and confirms with button_ok.png.
         """
         if not self.vision:
             return True
 
         screen = self.adb.screencap()
+        size = self.adb.get_screen_size() if self.adb else (1080, 2400)
+        w, h = size if isinstance(size, (tuple, list)) and len(size) >= 2 else (1080, 2400)
+
         sort_ok = bool(
             self.vision.find_template(screen, "filters/tag_sort_released.png", threshold=0.75)
             or (hasattr(self.vision, "is_sort_released") and self.vision.is_sort_released(screen))
         )
-        if self.include_ssr:
-            self.log(f"Full box scan (SSR+UR+LR). In-game sort status: SortReleased={sort_ok}")
-            return sort_ok
-
-        lr_ok = bool(
-            self.vision.find_template(screen, "filters/btn_lr_selected.png", threshold=0.75)
-            or (hasattr(self.vision, "is_filter_lr_selected") and self.vision.is_filter_lr_selected(screen))
-        )
-        ur_ok = bool(
-            self.vision.find_template(screen, "filters/btn_ur_selected.png", threshold=0.75)
-            or (hasattr(self.vision, "is_filter_ur_selected") and self.vision.is_filter_ur_selected(screen))
+        filter_on = bool(
+            self.vision.find_template(screen, "filters/tag_filter_on.png", threshold=0.75)
         )
 
-        self.log(f"In-game box filters status: LR={lr_ok}, UR={ur_ok}, SortReleased={sort_ok}")
-        return lr_ok and ur_ok and sort_ok
+        if not filter_on:
+            self.log("Filters not active on grid. Opening filter popup to configure UR+LR...")
+            # Open filter popup: click filter button or tag_filter_on / fallback at (0.90 * w, 0.95 * h)
+            filter_btn_loc = self.vision.find_template(
+                screen, "filters/tag_filter_on.png", threshold=0.75
+            )
+            if filter_btn_loc:
+                self.adb.tap(filter_btn_loc[0], filter_btn_loc[1], delay_after=1.0)
+            else:
+                self.adb.tap(int(w * 0.90), int(h * 0.95), delay_after=1.0)
+
+            popup_screen = self.adb.screencap()
+
+            # Check UR filter
+            ur_selected = bool(
+                self.vision.find_template(
+                    popup_screen, "filters/btn_ur_selected.png", threshold=0.75
+                )
+            )
+            if not ur_selected:
+                ur_unsel_loc = self.vision.find_template(
+                    popup_screen, "filters/btn_ur_unselected.png", threshold=0.75
+                )
+                if ur_unsel_loc:
+                    self.adb.tap(ur_unsel_loc[0], ur_unsel_loc[1], delay_after=0.5)
+                else:
+                    self.adb.tap(int(w * 0.70), int(h * 0.638), delay_after=0.5)
+                popup_screen = self.adb.screencap()
+
+            # Check LR filter
+            lr_selected = bool(
+                self.vision.find_template(
+                    popup_screen, "filters/btn_lr_selected.png", threshold=0.75
+                )
+            )
+            if not lr_selected:
+                lr_unsel_loc = self.vision.find_template(
+                    popup_screen, "filters/btn_lr_unselected.png", threshold=0.75
+                )
+                if lr_unsel_loc:
+                    self.adb.tap(lr_unsel_loc[0], lr_unsel_loc[1], delay_after=0.5)
+                else:
+                    self.adb.tap(int(w * 0.84), int(h * 0.638), delay_after=0.5)
+                popup_screen = self.adb.screencap()
+
+            # Confirm and close popup
+            ok_loc = self.vision.find_template(
+                popup_screen, "buttons/button_ok.png", threshold=0.75
+            )
+            if ok_loc:
+                self.adb.tap(ok_loc[0], ok_loc[1], delay_after=1.0)
+            else:
+                self.adb.tap(int(w * 0.50), int(h * 0.85), delay_after=1.0)
+
+            self.log(f"In-game box filters configured. SortReleased={sort_ok}")
+            return True
+
+        self.log(f"In-game box filters status: FilterOn={filter_on}, SortReleased={sort_ok}")
+        return True
 
     def _init_catalog(self) -> None:
         """Loads and indexes DokkanDB cards catalog by subname and ID."""
@@ -301,7 +410,7 @@ class BoxScannerTask(BaseTask):
 
         char_json_path = os.path.join(self.dokkandb.cache_dir, "dokkan_characters.json")
         char_map: dict[int, dict[str, Any]] = {}
-        allowed_rarities = (3, 4, 5) if self.include_ssr else (4, 5)
+        allowed_rarities = (3, 4, 5)
 
         # 1. Index cards from DokkanDB catalog (and their awakening forms)
         for c in self._catalog:
@@ -341,7 +450,7 @@ class BoxScannerTask(BaseTask):
                         tid = c.get("thumbId")
                         if tid and int(tid) not in char_map:
                             rar = c.get("rarity")
-                            if rar in ("SSR", "UR", "LR") if self.include_ssr else rar in ("UR", "LR"):
+                            if rar in ("SSR", "UR", "LR"):
                                 char_map[int(tid)] = c
             except Exception as e:
                 logger.warning(f"Error reading dokkan_characters.json: {e}")
@@ -366,7 +475,7 @@ class BoxScannerTask(BaseTask):
         type_map = {"AGI": "AGL", "TEC": "TEQ", "INT": "INT", "PUI": "STR", "END": "PHY"}
         blacklisted_thumbs = {1002910, 1024090, 1002300}
 
-        valid_rarities = ("SSR", "UR", "LR") if self.include_ssr else ("UR", "LR")
+        valid_rarities = ("SSR", "UR", "LR")
 
         for f in thumb_files:
             fp = os.path.join(cache_dir, f)
@@ -457,15 +566,31 @@ class BoxScannerTask(BaseTask):
         """
         Matches a single grid slot crop, returning (best_candidate, best_score, delta).
         Delta is the confidence margin between candidate #1 and #2.
+        Crops central 65% to exclude rarity border and typing badge.
         """
         if not self._loaded_thumbs or crop is None or crop.size == 0:
             return None, 0.0, 0.0
+
+        # Crop central 65% to exclude rarity frame and type badge
+        ch, cw = crop.shape[:2]
+        pad_h = int(ch * 0.175)
+        pad_w = int(cw * 0.175)
+        eval_crop = crop[pad_h : ch - pad_h, pad_w : cw - pad_w]
+        if eval_crop.size == 0 or eval_crop.shape[0] < 20 or eval_crop.shape[1] < 20:
+            eval_crop = crop
 
         scores: list[tuple[float, dict[str, Any]]] = []
 
         # Pass 1: Fast correlation over centered face patches
         for t in self._loaded_thumbs:
-            res = cv2.matchTemplate(crop, t["face_patch"], cv2.TM_CCOEFF_NORMED)
+            patch = t["face_patch"]
+            # Ensure patch fits inside eval_crop
+            target = (
+                eval_crop
+                if eval_crop.shape[0] >= patch.shape[0] and eval_crop.shape[1] >= patch.shape[1]
+                else crop
+            )
+            res = cv2.matchTemplate(target, patch, cv2.TM_CCOEFF_NORMED)
             score = float(cv2.minMaxLoc(res)[1])
             if score >= 0.25:
                 scores.append((score, t))
@@ -484,21 +609,18 @@ class BoxScannerTask(BaseTask):
 
         # Pass 2: High-accuracy masked correlation for shiny / holo LR cards or ambiguous matches
         eval_set: dict[int, dict[str, Any]] = {t["thumb_id"]: t for _, t in scores[:35]}
-        ch, cw = crop.shape[:2]
+        ech, ecw = eval_crop.shape[:2]
         masked_scores: list[tuple[float, dict[str, Any]]] = []
 
         for t in eval_set.values():
             mbgr = t.get("masked_bgr")
             mmask = t.get("masked_mask")
-            if (
-                mbgr is not None
-                and mmask is not None
-                and mbgr.shape[0] <= ch
-                and mbgr.shape[1] <= cw
-            ):
-                res = cv2.matchTemplate(crop, mbgr, cv2.TM_CCORR_NORMED, mask=mmask)
-                ms = float(cv2.minMaxLoc(res)[1])
-                masked_scores.append((ms, t))
+            if mbgr is not None and mmask is not None:
+                target = eval_crop if mbgr.shape[0] <= ech and mbgr.shape[1] <= ecw else crop
+                if mbgr.shape[0] <= target.shape[0] and mbgr.shape[1] <= target.shape[1]:
+                    res = cv2.matchTemplate(target, mbgr, cv2.TM_CCORR_NORMED, mask=mmask)
+                    ms = float(cv2.minMaxLoc(res)[1])
+                    masked_scores.append((ms, t))
 
         if masked_scores:
             masked_scores.sort(key=lambda x: x[0], reverse=True)
@@ -508,18 +630,32 @@ class BoxScannerTask(BaseTask):
                 second_ms = masked_scores[1][0] if len(masked_scores) > 1 else 0.0
                 delta = best_s - second_ms
 
+        if best_s < 0.75 and delta < 0.06:
+            return None, best_s, delta
+
         return best_cand, best_s, delta
 
-    def _get_second_candidate(
-        self, crop: np.ndarray
-    ) -> tuple[dict[str, Any] | None, float]:
+    def _get_second_candidate(self, crop: np.ndarray) -> tuple[dict[str, Any] | None, float]:
         """Returns the second best thumbnail match candidate and its score for anti-collision evaluation."""
         if not self._loaded_thumbs or crop is None or crop.size == 0:
             return None, 0.0
 
+        ch, cw = crop.shape[:2]
+        pad_h = int(ch * 0.175)
+        pad_w = int(cw * 0.175)
+        eval_crop = crop[pad_h : ch - pad_h, pad_w : cw - pad_w]
+        if eval_crop.size == 0 or eval_crop.shape[0] < 20 or eval_crop.shape[1] < 20:
+            eval_crop = crop
+
         scores: list[tuple[float, dict[str, Any]]] = []
         for t in self._loaded_thumbs:
-            res = cv2.matchTemplate(crop, t["face_patch"], cv2.TM_CCOEFF_NORMED)
+            patch = t["face_patch"]
+            target = (
+                eval_crop
+                if eval_crop.shape[0] >= patch.shape[0] and eval_crop.shape[1] >= patch.shape[1]
+                else crop
+            )
+            res = cv2.matchTemplate(target, patch, cv2.TM_CCOEFF_NORMED)
             score = float(cv2.minMaxLoc(res)[1])
             if score >= 0.25:
                 scores.append((score, t))
@@ -579,7 +715,14 @@ class BoxScannerTask(BaseTask):
         if not recognized_text:
             return None
 
-        norm_query = _normalize_title(recognized_text)
+        clean_text = re.sub(
+            r"^(?:growth|owth|wth|vth|uth|nth|rth|th)\b[\s\-\.$$\|]*",
+            "",
+            recognized_text,
+            flags=re.IGNORECASE,
+        ).strip()
+
+        norm_query = _normalize_title(clean_text)
         if len(norm_query) < 3:
             return None
 
@@ -614,6 +757,10 @@ class BoxScannerTask(BaseTask):
 
         # Dokkan vertical banner has letters rotated 90 deg counter-clockwise
         rot = cv2.rotate(crop, cv2.ROTATE_90_CLOCKWISE)
+
+        # Crop out the first 28% width of rot to exclude the Growth button
+        if rot.shape[1] > 0:
+            rot = rot[:, int(rot.shape[1] * 0.28) :]
 
         try:
             results, _ = self._ocr(rot)
@@ -715,58 +862,45 @@ class BoxScannerTask(BaseTask):
     def _track_vertical_shift(
         self, prev_img: np.ndarray, curr_img: np.ndarray, last_cy: float
     ) -> float | None:
-        """Calculates exact pixel shift between consecutive screens using multi-patch visual tracking."""
-        w, h = prev_img.shape[1], prev_img.shape[0]
-        col_xs = [int(w * r) for r in self.COL_RATIOS]
-        ROW_PITCH = 253.0
+        """Calculates exact pixel shift between consecutive screens using horizontal strip matching."""
+        if prev_img is None or curr_img is None:
+            return None
+        h, w = prev_img.shape[:2]
+        if curr_img.shape[:2] != (h, w) or h == 0 or w == 0:
+            return None
 
-        anchor_candidates = [last_cy]
-        for offset in [-2, -1, 1, 2]:
-            cand = last_cy + offset * ROW_PITCH
-            if 550.0 <= cand <= 1650.0:
-                anchor_candidates.append(cand)
-        for base_y in [858.0, 1111.0, 1364.0]:
-            if not any(abs(base_y - a) < 40 for a in anchor_candidates):
-                anchor_candidates.append(base_y)
+        roi_y_start = int(h * 0.18)
+        roi_y_end = int(h * 0.75)
+        if roi_y_end <= roi_y_start:
+            return None
+        curr_img_roi = curr_img[roi_y_start:roi_y_end, :]
 
-        for anchor_cy in anchor_candidates:
-            shifts: list[float] = []
-            for c_idx in [1, 2, 3, 0, 4]:
-                cx = col_xs[c_idx]
-                y1 = max(0, int(anchor_cy - 40))
-                y2 = min(h, int(anchor_cy + 40))
-                x1 = max(0, cx - 40)
-                x2 = min(w, cx + 40)
-                patch = prev_img[y1:y2, x1:x2]
-                if patch.shape[0] < 50 or patch.shape[1] < 50:
-                    continue
+        # Primary attempt: Row 3 (strip_cy = 1111) or Row 4 (strip_cy = 1363). Fallback: Row 2 (strip_cy = 858).
+        strip_candidates = [1111.0, 1363.0, 858.0]
+        # If last_cy is valid and not already close to candidates, consider it as well
+        if 550.0 <= last_cy <= 1650.0 and not any(abs(last_cy - c) < 40 for c in strip_candidates):
+            strip_candidates.insert(0, last_cy)
 
-                res = cv2.matchTemplate(curr_img, patch, cv2.TM_CCOEFF_NORMED)
-                _, max_v, _, max_l = cv2.minMaxLoc(res)
-                if max_v >= 0.68:
-                    new_cy = max_l[1] + (patch.shape[0] // 2)
-                    shifts.append(anchor_cy - new_cy)
+        for strip_cy in strip_candidates:
+            y1 = max(0, int(strip_cy - 40))
+            y2 = min(h, int(strip_cy + 40))
+            x1 = int(w * 0.10)
+            x2 = int(w * 0.90)
+            strip = prev_img[y1:y2, x1:x2]
 
-            if len(shifts) >= 2:
-                shifts.sort()
-                diffs = [abs(shifts[i + 1] - shifts[i]) for i in range(len(shifts) - 1)]
-                if min(diffs) <= 10.0:
-                    return float(np.median(shifts))
-            elif len(shifts) == 1 and shifts[0] > 50.0:
-                return float(shifts[0])
+            if strip.shape[0] < 20 or strip.shape[1] < 50:
+                continue
+            if curr_img_roi.shape[0] < strip.shape[0] or curr_img_roi.shape[1] < strip.shape[1]:
+                continue
 
-        # Fallback: Horizontal row strip across central rows
-        for sy in [858, 1111, 1364, int(last_cy)]:
-            if 550 <= sy <= 1650:
-                sy1 = max(0, int(sy - 45))
-                sy2 = min(h, int(sy + 45))
-                strip = prev_img[sy1:sy2, int(w * 0.15) : int(w * 0.85)]
-                if strip.size > 0:
-                    res = cv2.matchTemplate(curr_img, strip, cv2.TM_CCOEFF_NORMED)
-                    _, max_v, _, max_l = cv2.minMaxLoc(res)
-                    if max_v >= 0.70:
-                        new_cy = max_l[1] + (strip.shape[0] // 2)
-                        return float(sy - new_cy)
+            res = cv2.matchTemplate(curr_img_roi, strip, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+
+            if max_val >= 0.68:
+                new_strip_cy = (roi_y_start + max_loc[1]) + (strip.shape[0] // 2)
+                shift = strip_cy - new_strip_cy
+                if shift > 30.0:
+                    return float(shift)
 
         return None
 
@@ -789,13 +923,19 @@ class BoxScannerTask(BaseTask):
             csub = cat_card.get("subname") or ""
             rarity = cat_card.get("rarity") or cand.get("rarity", 4)
             elem = cat_card.get("element") or cand.get("element")
-
-            is_eza = bool(
-                cand.get("has_eza")
-                or cat_card.get("has_eza")
+            has_eza_data = bool(
+                cat_card.get("eza_leader_skill")
+                or cat_card.get("passive_skills_rows_eza")
                 or cat_card.get("eza_leader_skill_set_id")
+                or cand.get("has_eza")
             )
-            is_seza = bool(cat_card.get("eza_leader_skill_set_id_pre"))
+            has_seza_data = bool(
+                cat_card.get("eza_passive_skill_description_pre")
+                or cat_card.get("passive_skills_rows_eza_pre")
+                or cat_card.get("eza_leader_skill_set_id_pre")
+            )
+            is_seza = has_seza_data
+            is_eza = has_eza_data or is_seza
             pot_pct = 100 if is_rainbow else 0
 
             # Check if this card was already scanned at nearly the same position (overlap re-scan)
@@ -804,9 +944,11 @@ class BoxScannerTask(BaseTask):
             prev_pos = self._recently_scanned_positions.get(cid)
             if prev_pos is not None:
                 if isinstance(prev_pos, (tuple, list)) and len(prev_pos) >= 2:
-                    p_cy, p_cx = prev_pos[0], prev_pos[1]
+                    p_cy, p_cx = float(prev_pos[0]), float(prev_pos[1])
+                elif isinstance(prev_pos, (int, float)):
+                    p_cy, p_cx = float(prev_pos), float(cx)
                 else:
-                    p_cy, p_cx = prev_pos, cx
+                    p_cy, p_cx = float(cy), float(cx)
                 if abs(p_cx - cx) < 60.0 and abs(p_cy - cy) < 180.0:
                     self._recently_scanned_positions[cid] = (cy, cx)
                     return True
@@ -836,9 +978,11 @@ class BoxScannerTask(BaseTask):
                     f"[{cid}] {cname} - '{csub}' ({rarity_str} {star_str}) [p:{swipe_page}, s:{grid_slot}]"
                 )
             else:
-                # Mandatory Adjacency validation for DUPE increment
+                from_ocr = bool(cand.get("from_ocr"))
+                # Mandatory Adjacency validation for DUPE increment (unless verified via OCR)
                 if (
-                    self._last_registered_card_id is not None
+                    not from_ocr
+                    and self._last_registered_card_id is not None
                     and self._last_registered_card_id != cid
                 ):
                     self.log(
@@ -915,6 +1059,7 @@ class BoxScannerTask(BaseTask):
                 max(0, cx - half_w) : min(w, cx + half_w),
             ]
             cand, score, delta = self._match_slot_thumbnail_with_delta(crop)
+            ocr_executed_for_slot = False
 
             # Check if this card was already scanned at nearly the same position (overlap re-scan)
             prev_pos = getattr(self, "_recently_scanned_positions", {}).get(
@@ -923,9 +1068,11 @@ class BoxScannerTask(BaseTask):
             is_overlap_rescan = False
             if prev_pos is not None:
                 if isinstance(prev_pos, (tuple, list)) and len(prev_pos) >= 2:
-                    p_cy, p_cx = prev_pos[0], prev_pos[1]
+                    p_cy, p_cx = float(prev_pos[0]), float(prev_pos[1])
+                elif isinstance(prev_pos, (int, float)):
+                    p_cy, p_cx = float(prev_pos), float(cx)
                 else:
-                    p_cy, p_cx = prev_pos, cx
+                    p_cy, p_cx = float(final_cy), float(cx)
                 is_overlap_rescan = abs(p_cx - cx) < 60.0 and abs(p_cy - final_cy) < 180.0
 
             # Requirement 2.1: Anti-Collision Rule on [DUPE] (Mandatory Adjacency)
@@ -957,9 +1104,12 @@ class BoxScannerTask(BaseTask):
                         cand = cand2
                         score = s2
                     elif not self.pure_grid_mode:
+                        ocr_executed_for_slot = True
+                        delta = 1.0
                         fallback_cand = self._execute_ocr_fallback(cx, int(final_cy))
                         if fallback_cand:
                             cand = fallback_cand
+                            cand["from_ocr"] = True
                             score = 1.0
                         else:
                             cand = None
@@ -969,10 +1119,16 @@ class BoxScannerTask(BaseTask):
                         score = 0.0
 
             # Fallback OCR triggered when confidence < 0.72 or delta margin < 0.05
-            if (cand is None or score < 0.72 or delta < 0.05) and not self.pure_grid_mode and score > 0.0:
+            if (
+                (cand is None or score < 0.72 or delta < 0.05)
+                and not self.pure_grid_mode
+                and not ocr_executed_for_slot
+                and score > 0.0
+            ):
                 fallback_cand = self._execute_ocr_fallback(cx, int(final_cy))
                 if fallback_cand:
                     cand = fallback_cand
+                    cand["from_ocr"] = True
                     score = 1.0
 
             # Synchronize last registered card id per slot so subsequent slots in row know adjacency
@@ -987,189 +1143,241 @@ class BoxScannerTask(BaseTask):
 
     def run(self) -> None:
         """Main automated scanning loop with visual tracking, filter verification, and position logging."""
-        self.is_running = True
-        self.log(
-            "🚀 Starting Autonomous Character Box Scanner (Visual Shift & Position Tracking)..."
+        self._setup_file_logger()
+        start_time = datetime.now(timezone.utc)
+        logger.info("=" * 70)
+        logger.info(
+            f"=== Dokkan Box Scanner Session Started: {start_time.strftime('%Y-%m-%d %H:%M:%S UTC')} ==="
         )
+        logger.info(f"Log destination: {self.log_file}")
+        logger.info(f"Box output target: {self.output_file}")
+        logger.info(
+            f"Max cards to scan: {self.max_cards_to_scan if self.max_cards_to_scan else 'unlimited'}"
+        )
+        logger.info(f"Include SSR: {self.include_ssr}, Pure Grid Mode: {self.pure_grid_mode}")
+        logger.info("=" * 70)
 
-        self._init_catalog()
-        self._init_thumbnails()
-
-        # Check and ensure filters: UR + LR, Sort: Released
-        self.ensure_box_filters()
-
-        w, h = self.adb.get_screen_size()
-        self.log(f"Device resolution: {w}x{h}. Initializing grid scanning...")
-
-        initial_screen = self.adb.screencap()
-        if self._is_card_details_screen(initial_screen):
-            self.log("Detected open card detail view. Returning to grid...")
-            self.adb.tap(
-                int(w * self.BACK_BUTTON_RATIO[0]),
-                int(h * self.BACK_BUTTON_RATIO[1]),
-                delay_after=1.0,
+        self.is_running = True
+        try:
+            self.log(
+                "🚀 Starting Autonomous Character Box Scanner (Visual Shift & Position Tracking)..."
             )
 
-        self.scroll_to_top()
+            self._init_catalog()
+            self._init_thumbnails()
 
-        if not hasattr(self, "scanned_cards") or self.scanned_cards is None:
-            self.scanned_cards = {}
-        self._recently_scanned_positions = {}
-        self._last_registered_card_id = None
-        ROW_PITCH = 253.0
-        half_w = int(w * 0.088)  # 95px
-        half_h = 125
-        col_xs = [int(w * r) for r in self.COL_RATIOS]
-        max_visible_y = 1680.0
+            # Check and ensure filters: UR + LR, Sort: Released
+            self.ensure_box_filters()
 
-        curr_grid = self.adb.screencap()
+            w, h = self.adb.get_screen_size()
+            self.log(f"Device resolution: {w}x{h}. Initializing grid scanning...")
 
-        # Step 0: Scan all 5 rows of top screen (swipe_page = 0)
-        top_row_ys = [int(h * r) for r in self.ROW_RATIOS]
-        self.log(f"Scanning initial top screen (5 rows at y={top_row_ys})...")
-
-        last_scanned_cy = float(top_row_ys[-1])
-        for r_idx, cy in enumerate(top_row_ys):
-            aligned_cy, row_results = self._match_row_with_alignment(
-                curr_grid, cy, col_xs, half_w, half_h
-            )
-            for cand, score, crop, cx, c_idx in row_results:
-                grid_slot = r_idx * 5 + c_idx
-                self._register_card(
-                    cand, score, crop, aligned_cy, cx, swipe_page=0, grid_slot=grid_slot
-                )
-            last_scanned_cy = float(aligned_cy)
-
-        # Requirement 2.3: 3-row slow anti-inertia swipe with 2 rows guaranteed overlap
-        SWIPE_ROWS = 3
-        SWIPE_DELTA_Y = int(SWIPE_ROWS * ROW_PITCH)  # ~759px
-        start_y = int(h * 0.65)
-        end_y = start_y - SWIPE_DELTA_Y
-
-        consecutive_stationary_swipes = 0
-        swipe_count = 0
-
-        while not self.is_stopped():
-            swipe_count += 1
-
-            total_instances = sum(int(c.get("copies", 1)) for c in self.scanned_cards.values())
-            if self.max_cards_to_scan and total_instances >= self.max_cards_to_scan:
-                self.log(f"Reached target scan limit of {self.max_cards_to_scan} cards.")
-                break
-
-            pre_swipe = curr_grid
-            self.adb.swipe(
-                int(w * 0.50), start_y, int(w * 0.50), end_y, duration_ms=800, delay_after=1.0
-            )
-
-            next_grid = self.adb.screencap()
-            if self._is_card_details_screen(next_grid):
+            initial_screen = self.adb.screencap()
+            if self._is_card_details_screen(initial_screen):
+                self.log("Detected open card detail view. Returning to grid...")
                 self.adb.tap(
                     int(w * self.BACK_BUTTON_RATIO[0]),
                     int(h * self.BACK_BUTTON_RATIO[1]),
-                    delay_after=0.5,
+                    delay_after=1.0,
                 )
-                next_grid = self.adb.screencap()
 
-            # Requirement 2.2: Fine-scroll termination based strictly on direct pixel diff.
-            # Never stop for '0 new IDs' (screen could contain only duplicates or re-scanned rows).
-            screen_diff = self._compute_screen_diff(pre_swipe, next_grid)
-            logger.debug(f"Swipe #{swipe_count}: pixel diff = {screen_diff:.2f}")
+            self.scroll_to_top()
 
-            if screen_diff < 3.0:
-                consecutive_stationary_swipes += 1
-                self.log(
-                    f"No vertical scroll detected via pixel diff ({screen_diff:.2f} < 3.0, "
-                    f"{consecutive_stationary_swipes}/2 stationary swipes)..."
+            if not hasattr(self, "scanned_cards") or self.scanned_cards is None:
+                self.scanned_cards = {}
+            self._recently_scanned_positions = {}
+            self._last_registered_card_id = None
+            ROW_PITCH = 253.0
+            half_w = int(w * 0.088)  # 95px
+            half_h = 125
+            col_xs = [int(w * r) for r in self.COL_RATIOS]
+            max_visible_y = 1680.0
+
+            curr_grid = self.adb.screencap()
+
+            # Step 0: Scan all 5 rows of top screen (swipe_page = 0)
+            top_row_ys = [int(h * r) for r in self.ROW_RATIOS]
+            self.log(f"Scanning initial top screen (5 rows at y={top_row_ys})...")
+
+            last_scanned_cy = float(top_row_ys[-1])
+            for r_idx, cy in enumerate(top_row_ys):
+                aligned_cy, row_results = self._match_row_with_alignment(
+                    curr_grid, cy, col_xs, half_w, half_h
                 )
-                if consecutive_stationary_swipes >= 2:
-                    remaining_rows = []
-                    next_cy = last_scanned_cy + ROW_PITCH
-                    while next_cy <= max_visible_y:
-                        remaining_rows.append(next_cy)
-                        next_cy += ROW_PITCH
+                for cand, score, crop, cx, c_idx in row_results:
+                    grid_slot = r_idx * 5 + c_idx
+                    self._register_card(
+                        cand, score, crop, aligned_cy, cx, swipe_page=0, grid_slot=grid_slot
+                    )
+                last_scanned_cy = float(aligned_cy)
 
-                    if remaining_rows:
-                        self.log(f"Scanning final bottom rows: {[int(y) for y in remaining_rows]}")
-                        for r_offset, cy in enumerate(remaining_rows):
-                            aligned_cy, row_results = self._match_row_with_alignment(
-                                next_grid, cy, col_xs, half_w, half_h
-                            )
-                            for cand, score, crop, cx, c_idx in row_results:
-                                slot = (
-                                    (len(top_row_ys) - len(remaining_rows) + r_offset) % 5
-                                ) * 5 + c_idx
-                                self._register_card(
-                                    cand,
-                                    score,
-                                    crop,
-                                    aligned_cy,
-                                    cx,
-                                    swipe_page=swipe_count,
-                                    grid_slot=slot,
-                                )
+            # Requirement 2.3: 3-row slow anti-inertia swipe with 2 rows guaranteed overlap
+            SWIPE_ROWS = 3
+            SWIPE_DELTA_Y = int(SWIPE_ROWS * ROW_PITCH)  # ~759px
+            start_y = int(h * 0.65)
+            end_y = start_y - SWIPE_DELTA_Y
 
-                    self.log("✅ Reached bottom of Character List (pixel diff verified). Full Box scan completed!")
+            consecutive_stationary_swipes = 0
+            swipe_count = 0
+
+            while not self.is_stopped():
+                swipe_count += 1
+
+                total_instances = sum(int(c.get("copies", 1)) for c in self.scanned_cards.values())
+                if self.max_cards_to_scan and total_instances >= self.max_cards_to_scan:
+                    self.log(f"Reached target scan limit of {self.max_cards_to_scan} cards.")
                     break
 
-                curr_grid = next_grid
-                continue
-            else:
+                pre_swipe = curr_grid
+                self.adb.swipe(
+                    int(w * 0.50), start_y, int(w * 0.50), end_y, duration_ms=800, delay_after=1.0
+                )
+
+                next_grid = self.adb.screencap()
+                if self._is_card_details_screen(next_grid):
+                    self.adb.tap(
+                        int(w * self.BACK_BUTTON_RATIO[0]),
+                        int(h * self.BACK_BUTTON_RATIO[1]),
+                        delay_after=0.5,
+                    )
+                    next_grid = self.adb.screencap()
+
+                # Requirement 2.2: Fine-scroll termination based strictly on direct pixel diff.
+                # Never stop for '0 new IDs' (screen could contain only duplicates or re-scanned rows).
+                screen_diff = self._compute_screen_diff(pre_swipe, next_grid)
+                logger.debug(f"Swipe #{swipe_count}: pixel diff = {screen_diff:.2f}")
+
+                if screen_diff < 7.5:
+                    consecutive_stationary_swipes += 1
+                    self.log(
+                        f"No vertical scroll detected via pixel diff ({screen_diff:.2f} < 7.5, "
+                        f"{consecutive_stationary_swipes}/2 stationary swipes)..."
+                    )
+                    if consecutive_stationary_swipes >= 2:
+                        remaining_rows = []
+                        next_cy = last_scanned_cy + ROW_PITCH
+                        while next_cy <= max_visible_y:
+                            remaining_rows.append(next_cy)
+                            next_cy += ROW_PITCH
+
+                        if remaining_rows:
+                            self.log(
+                                f"Scanning final bottom rows: {[int(y) for y in remaining_rows]}"
+                            )
+                            for r_offset, cy in enumerate(remaining_rows):
+                                aligned_cy, row_results = self._match_row_with_alignment(
+                                    next_grid, cy, col_xs, half_w, half_h
+                                )
+                                for cand, score, crop, cx, c_idx in row_results:
+                                    slot = (
+                                        (len(top_row_ys) - len(remaining_rows) + r_offset) % 5
+                                    ) * 5 + c_idx
+                                    self._register_card(
+                                        cand,
+                                        score,
+                                        crop,
+                                        aligned_cy,
+                                        cx,
+                                        swipe_page=swipe_count,
+                                        grid_slot=slot,
+                                    )
+
+                        self.log(
+                            "✅ Reached bottom of Character List (pixel diff verified). Full Box scan completed!"
+                        )
+                        break
+
+                    curr_grid = next_grid
+                    continue
+                shift = self._track_vertical_shift(curr_grid, next_grid, last_scanned_cy)
+                if shift is None or shift < 50.0:
+                    if screen_diff < 12.0:
+                        self.log(
+                            f"Low motion detected (diff: {screen_diff:.2f}, shift: {shift}). Treating as bottom boundary."
+                        )
+                        consecutive_stationary_swipes += 1
+                        if consecutive_stationary_swipes >= 2:
+                            break
+                        curr_grid = next_grid
+                        continue
+                    shift = float(SWIPE_DELTA_Y)
+
                 consecutive_stationary_swipes = 0
 
-            shift = self._track_vertical_shift(curr_grid, next_grid, last_scanned_cy)
-            if shift is None or shift < 25.0:
-                shift = float(SWIPE_DELTA_Y)
+                new_anchor_cy = last_scanned_cy - shift
+                new_rows = []
+                k = 1
+                while True:
+                    next_cy = new_anchor_cy + k * ROW_PITCH
+                    if next_cy > max_visible_y:
+                        break
+                    if next_cy >= 550.0:
+                        new_rows.append(next_cy)
+                    k += 1
 
-            new_anchor_cy = last_scanned_cy - shift
-            new_rows = []
-            k = 1
-            while True:
-                next_cy = new_anchor_cy + k * ROW_PITCH
-                if next_cy > max_visible_y:
-                    break
-                if next_cy >= 550.0:
-                    new_rows.append(next_cy)
-                k += 1
+                self.log(
+                    f"Swipe #{swipe_count}: shift {shift:.0f}px ({(shift / ROW_PITCH):.2f} rows). "
+                    f"Scanning {len(new_rows)} newly revealed rows: {[int(y) for y in new_rows]}"
+                )
 
-            self.log(
-                f"Swipe #{swipe_count}: shift {shift:.0f}px ({(shift / ROW_PITCH):.2f} rows). "
-                f"Scanning {len(new_rows)} newly revealed rows: {[int(y) for y in new_rows]}"
-            )
-
-            if new_rows:
-                last_aligned = float(new_rows[-1])
-                for r_offset, cy in enumerate(new_rows):
-                    aligned_cy, row_results = self._match_row_with_alignment(
-                        next_grid, cy, col_xs, half_w, half_h
-                    )
-                    for cand, score, crop, cx, c_idx in row_results:
-                        slot = ((r_offset + 3) % 5) * 5 + c_idx
-                        self._register_card(
-                            cand,
-                            score,
-                            crop,
-                            aligned_cy,
-                            cx,
-                            swipe_page=swipe_count,
-                            grid_slot=slot,
+                if new_rows:
+                    last_aligned = float(new_rows[-1])
+                    for r_offset, cy in enumerate(new_rows):
+                        aligned_cy, row_results = self._match_row_with_alignment(
+                            next_grid, cy, col_xs, half_w, half_h
                         )
-                    last_aligned = float(aligned_cy)
-                last_scanned_cy = last_aligned
-            else:
-                last_scanned_cy = float(new_anchor_cy)
+                        for cand, score, crop, cx, c_idx in row_results:
+                            slot = ((r_offset + 3) % 5) * 5 + c_idx
+                            self._register_card(
+                                cand,
+                                score,
+                                crop,
+                                aligned_cy,
+                                cx,
+                                swipe_page=swipe_count,
+                                grid_slot=slot,
+                            )
+                        last_aligned = float(aligned_cy)
+                    last_scanned_cy = last_aligned
+                else:
+                    last_scanned_cy = float(new_anchor_cy)
 
-            curr_grid = next_grid
+                curr_grid = next_grid
 
-            if swipe_count % 3 == 0:
-                self._save_box(enrich=False)
+                if swipe_count % 3 == 0:
+                    self._save_box(enrich=False)
 
-        # Final DokkanDB enrichment with optimal linking partners
-        self.log("Enriching owned cards with DokkanDB links and optimal linking partners...")
-        self._save_box(enrich=True)
-        total_instances = sum(int(c.get("copies", 1)) for c in self.scanned_cards.values())
-        self.log(
-            f"✅ Box Scan Completed! Stored {total_instances} total cards ({len(self.scanned_cards)} unique) in '{self.output_file}'."
-        )
-        self.is_running = False
-
+            # Final DokkanDB enrichment with optimal linking partners
+            self.log("Enriching owned cards with DokkanDB links and optimal linking partners...")
+            self._save_box(enrich=True)
+            total_instances = sum(int(c.get("copies", 1)) for c in self.scanned_cards.values())
+            self.log(
+                f"✅ Box Scan Completed! Stored {total_instances} total cards ({len(self.scanned_cards)} unique) in '{self.output_file}'."
+            )
+        except Exception as exc:
+            logger.exception(f"Unhandled exception during box scanning: {exc}")
+            self.log(f"❌ Box scan interrupted by error: {exc}")
+            raise
+        finally:
+            end_time = datetime.now(timezone.utc)
+            duration = end_time - start_time
+            total_cards = (
+                sum(int(c.get("copies", 1)) for c in self.scanned_cards.values())
+                if hasattr(self, "scanned_cards") and self.scanned_cards
+                else 0
+            )
+            unique_cards = (
+                len(self.scanned_cards)
+                if hasattr(self, "scanned_cards") and self.scanned_cards
+                else 0
+            )
+            logger.info("=" * 70)
+            logger.info(
+                f"=== Dokkan Box Scanner Session Ended: {end_time.strftime('%Y-%m-%d %H:%M:%S UTC')} (Duration: {duration}) ==="
+            )
+            logger.info(
+                f"Final Count: {total_cards} total cards ({unique_cards} unique) in '{self.output_file}'"
+            )
+            logger.info("=" * 70)
+            self.is_running = False
+            self._close_file_logger()

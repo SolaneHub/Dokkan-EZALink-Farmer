@@ -804,9 +804,14 @@ class TerminalCLI:
         except Exception as e:
             self.console.print(f"[bold red]{t('cli.unexpected_error', error=str(e))}[/bold red]")
 
-    def handle_box_scan_interactive(self, args: list | None = None):
+    def handle_box_scan_interactive(self, args: list | None = None, log_file: str | None = None):
         """Interactive OCR Character Box Scanner to autonomously build config/box.json."""
         import questionary
+
+        from dokkan_eza_link_farmer.automation.tasks.box_scanner import (
+            DEFAULT_BOX_SCAN_LOG_PATH,
+            DEFAULT_USER_BOX_PATH,
+        )
 
         try:
             self.console.print("\n[bold cyan]📦 Autonomous Character Box Scanner (OCR)[/bold cyan]")
@@ -836,13 +841,22 @@ class TerminalCLI:
                     "[dim]New scans are incremental: existing cards will be preserved and updated.[/dim]\n"
                 )
 
-            # Parse optional max limit from args (e.g. scan-box 50)
+            # Parse optional max limit and log file from args (e.g. scan-box 50, scan-box --log-file custom.log)
             max_cards: int | None = None
+            custom_log: str | None = log_file
             if args:
-                for a in args:
-                    if str(a).isdigit():
+                skip_next = False
+                for idx, a in enumerate(args):
+                    if skip_next:
+                        skip_next = False
+                        continue
+                    if a in ("--log-file", "--log", "-lf") and idx + 1 < len(args):
+                        custom_log = args[idx + 1]
+                        skip_next = True
+                    elif a.startswith("--log-file="):
+                        custom_log = a.split("=", 1)[1]
+                    elif str(a).isdigit():
                         max_cards = int(a)
-                        break
 
             if max_cards is None:
                 choices = [
@@ -868,19 +882,20 @@ class TerminalCLI:
                 elif mode > 0:
                     max_cards = mode
 
+            target_log = custom_log if custom_log is not None else DEFAULT_BOX_SCAN_LOG_PATH
             limit_text = f"up to {max_cards} cards" if max_cards else "all cards"
             self.console.print(
                 f"[bold green]Starting autonomous box scanner ({limit_text})...[/bold green]"
             )
+            self.console.print(f"[dim]Debug log saved to: {target_log}[/dim]")
             self.console.print(
                 "[dim]Please ensure Dokkan Battle is showing the 'Character List' (Box) screen.[/dim]\n"
             )
 
-            from dokkan_eza_link_farmer.automation.tasks.box_scanner import DEFAULT_USER_BOX_PATH
-
             self.engine.start_box_scanner(
                 output_file=DEFAULT_USER_BOX_PATH,
                 max_cards_to_scan=max_cards,
+                log_file=target_log,
             )
 
         except (KeyboardInterrupt, EOFError):

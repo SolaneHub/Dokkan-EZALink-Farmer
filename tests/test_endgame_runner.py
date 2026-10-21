@@ -166,11 +166,13 @@ class TestEndgameRunnerFullLifecycle:
     def test_endgame_runner_3_run_lifecycle(self, test_box_and_stage):
         _cards, stage, box_path, memory_path = test_box_and_stage
 
-        # Track formation calls
+        # Track formation calls and target_slot kwargs
         formation_calls: list[list[int]] = []
+        formation_slots: list[int | None] = []
 
-        def mock_formation(team_cards, **_kwargs):
+        def mock_formation(team_cards, target_slot=None, **_kwargs):
             formation_calls.append([c.id for c in team_cards])
+            formation_slots.append(target_slot)
             return True
 
         recorded_culprit_id: list[int] = []
@@ -297,9 +299,10 @@ class TestEndgameRunnerFullLifecycle:
         assert "Final Phase Boss HP < 20%" in decision_run2.reason
 
         # 4. Verification of Step B In-Game Team Formation Optimization
-        # Formation was applied in Run 1 (initial team) and Run 2 (surgically replaced),
+        # Formation was applied in Run 1 (initial team, target_slot=None) and Run 2 (surgically replaced slot 5),
         # but NOT in Run 3 (Instant Retry kept identical team)
         assert len(formation_calls) == 2
+        assert formation_slots == [None, 5]
 
         # 5. Verification of ai_memory.json persistence
         assert memory_path.exists()

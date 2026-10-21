@@ -44,12 +44,12 @@ DECK_SLOT_Y_RATIO = 0.21
 # Filter modal relative positions on 1080x2400
 ELEMENT_X_RATIOS = {
     "AGL": 0.155,
-    "TEQ": 0.328,
-    "INT": 0.500,
-    "STR": 0.672,
-    "PHY": 0.845,
+    "TEQ": 0.325,
+    "INT": 0.495,
+    "STR": 0.670,
+    "PHY": 0.840,
 }
-ELEMENT_Y_RATIO = 0.455
+ELEMENT_Y_RATIO = 0.565
 
 CLASS_X_RATIOS = {
     "Super": 0.35,
@@ -80,9 +80,7 @@ def open_filter_menu(adb: ADBClient, vision: Vision, w: int, h: int) -> bool:
         return True
 
     is_open = (
-        vision.is_filter_dialog_open(screen)
-        if hasattr(vision, "is_filter_dialog_open")
-        else False
+        vision.is_filter_dialog_open(screen) if hasattr(vision, "is_filter_dialog_open") else False
     )
     if is_open is True:
         return True
@@ -249,9 +247,7 @@ def apply_surgical_filter(
     adb.tap(class_x, class_y, delay_after=0.4)
 
     # 6. Confirm OK
-    ok_match = (
-        vision.find_ok_button(curr_screen) if hasattr(vision, "find_ok_button") else None
-    )
+    ok_match = vision.find_ok_button(curr_screen) if hasattr(vision, "find_ok_button") else None
     if isinstance(ok_match, (tuple, list)) and len(ok_match) >= 2:
         adb.tap(int(ok_match[0]), int(ok_match[1]), delay_after=1.0)
     else:
@@ -293,7 +289,8 @@ def find_card_on_screen(
     vision: Vision,
     card: DokkanCard,
     thumbs_dir: str | None = None,
-    max_swipes: int = 3,
+    max_swipes: int = 2,
+    threshold: float = 0.70,
 ) -> tuple[int, int] | None:
     """Visual match on live screen: matches card_{thumb_id}_thumb.png via cv2.matchTemplate.
 
@@ -330,7 +327,11 @@ def find_card_on_screen(
         template = _prepare_thumb_template(thumb_path)
 
     def _match_in_screen(screen_img: np.ndarray | None) -> tuple[int, int] | None:
-        if template is None or screen_img is None or (isinstance(screen_img, np.ndarray) and screen_img.size == 0):
+        if (
+            template is None
+            or screen_img is None
+            or (isinstance(screen_img, np.ndarray) and screen_img.size == 0)
+        ):
             return None
         sh, sw = screen_img.shape[:2]
         # Restrict matching to character grid area (Y: 28% to 78%)
@@ -343,7 +344,7 @@ def find_card_on_screen(
 
         res = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, max_loc = cv2.minMaxLoc(res)
-        if max_val >= 0.55:
+        if max_val >= threshold:
             cx = max_loc[0] + tw // 2
             cy = y_min + max_loc[1] + th // 2
             return (cx, cy)
@@ -501,7 +502,11 @@ def apply_team_in_game(
             if isinstance(formation_btn, (tuple, list)) and len(formation_btn) >= 2:
                 adb.tap(int(formation_btn[0]), int(formation_btn[1]), delay_after=2.5)
             elif "edit_team_button" in meta and isinstance(meta["edit_team_button"], (tuple, list)):
-                adb.tap(int(meta["edit_team_button"][0]), int(meta["edit_team_button"][1]), delay_after=2.5)
+                adb.tap(
+                    int(meta["edit_team_button"][0]),
+                    int(meta["edit_team_button"][1]),
+                    delay_after=2.5,
+                )
             else:
                 adb.tap(int(w * 0.80), int(h * 0.49), delay_after=2.5)
 
@@ -543,9 +548,7 @@ def apply_team_in_game(
                 adb.tap(deck_x, deck_y, delay_after=1.0)
 
             card_to_equip = (
-                team_cards[resolved_slot - 1]
-                if len(team_cards) >= resolved_slot
-                else team_cards[0]
+                team_cards[resolved_slot - 1] if len(team_cards) >= resolved_slot else team_cards[0]
             )
             logger.info(
                 "[apply_team_in_game] Surgically equipping card %d (%s)...",
@@ -561,9 +564,7 @@ def apply_team_in_game(
 
         else:
             # --- FULL FORMATION FLOW ---
-            logger.info(
-                "[apply_team_in_game] Executing full formation. Clearing current deck..."
-            )
+            logger.info("[apply_team_in_game] Executing full formation. Clearing current deck...")
             deck_rm = (
                 meta.get("button_deck_remove_all")
                 or (
@@ -584,9 +585,7 @@ def apply_team_in_game(
             # Dismiss confirmation OK popup if present
             popup_screen = adb.screencap()
             ok_match = (
-                vision.find_ok_button(popup_screen)
-                if hasattr(vision, "find_ok_button")
-                else None
+                vision.find_ok_button(popup_screen) if hasattr(vision, "find_ok_button") else None
             )
             if isinstance(ok_match, (tuple, list)) and len(ok_match) >= 2:
                 adb.tap(int(ok_match[0]), int(ok_match[1]), delay_after=0.8)
