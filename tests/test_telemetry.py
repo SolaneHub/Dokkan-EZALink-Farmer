@@ -21,6 +21,15 @@ from pathlib import Path
 
 import pytest
 
+from dokkan_eza_link_farmer.ai.endgame.telemetry import (
+    CombatFrame,
+    CombatRingBuffer,
+    CulpritAttribution,
+    EpisodicMemory,
+    TurnSnapshot,
+    attribute_culprit,
+    create_failure_report,
+)
 from dokkan_eza_link_farmer.ai.models import (
     BossPhase,
     CardForm,
@@ -31,15 +40,6 @@ from dokkan_eza_link_farmer.ai.models import (
 )
 from dokkan_eza_link_farmer.ai.solver import (
     DokkanConstraintSolver,
-)
-from dokkan_eza_link_farmer.ai.telemetry import (
-    CombatFrame,
-    CombatRingBuffer,
-    CulpritAttribution,
-    EpisodicMemory,
-    TurnSnapshot,
-    attribute_culprit,
-    create_failure_report,
 )
 
 

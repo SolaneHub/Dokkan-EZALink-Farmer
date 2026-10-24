@@ -205,7 +205,7 @@ def main() -> None:
         return
 
     if getattr(args, "debug_telemetry", False):
-        from dokkan_eza_link_farmer.ai.telemetry import set_debug_telemetry
+        from dokkan_eza_link_farmer.ai.endgame.telemetry import set_debug_telemetry
 
         set_debug_telemetry(True)
 

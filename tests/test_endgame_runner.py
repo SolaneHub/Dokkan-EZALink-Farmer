@@ -15,10 +15,16 @@ from unittest.mock import patch
 import pytest
 
 from dokkan_eza_link_farmer.ai.boss_catalog import get_boss_stage, list_boss_stages
-from dokkan_eza_link_farmer.ai.endgame_runner import (
+from dokkan_eza_link_farmer.ai.endgame.runner import (
     EndgameResult,
     EndgameRunner,
     EndgameRunnerState,
+)
+from dokkan_eza_link_farmer.ai.endgame.telemetry import (
+    CombatFrame,
+    CombatTelemetryTracker,
+    EpisodicMemory,
+    TurnSnapshot,
 )
 from dokkan_eza_link_farmer.ai.models import (
     BossEnemy,
@@ -29,12 +35,6 @@ from dokkan_eza_link_farmer.ai.models import (
     LeaderSkillSpec,
     PassiveTags,
     SATags,
-)
-from dokkan_eza_link_farmer.ai.telemetry import (
-    CombatFrame,
-    CombatTelemetryTracker,
-    EpisodicMemory,
-    TurnSnapshot,
 )
 
 
@@ -275,7 +275,7 @@ class TestEndgameRunnerFullLifecycle:
         )
 
         with patch(
-            "dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game",
+            "dokkan_eza_link_farmer.ai.endgame.runner.apply_team_in_game",
             side_effect=mock_formation,
         ):
             result: EndgameResult = runner.run(stage)
@@ -383,7 +383,7 @@ class TestEndgameRunnerEdgeCases:
         )
 
         with patch(
-            "dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", return_value=True
+            "dokkan_eza_link_farmer.ai.endgame.runner.apply_team_in_game", return_value=True
         ):
             res = runner.run(stage)
 
@@ -433,7 +433,7 @@ class TestEndgameRunnerEdgeCases:
         )
 
         with patch(
-            "dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", return_value=True
+            "dokkan_eza_link_farmer.ai.endgame.runner.apply_team_in_game", return_value=True
         ):
             res = runner.run(broly_stage)
 
@@ -493,7 +493,7 @@ class TestEndgameRunnerEdgeCases:
         )
 
         with patch(
-            "dokkan_eza_link_farmer.ai.endgame_runner.apply_team_in_game", return_value=True
+            "dokkan_eza_link_farmer.ai.endgame.runner.apply_team_in_game", return_value=True
         ):
             res = runner.run(stage)
 
@@ -509,7 +509,7 @@ class TestEndgameRunnerEdgeCases:
         cards, stage, box_path, memory_path = test_box_and_stage
         engine = BotEngine()
 
-        with patch("dokkan_eza_link_farmer.ai.endgame_runner.EndgameRunner.run") as mock_runner_run:
+        with patch("dokkan_eza_link_farmer.ai.endgame.runner.EndgameRunner.run") as mock_runner_run:
             mock_runner_run.return_value = EndgameResult(
                 success=True,
                 attempts=1,
@@ -527,7 +527,7 @@ class TestEndgameRunnerEdgeCases:
         cards, stage, box_path, memory_path = test_box_and_stage
         engine = BotEngine()
 
-        with patch("dokkan_eza_link_farmer.ai.endgame_runner.EndgameRunner.run") as mock_runner_run:
+        with patch("dokkan_eza_link_farmer.ai.endgame.runner.EndgameRunner.run") as mock_runner_run:
             mock_runner_run.return_value = EndgameResult(
                 success=True,
                 attempts=1,

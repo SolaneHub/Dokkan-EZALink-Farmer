@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from dokkan_eza_link_farmer.ai.telemetry import (
+from dokkan_eza_link_farmer.ai.endgame.telemetry import (
     CombatRingBuffer,
     CombatTelemetryTracker,
     is_debug_telemetry_enabled,
@@ -45,7 +45,7 @@ class TestTelemetryFreezing:
     """Verifies that extended telemetry ring-buffer accumulation is disabled during standard farming."""
 
     def test_standard_farming_ring_buffer_frozen_by_default(self):
-        """In standard mode without --debug-telemetry, CombatTelemetryTracker skips ring_buffer frames."""
+        """In standard mode without --debug-telemetry, CombatTelemetryTracker skips non-lethal frames."""
         set_debug_telemetry(False)
         assert is_debug_telemetry_enabled() is False
 
@@ -61,28 +61,41 @@ class TestTelemetryFreezing:
         )
 
         assert frame is not None
-        # Since debug_telemetry is frozen, ring buffer remains empty to conserve memory
+        # Since debug_telemetry is frozen, non-lethal observation frame is skipped to conserve memory
         assert len(ring) == 0
 
-    def test_debug_telemetry_flag_enables_ring_buffer_accumulation(self):
-        """When --debug-telemetry is set or debug_telemetry=True, ring_buffer records frames."""
-        set_debug_telemetry(True)
-        assert is_debug_telemetry_enabled() is True
-
-        ring = CombatRingBuffer(capacity=4)
-        tracker = CombatTelemetryTracker(ring_buffer=ring)
-
-        frame = tracker.record_action(
+        # But lethal frames must always be recorded for post-defeat culprit attribution
+        lethal_frame = tracker.record_action(
             active_slot=2,
             target_card_id=102,
             incoming_damage=700000,
             player_hp_after=0.0,
             is_lethal=True,
         )
-
-        assert frame is not None
+        assert lethal_frame is not None
         assert len(ring) == 1
         assert ring.get_pre_ko_frames()[0].target_card_id == 102
 
-        # Reset flag
-        set_debug_telemetry(False)
+    def test_debug_telemetry_flag_enables_ring_buffer_accumulation(self):
+        """When --debug-telemetry is set or debug_telemetry=True, ring_buffer records non-lethal frames."""
+        try:
+            set_debug_telemetry(True)
+            assert is_debug_telemetry_enabled() is True
+
+            ring = CombatRingBuffer(capacity=4)
+            tracker = CombatTelemetryTracker(ring_buffer=ring)
+
+            # Non-lethal action must now be recorded because debug telemetry is enabled
+            frame = tracker.record_action(
+                active_slot=2,
+                target_card_id=102,
+                incoming_damage=700000,
+                player_hp_after=50.0,
+                is_lethal=False,
+            )
+
+            assert frame is not None
+            assert len(ring) == 1
+            assert ring.get_pre_ko_frames()[0].target_card_id == 102
+        finally:
+            set_debug_telemetry(False)

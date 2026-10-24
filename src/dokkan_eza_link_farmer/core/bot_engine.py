@@ -168,15 +168,6 @@ class BotEngine:
             self.emit_log(t("tasks.task_already_running"))
             return False
 
-        from dokkan_eza_link_farmer.ai.telemetry import (
-            is_debug_telemetry_enabled,
-            set_debug_telemetry,
-        )
-
-        # In standard farming runs, freeze high-memory extended telemetry unless explicitly enabled
-        if not is_debug_telemetry_enabled():
-            set_debug_telemetry(False)
-
         self.current_task = EZAFarmTask(
             self.adb,
             self.vision,
@@ -203,15 +194,6 @@ class BotEngine:
         if self.is_task_running():
             self.emit_log(t("tasks.task_already_running"))
             return False
-
-        from dokkan_eza_link_farmer.ai.telemetry import (
-            is_debug_telemetry_enabled,
-            set_debug_telemetry,
-        )
-
-        # In standard farming runs, freeze high-memory extended telemetry unless explicitly enabled
-        if not is_debug_telemetry_enabled():
-            set_debug_telemetry(False)
 
         self.current_task = LinkLevelFarmTask(
             self.adb,
@@ -241,15 +223,6 @@ class BotEngine:
         if self.is_task_running():
             self.emit_log(t("tasks.task_already_running"))
             return False
-
-        from dokkan_eza_link_farmer.ai.telemetry import (
-            is_debug_telemetry_enabled,
-            set_debug_telemetry,
-        )
-
-        # In standard farming runs, freeze high-memory extended telemetry unless explicitly enabled
-        if not is_debug_telemetry_enabled():
-            set_debug_telemetry(False)
 
         self.current_task = StageFarmTask(
             self.adb,
@@ -340,7 +313,7 @@ class BotEngine:
             return False
 
         from dokkan_eza_link_farmer.ai.boss_catalog import get_boss_stage
-        from dokkan_eza_link_farmer.ai.endgame_runner import EndgameRunner
+        from dokkan_eza_link_farmer.ai.endgame import EndgameRunner
         from dokkan_eza_link_farmer.ai.models import BossStage
 
         try:
@@ -394,6 +367,9 @@ class BotEngine:
         self._start_task_thread()
         return True
 
+    # Public contract alias for start_ai_endgame
+    start_ai_endgame_run = start_ai_endgame
+
     def run_ai_endgame_sync(
         self,
         stage_identifier: int | str | Any = 10101,
@@ -404,7 +380,7 @@ class BotEngine:
     ) -> Any:
         """Runs AI Endgame Trial & Error synchronously (for direct CLI execution)."""
         from dokkan_eza_link_farmer.ai.boss_catalog import get_boss_stage
-        from dokkan_eza_link_farmer.ai.endgame_runner import EndgameRunner
+        from dokkan_eza_link_farmer.ai.endgame import EndgameRunner
         from dokkan_eza_link_farmer.ai.models import BossStage
 
         target_stage = (
