@@ -646,6 +646,111 @@ class TestBossGimmickOverrides:
         assert delta_frail == -15.0
         assert any("Slot Lock Vulnerability" in p for p in pen_frail)
 
+    def test_solver_multi_battle_stacking_reset_penalty_and_turn1_bonus(
+        self, solver: DokkanConstraintSolver
+    ) -> None:
+        stage = BossStage(
+            stage_id=17280164,
+            event_id=1728,
+            stage_name="Pure Saiyans",
+            event_name="Union Master",
+            total_battles=3,
+            phases=[
+                BossPhase(
+                    phase_index=1, battle_index=1, round_index=1, is_new_battle=True, element=21
+                ),
+                BossPhase(
+                    phase_index=2, battle_index=2, round_index=1, is_new_battle=True, element=20
+                ),
+                BossPhase(
+                    phase_index=3, battle_index=3, round_index=1, is_new_battle=True, element=10
+                ),
+                BossPhase(
+                    phase_index=4, battle_index=3, round_index=2, is_new_battle=False, element=10
+                ),
+            ],
+        )
+
+        # Pure slow stacker without guard or DR
+        stacker_card = DokkanCard(
+            id=7001,
+            name="Fragile Slow Stacker",
+            element=1,  # TEQ
+            super_attack="Raises DEF and causes supreme damage",
+            passive_skill="ATK & DEF +100%",
+        )
+        assert stacker_card.has_stacking_def is True
+        assert stacker_card.has_guard is False
+        assert stacker_card.damage_reduction_percent == 0
+
+        delta_s, _, pen_s = solver.evaluate_boss_gimmicks(stacker_card, stage)
+        assert any("Stacking Reset Vulnerability" in p for p in pen_s)
+        assert delta_s <= -15.0
+
+        # Turn 1 Immediate Tank (Guard or 50% DR)
+        tank_card = DokkanCard(
+            id=7002,
+            name="Turn 1 Solid Tank",
+            element=1,  # TEQ
+            passive_skill="Guards all attacks; reduces damage received by 50%",
+        )
+        assert tank_card.has_guard is True
+        assert tank_card.damage_reduction_percent == 50
+
+        delta_t, count_t, _ = solver.evaluate_boss_gimmicks(tank_card, stage)
+        assert any("Multi-Battle Reliability" in c for c in count_t)
+        assert delta_t >= 15.0
+
+    def test_defensive_expiration_and_dodge_cancellation_awareness(
+        self, solver: DokkanConstraintSolver
+    ) -> None:
+        stage = BossStage(
+            stage_id=17280164,
+            event_id=1728,
+            stage_name="Pure Saiyans",
+            event_name="Union Master",
+            total_battles=3,
+            phases=[
+                BossPhase(
+                    phase_index=1, battle_index=1, round_index=1, is_new_battle=True, element=21
+                ),
+                BossPhase(
+                    phase_index=2, battle_index=2, round_index=1, is_new_battle=True, element=20
+                ),
+                BossPhase(
+                    phase_index=3, battle_index=3, round_index=1, is_new_battle=True, element=10
+                ),
+                BossPhase(
+                    phase_index=4,
+                    battle_index=3,
+                    round_index=2,
+                    is_new_battle=False,
+                    element=10,
+                    cancels_dodge=True,
+                ),
+            ],
+        )
+
+        # Unit with intro guard (6 turns) and high dodge (70%) but no permanent guard/DR
+        god_goku = DokkanCard(
+            id=1034461,
+            name="Super Saiyan God Goku",
+            element=4,  # PHY
+            passive_skill="Guards all attacks for 6 turns from start of turn; great chance of evading enemy attacks",
+            categories=["Pure Saiyans"],
+            category_ids=[17],
+        )
+
+        # 1. When evaluated against boss that cancels dodge in late phase:
+        # Dodge is neutralized, guard expires in multi-battle stage -> NOT Slot 1 viable!
+        assert solver.is_slot1_viable(god_goku, boss_stage=stage) is False
+
+        # 2. Solver evaluates severe glass cannon / guard expiration penalties
+        delta, _, penalties = solver.evaluate_boss_gimmicks(god_goku, stage)
+        assert delta < 0.0
+        assert any("Cancels Dodge" in p for p in penalties)
+        assert any("Guard Expiration" in p for p in penalties)
+
 
 class TestSameNameBaseFormPenalty:
     """Validates the mathematical same-name penalty for base form (form_index: 0)."""

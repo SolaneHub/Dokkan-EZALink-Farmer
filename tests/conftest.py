@@ -17,7 +17,6 @@ SLOW_MODULE_NAMES = {
     "test_box_scanner",
     "test_team_formation",
     "test_endgame_runner",
-    "test_verify_phase4",
 }
 
 

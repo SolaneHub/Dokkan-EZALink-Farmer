@@ -5,10 +5,6 @@ from dokkan_eza_link_farmer.ai.boss_catalog import (
     list_boss_stages,
     load_boss_catalog,
 )
-from dokkan_eza_link_farmer.ai.box_scanner import (
-    DEFAULT_BOX_SCAN_LOG_PATH,
-    BoxScanner,
-)
 from dokkan_eza_link_farmer.ai.client import DokkanAIClient
 from dokkan_eza_link_farmer.ai.endgame_runner import (
     BattleSimulatorFn,
@@ -65,6 +61,12 @@ from dokkan_eza_link_farmer.ai.telemetry import (
     attribute_culprit,
     create_failure_report,
 )
+from dokkan_eza_link_farmer.automation.tasks.box_scanner import (
+    DEFAULT_BOX_SCAN_LOG_PATH,
+    BoxScannerTask,
+)
+
+BoxScanner = BoxScannerTask
 
 __all__ = [
     "AIConfig",
@@ -75,6 +77,7 @@ __all__ = [
     "BossPhase",
     "BossStage",
     "BoxScanner",
+    "BoxScannerTask",
     "CandidateEvaluation",
     "CardForm",
     "ChallengeMission",

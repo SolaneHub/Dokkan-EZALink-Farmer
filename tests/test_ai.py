@@ -11,8 +11,15 @@ from dokkan_eza_link_farmer.ai.mission_solver import (
 from dokkan_eza_link_farmer.ai.models import (
     AIConfig,
     AIModelFamily,
+    CardForm,
     DokkanCard,
+    LeaderSkillSpec,
+    PassiveTags,
     SupportedAIModel,
+)
+from dokkan_eza_link_farmer.ai.support_catalog import (
+    get_recommended_support_items,
+    get_recommended_support_memory,
 )
 from dokkan_eza_link_farmer.ai.team_builder import TeamBuilder
 from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
@@ -192,6 +199,177 @@ class TestDokkanAI:
         assert rec.leader.name == "Leader"
         assert "Rotazione A" in rec.tactical_analysis
         assert "Whis" in rec.recommended_items
+
+    def test_support_catalog_items_and_memory(self):
+        items = get_recommended_support_items(max_items=4)
+        assert len(items) == 4
+        assert items[0]["name"] == "Whis"
+        assert items[0]["rank"] == 1
+        assert "40%" in items[0]["effect"]
+        assert items[1]["name"] == "Ghost Usher"
+        assert items[2]["name"] == "Icarus"
+        assert items[3]["name"] == "Princess Snake"
+
+        # Team with Movie Heroes category
+        movie_heroes_team = [
+            DokkanCard(id=1, name="Gogeta", categories=["Movie Heroes", "Fused Fighters"]),
+            DokkanCard(id=2, name="Piccolo", categories=["Movie Heroes"]),
+            DokkanCard(id=3, name="Gohan", categories=["Movie Heroes", "Hybrid Saiyans"]),
+            DokkanCard(id=4, name="Gamma 1", categories=["Movie Heroes", "Super Heroes"]),
+            DokkanCard(id=5, name="Gamma 2", categories=["Movie Heroes", "Super Heroes"]),
+            DokkanCard(id=6, name="Beast Gohan", categories=["Movie Heroes", "Super Heroes"]),
+        ]
+        mem = get_recommended_support_memory(movie_heroes_team)
+        assert mem is not None
+        assert "Permanente" in mem["duration"]
+        assert mem["name"] in ("Kakarot", "Super Hero Fading Away")
+
+        # Team with Majin Buu Saga
+        buu_team = [
+            DokkanCard(id=10, name="Buu", categories=["Majin Buu Saga"]),
+            DokkanCard(id=11, name="Gotenks", categories=["Majin Buu Saga"]),
+            DokkanCard(id=12, name="Vegito", categories=["Majin Buu Saga"]),
+            DokkanCard(id=13, name="Goku", categories=["Majin Buu Saga"]),
+            DokkanCard(id=14, name="Vegeta", categories=["Majin Buu Saga"]),
+            DokkanCard(id=15, name="Gohan", categories=["Majin Buu Saga"]),
+        ]
+        mem_buu = get_recommended_support_memory(buu_team)
+        assert mem_buu is not None
+        assert mem_buu["name"] == "Buu's Slumber"
+        assert "Permanente" in mem_buu["duration"]
+
+    def test_tactical_form_timeline_standby_exchange_switch(self):
+        # 1. Standby card
+        standby_card = DokkanCard(
+            id=1025731,
+            name="SSJ3 Goku & SSJ2 Vegeta",
+            standby_skill_name="Enters Standby Mode",
+            standby_skill_condition="Can be activated when HP is 50% or less, or from 4th turn",
+            standby_skill_effect="Stands by for 5 turns, charge count increases with Ki",
+        )
+        timeline_sb = standby_card.get_tactical_form_timeline()
+        assert len(timeline_sb) >= 1
+        assert timeline_sb[0]["type"] == "Standby Mode"
+        assert "Turno 4" in timeline_sb[0]["timing"]
+
+        # 2. Exchange card
+        exchange_card = DokkanCard(
+            id=1017661,
+            name="Super Vegeta/Super Trunks",
+            active_skill_name="Exchange",
+            active_skill_condition="Can be activated from the 3rd turn",
+            active_skill_effect="Exchange with Super Trunks",
+        )
+        timeline_ex = exchange_card.get_tactical_form_timeline()
+        assert len(timeline_ex) >= 1
+        assert timeline_ex[0]["type"] == "Scambio (Exchange)"
+
+        # 3. Reversible Switch card
+        switch_card = DokkanCard(
+            id=1099999,
+            name="Gamma 1 & Gamma 2",
+            active_skill_name="Switch Core",
+            active_skill_condition="Can switch back and forth each turn",
+            active_skill_effect="Switches between offensive and defensive mode",
+        )
+        timeline_sw = switch_card.get_tactical_form_timeline()
+        assert len(timeline_sw) >= 1
+        assert timeline_sw[0]["type"] == "Scambio Reversibile (Switch)"
+
+        # 4. Transforming card
+        trans_card = DokkanCard(
+            id=1030431,
+            name="Angel Goku & Vegeta",
+            transformations=[
+                CardForm(
+                    form_id=1030432,
+                    form_name="Super Gogeta",
+                    min_turn=4,
+                    passive_skill_text="Super effective against all types; high chance of critical hit",
+                )
+            ],
+        )
+        timeline_tr = trans_card.get_tactical_form_timeline()
+        assert len(timeline_tr) >= 1
+        assert timeline_tr[0]["type"] == "Trasformazione"
+        assert "Fase Finale" in timeline_tr[0]["timing"]
+
+    def test_friend_leader_flexible_rotation_slot1(self):
+        tb = TeamBuilder()
+        main_leader = DokkanCard(
+            id=1001,
+            name="Main Leader",
+            element=0,
+            leader_skill="Super Heroes Ki +3 HP, ATK & DEF +200%",
+            leader_spec=LeaderSkillSpec(main_category_ids=[88], base_boost_pct=200),
+            categories=["Super Heroes"],
+            links=["Super Saiyan", "Prepared for Battle"],
+        )
+        beast_friend = DokkanCard(
+            id=1002,
+            name="Beast Gohan Friend",
+            element=1,
+            leader_skill="Super Heroes Ki +3 HP, ATK & DEF +200%",
+            leader_spec=LeaderSkillSpec(main_category_ids=[88], base_boost_pct=200),
+            categories=["Super Heroes"],
+            passive_skill="Guards all attacks; reduces damage received by 58%",
+            base_form=CardForm(
+                form_id=1002,
+                passive_tags=PassiveTags(slot1_viable=True, has_guard=True, dr_base_percent=58),
+            ),
+            links=["Super Saiyan", "Prepared for Battle", "Fierce Battle"],
+        )
+        sub_cards = [
+            main_leader,
+            DokkanCard(
+                id=1003,
+                name="Sub 1",
+                categories=["Super Heroes"],
+                links=["Super Saiyan", "Prepared for Battle"],
+            ),
+            DokkanCard(
+                id=1004,
+                name="Sub 2",
+                categories=["Super Heroes"],
+                links=["Super Saiyan", "Prepared for Battle"],
+            ),
+            DokkanCard(
+                id=1005,
+                name="Sub 3",
+                categories=["Super Heroes"],
+                links=["Prepared for Battle"],
+            ),
+            DokkanCard(
+                id=1006,
+                name="Sub 4",
+                categories=["Super Heroes"],
+                links=["Prepared for Battle"],
+            ),
+            DokkanCard(
+                id=1007,
+                name="Sub 5",
+                categories=["Super Heroes"],
+                links=["Prepared for Battle"],
+            ),
+        ]
+        selected_friend = tb.select_best_friend_leader(sub_cards, candidate_pool=[beast_friend])
+        assert selected_friend.id == beast_friend.id
+
+        rec = tb.build_team_plan(sub_cards, candidate_pool=[beast_friend])
+        assert rec.friend_leader is not None
+        assert rec.friend_leader.id == beast_friend.id
+        assert len(rec.floaters) == 3
+
+        rot_cards = [
+            rec.rotation_a.slot1,
+            rec.rotation_a.slot2,
+            rec.rotation_b.slot1,
+            rec.rotation_b.slot2,
+        ]
+        assert any(c.id == beast_friend.id for c in rot_cards)
+        assert (
+            rec.rotation_a.slot1.id == beast_friend.id or rec.rotation_b.slot1.id == beast_friend.id
+        )
 
     def test_dokkandb_client_card_and_catalog(self, tmp_path):
         db = DokkanDBClient(cache_dir=str(tmp_path))
