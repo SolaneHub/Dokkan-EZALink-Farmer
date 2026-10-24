@@ -1424,6 +1424,14 @@ class TestMultiEnemyAdvisorAndBriefing:
         )
         assert "unconditional Guard that protect against rainbow attacks" in system_content
         assert (
+            "CRITICAL MANDATORY REQUIREMENT: You MUST evaluate unit survivability and effectiveness across ALL battles and ALL phases of the stage"
+            in system_content
+        )
+        assert (
+            "A candidate that is strong against the final boss but has severe type disadvantage or dies in Phase 1"
+            in system_content
+        )
+        assert (
             "Phase 1: Rainbow (5 Enemies: All 5 Types) - Total HP: 155M, Actions: 5/turn"
             in user_content
         )

@@ -106,10 +106,27 @@ class TestDokkanAI:
             ]
         }
 
-        with patch("requests.post", return_value=mock_resp):
-            guide, reasoning = client.analyze_team_strategy("Team Super Heroes")
+        with patch("requests.post", return_value=mock_resp) as mock_post:
+            guide, reasoning = client.analyze_team_strategy("Team Super Heroes", language="it")
             assert "Rotazione 1" in guide
             assert reasoning is None
+
+            # Verify system prompt content in Italian
+            call_payload = mock_post.call_args[1]["json"]
+            sys_msg_it = call_payload["messages"][0]["content"]
+            assert "### ⚔️ Guida Fasi & Strategia di Combattimento" in sys_msg_it
+            assert "Avvio Scontro (Fase 1 / Battaglia 1)" in sys_msg_it
+            assert "Fasi Intermedie" in sys_msg_it
+            assert "Fase Finale" in sys_msg_it
+
+            # Verify system prompt content in English
+            client.analyze_team_strategy("Team Super Heroes", language="en")
+            call_payload_en = mock_post.call_args[1]["json"]
+            sys_msg_en = call_payload_en["messages"][0]["content"]
+            assert "### ⚔️ Phase-by-Phase Battle Strategy" in sys_msg_en
+            assert "Battle Opening (Phase 1 / Battle 1)" in sys_msg_en
+            assert "Mid Phases" in sys_msg_en
+            assert "Final Phase" in sys_msg_en
 
     def test_link_synergy_and_ki_links(self):
         card1 = DokkanCard(

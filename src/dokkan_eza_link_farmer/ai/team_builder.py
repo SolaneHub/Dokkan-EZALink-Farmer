@@ -1141,6 +1141,9 @@ class TeamBuilder:
             "You are an expert Dokkan Battle Grandmaster AI Advisor. "
             "Your task is to analyze semantic passive conditions that regex rules may miss "
             "(e.g., ally-specific guard conditions, category-restricted critical hits, specific turn restrictions). "
+            "CRITICAL MANDATORY REQUIREMENT: You MUST evaluate unit survivability and effectiveness across ALL battles and ALL phases of the stage "
+            "(from Phase 1 / Turn 1 to the final phase). A candidate that is strong against the final boss but has severe type disadvantage "
+            "or dies in Phase 1 (especially against initial multi-enemy attack barrages) is UNACCEPTABLE. Favor candidates that guarantee survival across the entire gauntlet. "
             + mission_constraint_rules
             + "When multi-enemy phases are present, strongly prioritize AoE attackers that hit all targets simultaneously "
             "and units with unconditional Guard that protect against rainbow attacks. "
