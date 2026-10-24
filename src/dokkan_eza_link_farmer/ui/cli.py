@@ -1300,7 +1300,11 @@ class TerminalCLI:
 
         total_battles = getattr(stage, "total_battles", 1)
         battles_str = f"{total_battles} battagli{'e' if total_battles > 1 else 'a'}"
-        stack_warn = "\n[bold red]⚠️ Stacking ATK/DEF: Si azzera a inizio di ciascuna nuova battaglia separata![/bold red]" if getattr(stage, "is_multi_battle", False) else ""
+        stack_warn = (
+            "\n[bold red]⚠️ Stacking ATK/DEF: Si azzera a inizio di ciascuna nuova battaglia separata![/bold red]"
+            if getattr(stage, "is_multi_battle", False)
+            else ""
+        )
 
         self.console.print(
             Panel.fit(
@@ -1358,6 +1362,7 @@ class TerminalCLI:
         """Displays rich team representation with Dokkan typing colors for all cards."""
         from rich.table import Table
 
+        from dokkan_eza_link_farmer.ai.models import DokkanCard
         from dokkan_eza_link_farmer.ai.team_builder import (
             render_stage_intel_rich,
             render_team_summary_table_rich,
@@ -1386,7 +1391,9 @@ class TerminalCLI:
         )
 
         # 2. Rotations Breakdown Table with Dokkan Colors (7 combat units: Rot A, Rot B, Floaters)
-        def _get_card_badge(card: DokkanCard, leader: DokkanCard, friend: DokkanCard, is_floater: bool = False) -> Any:
+        def _get_card_badge(
+            card: DokkanCard, leader: DokkanCard, friend: DokkanCard, is_floater: bool = False
+        ) -> Any:
             from rich.text import Text
 
             base = card.rich_formatted_name()
@@ -1445,7 +1452,9 @@ class TerminalCLI:
             "[bold red]Slot 1 (Tank)[/bold red]",
             _get_card_badge(rec.rotation_a.slot1, rec.leader, rec.friend_leader, is_floater=False),
             _get_card_tactical_role(rec.rotation_a.slot1, is_slot1=True),
-            f"🔗 {', '.join(rec.rotation_a.shared_links[:4])}" if rec.rotation_a.shared_links else "Difensore principale",
+            f"🔗 {', '.join(rec.rotation_a.shared_links[:4])}"
+            if rec.rotation_a.shared_links
+            else "Difensore principale",
         )
         t_team.add_row(
             "",
@@ -1463,7 +1472,9 @@ class TerminalCLI:
             "[bold red]Slot 1 (Tank)[/bold red]",
             _get_card_badge(rec.rotation_b.slot1, rec.leader, rec.friend_leader, is_floater=False),
             _get_card_tactical_role(rec.rotation_b.slot1, is_slot1=True),
-            f"🔗 {', '.join(rec.rotation_b.shared_links[:4])}" if rec.rotation_b.shared_links else "Difensore principale",
+            f"🔗 {', '.join(rec.rotation_b.shared_links[:4])}"
+            if rec.rotation_b.shared_links
+            else "Difensore principale",
         )
         t_team.add_row(
             "",
@@ -1840,7 +1851,9 @@ class TerminalCLI:
             dokkandb=self.engine.dokkandb, ai_client=self.engine.ai_client
         )
 
-        self.console.print(f"[bold green]✓ Modello AI impostato su {model_name} (Ottimizzato 100% GPU / zero-latency)[/bold green]")
+        self.console.print(
+            f"[bold green]✓ Modello AI impostato su {model_name} (Ottimizzato 100% GPU / zero-latency)[/bold green]"
+        )
         self._ai_show_status()
 
     def run(self):

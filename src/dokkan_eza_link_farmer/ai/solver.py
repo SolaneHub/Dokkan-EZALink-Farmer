@@ -151,14 +151,16 @@ class DokkanConstraintSolver:
 
         # 1. Guaranteed Pre-Attack Guard (Start-of-Turn)
         has_guard = False
-        if getattr(card, "is_guard_unconditional", False):
-            has_guard = True
-        elif (
-            "guards all attacks" in text
-            or "guards against all attacks" in text
-            or "all attacks guarded" in text
-            or "guaranteed to guard" in text
-        ) or card.has_guard:
+        if (
+            getattr(card, "is_guard_unconditional", False)
+            or (
+                "guards all attacks" in text
+                or "guards against all attacks" in text
+                or "all attacks guarded" in text
+                or "guaranteed to guard" in text
+            )
+            or card.has_guard
+        ):
             has_guard = True
 
         # Invalidate guard if it is an RNG chance or enemy-oriented
@@ -176,7 +178,12 @@ class DokkanConstraintSolver:
             has_guard = False
 
         # In long fights or multi-battles, timed guard <= 6 turns expires before the boss
-        if is_long_event and card.guard_turns_limit and card.guard_turns_limit <= 6 and not card.is_guard_permanent:
+        if (
+            is_long_event
+            and card.guard_turns_limit
+            and card.guard_turns_limit <= 6
+            and not card.is_guard_permanent
+        ):
             has_guard = False
 
         # 2. Damage Reduction %
@@ -195,7 +202,12 @@ class DokkanConstraintSolver:
                 dr = 0
 
         # In long fights or multi-battles, timed DR <= 6 turns expires before the boss
-        if is_long_event and card.dr_turns_limit and card.dr_turns_limit <= 6 and getattr(card, "permanent_damage_reduction_percent", 0) < 50:
+        if (
+            is_long_event
+            and card.dr_turns_limit
+            and card.dr_turns_limit <= 6
+            and getattr(card, "permanent_damage_reduction_percent", 0) < 50
+        ):
             dr = getattr(card, "permanent_damage_reduction_percent", 0)
 
         # 3. Dodge % (Neutralized if boss cancels dodge)
@@ -301,10 +313,12 @@ class DokkanConstraintSolver:
         matchup = self.check_type_matchup(card.element, final_phase.element)
         if matchup > 0:
             delta += 5.0
-            counters.append(f"Type Advantage against Boss Final Phase ({final_phase.element_name}) (+5.0)")
+            counters.append(
+                f"Type Advantage against Boss Final Phase ({final_phase.element_name}) (+5.0)"
+            )
         elif matchup < 0:
             # Check if type disadvantage is mitigated by Guard or DR >= 60%
-            is_long_event = (num_phases >= 3 or is_multi_battle)
+            is_long_event = num_phases >= 3 or is_multi_battle
             dr_pct = (
                 card.permanent_damage_reduction_percent
                 if is_long_event
@@ -351,18 +365,14 @@ class DokkanConstraintSolver:
                     f"Dodge ({effective_dodge_pct}%) neutralized by Boss (Cancels Dodge)"
                 )
 
-                is_long_event = (num_phases >= 3 or is_multi_battle)
+                is_long_event = num_phases >= 3 or is_multi_battle
                 dr_base = max(
                     card.damage_reduction_percent,
                     card.base_form.passive_tags.dr_base_percent
                     if card.base_form and card.base_form.passive_tags
                     else 0,
                 )
-                effective_dr = (
-                    card.permanent_damage_reduction_percent
-                    if is_long_event
-                    else dr_base
-                )
+                effective_dr = card.permanent_damage_reduction_percent if is_long_event else dr_base
                 has_guard_defense = (
                     (card.is_guard_permanent and card.is_guard_unconditional)
                     if is_long_event
@@ -385,7 +395,11 @@ class DokkanConstraintSolver:
                 stacking_reliable = has_stacking and not is_multi_battle
 
                 # If card has only dodge without reliable Guard or DR against Cancels Dodge
-                if not has_guard_defense and (effective_dr == 0 or effective_dr < 40) and not stacking_reliable:
+                if (
+                    not has_guard_defense
+                    and (effective_dr == 0 or effective_dr < 40)
+                    and not stacking_reliable
+                ):
                     delta -= 60.0
                     penalties.append(
                         "Severe Glass Cannon Vulnerability: relies on dodge but lacks Guard/DR against Cancels Dodge (-60.0)"
@@ -400,7 +414,9 @@ class DokkanConstraintSolver:
             # Check for permanent or reliable multi-battle shield
             # Note: Intro/Entrance guard only triggers in Battle 1 (once only per stage)!
             is_intro_only = (
-                card.guard_turns_limit is not None and card.guard_turns_limit <= 6 and not card.is_guard_permanent
+                card.guard_turns_limit is not None
+                and card.guard_turns_limit <= 6
+                and not card.is_guard_permanent
             )
             has_guard_reliable = (
                 (card.has_guard and not is_intro_only)
@@ -416,7 +432,11 @@ class DokkanConstraintSolver:
                 card.permanent_damage_reduction_percent,
                 card.base_form.passive_tags.permanent_dr_percent
                 if card.base_form and card.base_form.passive_tags
-                else (card.damage_reduction_percent if not card.dr_turns_limit or card.dr_turns_limit > 6 else 0),
+                else (
+                    card.damage_reduction_percent
+                    if not card.dr_turns_limit or card.dr_turns_limit > 6
+                    else 0
+                ),
             )
             has_turn1_shield = has_guard_reliable or dr_any >= 45
 

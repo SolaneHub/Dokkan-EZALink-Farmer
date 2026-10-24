@@ -105,7 +105,6 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
         else:
             dodge_chance = named if named > 0 else 30
 
-
     # 4. Revive, Taunt, Support, Mechanics
     has_revive = "revive" in text or "revival" in text
     has_taunt = (

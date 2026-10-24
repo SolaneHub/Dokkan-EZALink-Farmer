@@ -22,7 +22,7 @@ class SupportedAIModel(str, Enum):
         return [m.value for m in cls]
 
     @classmethod
-    def normalize(cls, raw: str) -> str:
+    def normalize(cls, _raw: str = "") -> str:
         """Strictly validates and maps input to the supported qwen3.5:4b model."""
         return cls.QWEN_3_5_4B.value
 
@@ -64,9 +64,7 @@ class AIConfig:
             return cls()
 
         raw_model = str(
-            data.get("ollama_model")
-            or data.get("model_name")
-            or SupportedAIModel.QWEN_3_5_4B.value
+            data.get("ollama_model") or data.get("model_name") or SupportedAIModel.QWEN_3_5_4B.value
         )
         model_name = SupportedAIModel.normalize(raw_model)
         family = AIModelFamily.QWEN
@@ -144,15 +142,21 @@ class PassiveTags:
             slot1_viable=bool(data.get("slot1_viable", False)),
             dr_base_percent=int(data.get("dr_base_percent", 0)),
             permanent_dr_percent=int(data.get("permanent_dr_percent", 0)),
-            dr_turns_limit=int(data["dr_turns_limit"]) if data.get("dr_turns_limit") is not None else None,
+            dr_turns_limit=int(data["dr_turns_limit"])
+            if data.get("dr_turns_limit") is not None
+            else None,
             is_dr_permanent=bool(data.get("is_dr_permanent", False)),
             dodge_chance_percent=int(data.get("dodge_chance_percent", 0)),
-            dodge_turns_limit=int(data["dodge_turns_limit"]) if data.get("dodge_turns_limit") is not None else None,
+            dodge_turns_limit=int(data["dodge_turns_limit"])
+            if data.get("dodge_turns_limit") is not None
+            else None,
             is_dodge_permanent=bool(data.get("is_dodge_permanent", True)),
             has_guard=bool(data.get("has_guard", False)),
             is_guard_permanent=bool(data.get("is_guard_permanent", False)),
             is_guard_unconditional=bool(data.get("is_guard_unconditional", False)),
-            guard_turns_limit=int(data["guard_turns_limit"]) if data.get("guard_turns_limit") is not None else None,
+            guard_turns_limit=int(data["guard_turns_limit"])
+            if data.get("guard_turns_limit") is not None
+            else None,
             has_revive=bool(data.get("has_revive", False)),
             has_taunt=bool(data.get("has_taunt", False)),
             has_support=bool(data.get("has_support", False)),
@@ -523,13 +527,15 @@ class DokkanCard:
                     if line_timed:
                         if line_turns:
                             dr_turn_limits.append(line_turns)
-                    elif is_basic or not is_conditional_header:
-                        if val > permanent_dr:
-                            permanent_dr = val
+                    elif (is_basic or not is_conditional_header) and val > permanent_dr:
+                        permanent_dr = val
 
                 # Guard
-                if "guard" in line and not "chance of guarding" in line and not "disables enemy" in line:
-                    if any(
+                if (
+                    "guard" in line
+                    and "chance of guarding" not in line
+                    and "disables enemy" not in line
+                    and any(
                         k in line
                         for k in (
                             "guards all attacks",
@@ -537,21 +543,26 @@ class DokkanCard:
                             "all attacks guarded",
                             "guaranteed to guard",
                         )
-                    ):
-                        has_guard = True
-                        if line_timed:
-                            if line_turns:
-                                guard_turn_limits.append(line_turns)
-                        else:
-                            is_guard_permanent = True
-                            if is_basic or not is_conditional_header:
-                                is_guard_unconditional = True
+                    )
+                ):
+                    has_guard = True
+                    if line_timed:
+                        if line_turns:
+                            guard_turn_limits.append(line_turns)
+                    else:
+                        is_guard_permanent = True
+                        if is_basic or not is_conditional_header:
+                            is_guard_unconditional = True
 
                 # Dodge
                 if any(k in line for k in ("evad", "evasion", "dodge")):
                     has_dodge = True
                     line_named = 0
-                    if "guaranteed to evade" in line or "guaranteed to dodge" in line or "guaranteed evasion" in line:
+                    if (
+                        "guaranteed to evade" in line
+                        or "guaranteed to dodge" in line
+                        or "guaranteed evasion" in line
+                    ):
                         line_named = 100
                     elif "great chance" in line:
                         line_named = 70
@@ -587,9 +598,8 @@ class DokkanCard:
                     if line_timed:
                         if line_turns:
                             dodge_turn_limits.append(line_turns)
-                    elif is_basic or not is_conditional_header:
-                        if line_val > base_dodge:
-                            base_dodge = line_val
+                    elif (is_basic or not is_conditional_header) and line_val > base_dodge:
+                        base_dodge = line_val
 
         if not has_guard and re.search(r"guard(?:s|ing)?\s+(?:against\s+)?all", sa.lower()):
             has_guard = True
@@ -718,7 +728,11 @@ class DokkanCard:
         Medium / med chance: 30%
         Rare chance: 20%
         """
-        if self.base_form and self.base_form.passive_tags and self.base_form.passive_tags.dodge_chance_percent > 0:
+        if (
+            self.base_form
+            and self.base_form.passive_tags
+            and self.base_form.passive_tags.dodge_chance_percent > 0
+        ):
             return self.base_form.passive_tags.dodge_chance_percent
 
         if not self.has_dodge:
@@ -728,7 +742,11 @@ class DokkanCard:
         t_clean = " ".join(text.split())
 
         named = 0
-        if "guaranteed to evade" in t_clean or "guaranteed to dodge" in t_clean or "guaranteed evasion" in t_clean:
+        if (
+            "guaranteed to evade" in t_clean
+            or "guaranteed to dodge" in t_clean
+            or "guaranteed evasion" in t_clean
+        ):
             named = 100
         elif "great chance" in t_clean:
             named = 70
@@ -896,15 +914,21 @@ class DokkanCard:
         if self.standby_skill_name or self.has_standby:
             name = self.standby_skill_name or "Standby Mode"
             cond = (self.standby_skill_condition or "").lower()
-            timing = "Turno 4 (HP <= 50%)" if "4" in cond else ("Turno 3+" if "3" in cond else "Turno 4+")
+            timing = (
+                "Turno 4 (HP <= 50%)"
+                if "4" in cond
+                else ("Turno 3+" if "3" in cond else "Turno 4+")
+            )
             eff = self.standby_skill_effect or "Enters Standby Mode"
-            events.append({
-                "type": "Standby Mode",
-                "name": name,
-                "timing": timing,
-                "condition": self.standby_skill_condition,
-                "effect": eff,
-            })
+            events.append(
+                {
+                    "type": "Standby Mode",
+                    "name": name,
+                    "timing": timing,
+                    "condition": self.standby_skill_condition,
+                    "effect": eff,
+                }
+            )
 
         # 2. Active Skill (Exchange, Switch, or standard Active)
         if self.active_skill_name or self.has_active_skill:
@@ -914,34 +938,44 @@ class DokkanCard:
             cond_lower = (self.active_skill_condition or "").lower()
 
             if "switch" in name_lower or "switch" in eff_lower:
-                events.append({
-                    "type": "Scambio Reversibile (Switch)",
-                    "name": name,
-                    "timing": "Turno 1+ (Ogni Turno)",
-                    "condition": self.active_skill_condition,
-                    "effect": self.active_skill_effect,
-                })
+                events.append(
+                    {
+                        "type": "Scambio Reversibile (Switch)",
+                        "name": name,
+                        "timing": "Turno 1+ (Ogni Turno)",
+                        "condition": self.active_skill_condition,
+                        "effect": self.active_skill_effect,
+                    }
+                )
             elif "exchange" in name_lower or "exchange" in eff_lower:
-                timing = "Turno 3" if "3" in cond_lower else ("Turno 4+" if "4" in cond_lower else "Turno 3+")
-                events.append({
-                    "type": "Scambio (Exchange)",
-                    "name": name,
-                    "timing": timing,
-                    "condition": self.active_skill_condition,
-                    "effect": self.active_skill_effect,
-                })
+                timing = (
+                    "Turno 3"
+                    if "3" in cond_lower
+                    else ("Turno 4+" if "4" in cond_lower else "Turno 3+")
+                )
+                events.append(
+                    {
+                        "type": "Scambio (Exchange)",
+                        "name": name,
+                        "timing": timing,
+                        "condition": self.active_skill_condition,
+                        "effect": self.active_skill_effect,
+                    }
+                )
 
         # 3. Transformations
         if self.transformations:
             for form in self.transformations:
                 turn = form.min_turn if form.min_turn > 1 else 4
-                events.append({
-                    "type": "Trasformazione",
-                    "name": form.form_name or f"Form {form.form_index}",
-                    "timing": f"Fase Finale (Turno {turn}+)",
-                    "condition": f"A partire dal Turno {turn}",
-                    "effect": form.passive_skill_text,
-                })
+                events.append(
+                    {
+                        "type": "Trasformazione",
+                        "name": form.form_name or f"Form {form.form_index}",
+                        "timing": f"Fase Finale (Turno {turn}+)",
+                        "condition": f"A partire dal Turno {turn}",
+                        "effect": form.passive_skill_text,
+                    }
+                )
 
         return events
 
@@ -1017,7 +1051,9 @@ class DokkanCard:
             def_score += 20.0
             breakdown["composite_timed_heavy_dr"] = 20.0
 
-        has_great_or_guaranteed_dodge = (self.has_dodge or dodge_chance > 0) and (dodge_chance >= 70 or is_guaranteed_dodge)
+        has_great_or_guaranteed_dodge = (self.has_dodge or dodge_chance > 0) and (
+            dodge_chance >= 70 or is_guaranteed_dodge
+        )
         if has_great_or_guaranteed_dodge:
             if self.is_dodge_permanent:
                 def_score += 28.0
@@ -1539,10 +1575,7 @@ class BossPhase:
                         if "AoE Super Attack" not in skill_tags:
                             skill_tags.append("AoE Super Attack")
 
-                    if (
-                        "lock" in m_desc
-                        or "coercion" in m_desc
-                    ) and (
+                    if ("lock" in m_desc or "coercion" in m_desc) and (
                         "slot" in m_desc
                         or "position" in m_desc
                         or "switch" in m_desc
@@ -1563,30 +1596,47 @@ class BossPhase:
                     ):
                         if "stun" in m_desc or "seal" in m_desc:
                             self.nullifies_stun_seal = True
-                        if "atk" in m_desc and ("reduction" in m_desc or "lower" in m_desc or "down" in m_desc):
+                        if "atk" in m_desc and (
+                            "reduction" in m_desc or "lower" in m_desc or "down" in m_desc
+                        ):
                             self.nullifies_atk_down = True
-                        if "def" in m_desc and ("reduction" in m_desc or "lower" in m_desc or "down" in m_desc):
+                        if "def" in m_desc and (
+                            "reduction" in m_desc or "lower" in m_desc or "down" in m_desc
+                        ):
                             self.nullifies_def_down = True
 
                     # Specific boss passive skills
                     if "goku" in m_desc and "atk" in m_desc:
                         if "ATK +30% vs 'Goku'" not in skill_tags:
                             skill_tags.append("ATK +30% vs 'Goku'")
-                    elif "super attack" in m_desc and ("each super attack" in m_desc or "per super attack" in m_desc or "each sa" in m_desc):
+                    elif "super attack" in m_desc and (
+                        "each super attack" in m_desc
+                        or "per super attack" in m_desc
+                        or "each sa" in m_desc
+                    ):
                         if "ATK/DEF +10% per SA" not in skill_tags:
                             skill_tags.append("ATK/DEF +10% per SA")
                     elif "attack received" in m_desc and ("each" in m_desc or "per" in m_desc):
                         if "ATK/DEF +6% per hit (max 60%)" not in skill_tags:
                             skill_tags.append("ATK/DEF +6% per hit (max 60%)")
-                    elif "after receiving" in m_desc or "7 attacks" in m_desc:
-                        if "ATK/DEF +30% after 7 hits" not in skill_tags:
-                            skill_tags.append("ATK/DEF +30% after 7 hits")
+                    elif (
+                        "after receiving" in m_desc or "7 attacks" in m_desc
+                    ) and "ATK/DEF +30% after 7 hits" not in skill_tags:
+                        skill_tags.append("ATK/DEF +30% after 7 hits")
 
             if self.nullifies_stun_seal and "Stun & Seal Immune" not in skill_tags:
                 skill_tags.append("Stun & Seal Immune")
-            if self.nullifies_atk_down and self.nullifies_def_down and "ATK & DEF Debuff Immune" not in skill_tags:
+            if (
+                self.nullifies_atk_down
+                and self.nullifies_def_down
+                and "ATK & DEF Debuff Immune" not in skill_tags
+            ):
                 skill_tags.append("ATK & DEF Debuff Immune")
-            elif self.nullifies_def_down and not self.nullifies_atk_down and "DEF Debuff Immune" not in skill_tags:
+            elif (
+                self.nullifies_def_down
+                and not self.nullifies_atk_down
+                and "DEF Debuff Immune" not in skill_tags
+            ):
                 skill_tags.append("DEF Debuff Immune")
 
             self.special_skills = skill_tags
@@ -1656,7 +1706,7 @@ class BossPhase:
             phase=idx,
             battle_index=int(data.get("battle_index", 1)),
             round_index=int(data.get("round_index", idx)),
-            is_new_battle=bool(data.get("is_new_battle", True if int(data.get("round_index", 1)) == 1 else False)),
+            is_new_battle=bool(data.get("is_new_battle", int(data.get("round_index", 1)) == 1)),
             bosses=bosses,
             element=int(data.get("element", 0)),
             element_name=str(data.get("element_name", "")),
@@ -1736,7 +1786,6 @@ class BossStage:
             total_battles=total_battles,
             phases=phases,
         )
-
 
 
 @dataclass

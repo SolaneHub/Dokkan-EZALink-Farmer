@@ -500,9 +500,7 @@ class TestBossGimmickOverrides:
         # Unshielded receives severe glass cannon vulnerability penalty (-60.0)
         assert delta_unshielded == pytest.approx(-60.0, abs=0.1)
         assert any("neutralized by Boss (Cancels Dodge)" in p for p in pen_unshielded)
-        assert any(
-            "Severe Glass Cannon Vulnerability" in p for p in pen_unshielded
-        )
+        assert any("Severe Glass Cannon Vulnerability" in p for p in pen_unshielded)
 
         # Shielded has dodge neutralized but does NOT suffer the extra -60.0 glass cannon penalty
         assert delta_shielded == pytest.approx(0.0, abs=0.1)

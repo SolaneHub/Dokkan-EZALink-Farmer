@@ -286,8 +286,14 @@ class TestAdvisorEnhancements:
                     element=21,
                     type_name="Extreme TEQ",
                     mechanics=[
-                        BossMechanic(id=526480, name="Coercion", description="Locks character switching"),
-                        BossMechanic(id=600104, name="Stun Immunity", description="Grants immunity to being stunned"),
+                        BossMechanic(
+                            id=526480, name="Coercion", description="Locks character switching"
+                        ),
+                        BossMechanic(
+                            id=600104,
+                            name="Stun Immunity",
+                            description="Grants immunity to being stunned",
+                        ),
                     ],
                 )
             ],
@@ -308,7 +314,9 @@ class TestAdvisorEnhancements:
                     element=20,
                     type_name="Extreme AGL",
                     mechanics=[
-                        BossMechanic(id=526510, name="ATK Boost", description="ATK +30% when Goku present"),
+                        BossMechanic(
+                            id=526510, name="ATK Boost", description="ATK +30% when Goku present"
+                        ),
                     ],
                 )
             ],
@@ -349,7 +357,9 @@ class TestAdvisorEnhancements:
                     element=10,
                     type_name="Super AGL",
                     mechanics=[
-                        BossMechanic(id=600106, name="Guaranteed Hit", description="Disables Evasion"),
+                        BossMechanic(
+                            id=600106, name="Guaranteed Hit", description="Disables Evasion"
+                        ),
                     ],
                 )
             ],
@@ -398,10 +408,18 @@ class TestAdvisorEnhancements:
             event_name="Union Master",
             total_battles=3,
             phases=[
-                BossPhase(phase_index=1, battle_index=1, round_index=1, is_new_battle=True, element=21),
-                BossPhase(phase_index=2, battle_index=2, round_index=1, is_new_battle=True, element=20),
-                BossPhase(phase_index=3, battle_index=3, round_index=1, is_new_battle=True, element=10),
-                BossPhase(phase_index=4, battle_index=3, round_index=2, is_new_battle=False, element=10),
+                BossPhase(
+                    phase_index=1, battle_index=1, round_index=1, is_new_battle=True, element=21
+                ),
+                BossPhase(
+                    phase_index=2, battle_index=2, round_index=1, is_new_battle=True, element=20
+                ),
+                BossPhase(
+                    phase_index=3, battle_index=3, round_index=1, is_new_battle=True, element=10
+                ),
+                BossPhase(
+                    phase_index=4, battle_index=3, round_index=2, is_new_battle=False, element=10
+                ),
             ],
         )
 
@@ -437,7 +455,6 @@ class TestAdvisorEnhancements:
         assert any("Multi-Battle Reliability" in c for c in count_t)
         assert delta_t >= 15.0
 
-
     def test_defensive_expiration_and_dodge_cancellation_awareness(self):
         from dokkan_eza_link_farmer.ai.models import BossPhase, BossStage
         from dokkan_eza_link_farmer.ai.solver import DokkanConstraintSolver
@@ -450,10 +467,23 @@ class TestAdvisorEnhancements:
             event_name="Union Master",
             total_battles=3,
             phases=[
-                BossPhase(phase_index=1, battle_index=1, round_index=1, is_new_battle=True, element=21),
-                BossPhase(phase_index=2, battle_index=2, round_index=1, is_new_battle=True, element=20),
-                BossPhase(phase_index=3, battle_index=3, round_index=1, is_new_battle=True, element=10),
-                BossPhase(phase_index=4, battle_index=3, round_index=2, is_new_battle=False, element=10, cancels_dodge=True),
+                BossPhase(
+                    phase_index=1, battle_index=1, round_index=1, is_new_battle=True, element=21
+                ),
+                BossPhase(
+                    phase_index=2, battle_index=2, round_index=1, is_new_battle=True, element=20
+                ),
+                BossPhase(
+                    phase_index=3, battle_index=3, round_index=1, is_new_battle=True, element=10
+                ),
+                BossPhase(
+                    phase_index=4,
+                    battle_index=3,
+                    round_index=2,
+                    is_new_battle=False,
+                    element=10,
+                    cancels_dodge=True,
+                ),
             ],
         )
 

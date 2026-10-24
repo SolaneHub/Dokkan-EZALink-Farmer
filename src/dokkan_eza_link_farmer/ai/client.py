@@ -6,7 +6,7 @@ from typing import Any
 
 import requests
 
-from dokkan_eza_link_farmer.ai.models import AIConfig, AIModelFamily
+from dokkan_eza_link_farmer.ai.models import AIConfig
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +60,8 @@ class DokkanAIClient:
 
     def _is_ollama(self) -> bool:
         """Checks if the configured backend is local Ollama."""
-        return (
-            getattr(self.config, "provider", "").lower() == "ollama"
-            or "11434" in getattr(self.config, "base_url", "")
+        return getattr(self.config, "provider", "").lower() == "ollama" or "11434" in getattr(
+            self.config, "base_url", ""
         )
 
     def chat_completion(
@@ -119,16 +118,15 @@ class DokkanAIClient:
             if "message" in res_json:
                 message = res_json["message"]
                 raw_content = message.get("content", "") or ""
-                reasoning = None
             else:
                 choice = res_json.get("choices", [{}])[0]
                 message = choice.get("message", {})
                 raw_content = message.get("content", "") or ""
-                reasoning = None
-
             # Strip any residual <think> tags from output
             if "<think>" in raw_content:
-                raw_content = re.sub(r"<think>.*?</think>", "", raw_content, flags=re.DOTALL).strip()
+                raw_content = re.sub(
+                    r"<think>.*?</think>", "", raw_content, flags=re.DOTALL
+                ).strip()
 
             return raw_content.strip(), None
         except Exception as e:

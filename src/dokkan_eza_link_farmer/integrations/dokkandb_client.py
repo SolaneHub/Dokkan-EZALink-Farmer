@@ -709,7 +709,7 @@ class DokkanDBClient:
             for r in b["rounds"]:
                 total_phase_index += 1
                 r_no = r["round_no"]
-                is_new_battle = (r_no == 1)
+                is_new_battle = r_no == 1
                 phase_hp = 0
                 phase_atk = 0
                 phase_def = 0
@@ -773,7 +773,6 @@ class DokkanDBClient:
                 summary["phases"].append(phase_entry)
 
         return summary
-
 
     def get_event_missions(
         self, event_id: int, region: str = "glb", force_refresh: bool = False

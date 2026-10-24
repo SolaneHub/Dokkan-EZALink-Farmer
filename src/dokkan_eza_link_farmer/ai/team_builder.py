@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-
 import itertools
 import json
 import logging
@@ -136,7 +135,9 @@ class TeamBuilder:
             cancels_dodge = any(getattr(p, "cancels_dodge", False) for p in phases)
             is_long_event = len(phases) >= 3 or getattr(boss_stage, "is_multi_battle", False)
 
-        if getattr(card, "is_guard_permanent", False) and getattr(card, "is_guard_unconditional", False):
+        if getattr(card, "is_guard_permanent", False) and getattr(
+            card, "is_guard_unconditional", False
+        ):
             priority += 50.0
         elif card.has_guard:
             if is_long_event and card.guard_turns_limit and card.guard_turns_limit <= 6:
@@ -180,7 +181,9 @@ class TeamBuilder:
     def calculate_slot1_anchor_weight(cls, card: DokkanCard, boss_stage: Any = None) -> float:
         """Assigns rotation anchor fitness bonus: Heavily rewards god-tier permanent tanks in Slot 1."""
         bonus = 0.0
-        if getattr(card, "is_guard_permanent", False) and getattr(card, "is_guard_unconditional", False):
+        if getattr(card, "is_guard_permanent", False) and getattr(
+            card, "is_guard_unconditional", False
+        ):
             bonus += 10.0
         if getattr(card, "permanent_damage_reduction_percent", 0) >= 40:
             bonus += 8.0
@@ -294,7 +297,9 @@ class TeamBuilder:
                 score += 15.0
             if getattr(cand, "permanent_damage_reduction_percent", 0) >= 40:
                 score += 20.0
-            if getattr(cand, "is_guard_permanent", False) and getattr(cand, "is_guard_unconditional", False):
+            if getattr(cand, "is_guard_permanent", False) and getattr(
+                cand, "is_guard_unconditional", False
+            ):
                 score += 25.0
 
             if score > best_score:
@@ -382,7 +387,9 @@ class TeamBuilder:
 
         # Optimize rotations for the complete 7-unit battle team (Leader + 5 Subs + Friend Leader)
         combat_team = list(cards[:6]) + [friend]
-        rot_a, rot_b, floaters = self.optimize_rotations_for_team(combat_team, boss_stage=boss_stage)
+        rot_a, rot_b, floaters = self.optimize_rotations_for_team(
+            combat_team, boss_stage=boss_stage
+        )
 
         def _label_card(c: DokkanCard) -> str:
             badge = ""
@@ -1342,7 +1349,10 @@ def format_team_summary_table(
 
         dodge_pct = c.dodge_chance_percent
         dodge_limit = getattr(c, "dodge_turns_limit", None)
-        cancels_dodge_boss = bool(boss_stage and any(getattr(p, "cancels_dodge", False) for p in getattr(boss_stage, "phases", [])))
+        cancels_dodge_boss = bool(
+            boss_stage
+            and any(getattr(p, "cancels_dodge", False) for p in getattr(boss_stage, "phases", []))
+        )
         if dodge_pct > 0:
             if cancels_dodge_boss:
                 dodge_label = f"Dodge {dodge_pct}% [Nullificato]"
@@ -1547,7 +1557,10 @@ def render_team_summary_table_rich(
 
         dodge_pct = c.dodge_chance_percent
         dodge_limit = getattr(c, "dodge_turns_limit", None)
-        cancels_dodge_boss = bool(boss_stage and any(getattr(p, "cancels_dodge", False) for p in getattr(boss_stage, "phases", [])))
+        cancels_dodge_boss = bool(
+            boss_stage
+            and any(getattr(p, "cancels_dodge", False) for p in getattr(boss_stage, "phases", []))
+        )
         if dodge_pct > 0:
             if cancels_dodge_boss:
                 dodge_part = f"Dodge {dodge_pct}% [Nullificato]"
@@ -1582,8 +1595,12 @@ def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str
     phases = getattr(boss_stage, "phases", [])
 
     if language == "it":
-        lines.append(f"**Evento**: {boss_stage.event_name} | **Stage**: {boss_stage.stage_name} (ID: {boss_stage.stage_id})")
-        lines.append(f"- **Struttura Evento**: {total_battles} Battagli{'a' if total_battles == 1 else 'e'} distinte ({len(phases)} Fasi totali)")
+        lines.append(
+            f"**Evento**: {boss_stage.event_name} | **Stage**: {boss_stage.stage_name} (ID: {boss_stage.stage_id})"
+        )
+        lines.append(
+            f"- **Struttura Evento**: {total_battles} Battagli{'a' if total_battles == 1 else 'e'} distinte ({len(phases)} Fasi totali)"
+        )
         if is_multi_battle:
             lines.append(
                 "> ⚠️ **AVVISO MECCANICA DI GIOCO (RESET STACKING)**: Questo evento è suddiviso in "
@@ -1602,12 +1619,32 @@ def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str
             actions_val = getattr(p, "actions_per_turn", 0)
             skills = getattr(p, "special_skills", [])
 
-            hp_str = f"{hp_val / 1_000_000:.0f}M" if hp_val >= 1_000_000 else (f"{hp_val:,}" if hp_val else "N/A")
-            atk_str = f"{atk_val / 1_000:.0f}k" if atk_val >= 1_000 else (str(atk_val) if atk_val else "N/A")
-            sa_est = f"~{sa_est_val / 1_000_000:.1f}M" if sa_est_val >= 1_000_000 else (f"~{sa_est_val:,}" if sa_est_val else "N/A")
+            hp_str = (
+                f"{hp_val / 1_000_000:.0f}M"
+                if hp_val >= 1_000_000
+                else (f"{hp_val:,}" if hp_val else "N/A")
+            )
+            atk_str = (
+                f"{atk_val / 1_000:.0f}k"
+                if atk_val >= 1_000
+                else (str(atk_val) if atk_val else "N/A")
+            )
+            sa_est = (
+                f"~{sa_est_val / 1_000_000:.1f}M"
+                if sa_est_val >= 1_000_000
+                else (f"~{sa_est_val:,}" if sa_est_val else "N/A")
+            )
             actions_str = f"{actions_val} attacchi/turno" if actions_val else "Attacchi standard"
             skills_str = ", ".join(skills) if skills else "Nessuna abilità speciale rilevata"
-            stacking_note = "Inizio evento (stacking da 0)" if getattr(p, "phase_index", 1) == 1 else ("⚠️ NUOVA BATTAGLIA (Stacking azzerato a 0!)" if getattr(p, "is_new_battle", False) else "Stacking conservato dalla fase precedente")
+            stacking_note = (
+                "Inizio evento (stacking da 0)"
+                if getattr(p, "phase_index", 1) == 1
+                else (
+                    "⚠️ NUOVA BATTAGLIA (Stacking azzerato a 0!)"
+                    if getattr(p, "is_new_battle", False)
+                    else "Stacking conservato dalla fase precedente"
+                )
+            )
 
             lines.append(
                 f"- **Battaglia {getattr(p, 'battle_index', 1)} - Round {getattr(p, 'round_index', 1)} (Fase {getattr(p, 'phase_index', 1)})**: "
@@ -1617,8 +1654,12 @@ def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str
                 f"  - **Stato Stacking**: {stacking_note}"
             )
     else:
-        lines.append(f"**Event**: {boss_stage.event_name} | **Stage**: {boss_stage.stage_name} (ID: {boss_stage.stage_id})")
-        lines.append(f"- **Event Structure**: {total_battles} Distinct Battle(s) ({len(phases)} Total Phases)")
+        lines.append(
+            f"**Event**: {boss_stage.event_name} | **Stage**: {boss_stage.stage_name} (ID: {boss_stage.stage_id})"
+        )
+        lines.append(
+            f"- **Event Structure**: {total_battles} Distinct Battle(s) ({len(phases)} Total Phases)"
+        )
         if is_multi_battle:
             lines.append(
                 "> ⚠️ **CRITICAL GAME MECHANIC (STACKING RESET)**: This stage consists of "
@@ -1637,12 +1678,32 @@ def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str
             actions_val = getattr(p, "actions_per_turn", 0)
             skills = getattr(p, "special_skills", [])
 
-            hp_str = f"{hp_val / 1_000_000:.0f}M" if hp_val >= 1_000_000 else (f"{hp_val:,}" if hp_val else "N/A")
-            atk_str = f"{atk_val / 1_000:.0f}k" if atk_val >= 1_000 else (str(atk_val) if atk_val else "N/A")
-            sa_est = f"~{sa_est_val / 1_000_000:.1f}M" if sa_est_val >= 1_000_000 else (f"~{sa_est_val:,}" if sa_est_val else "N/A")
+            hp_str = (
+                f"{hp_val / 1_000_000:.0f}M"
+                if hp_val >= 1_000_000
+                else (f"{hp_val:,}" if hp_val else "N/A")
+            )
+            atk_str = (
+                f"{atk_val / 1_000:.0f}k"
+                if atk_val >= 1_000
+                else (str(atk_val) if atk_val else "N/A")
+            )
+            sa_est = (
+                f"~{sa_est_val / 1_000_000:.1f}M"
+                if sa_est_val >= 1_000_000
+                else (f"~{sa_est_val:,}" if sa_est_val else "N/A")
+            )
             actions_str = f"{actions_val} attacks/turn" if actions_val else "Standard actions"
             skills_str = ", ".join(skills) if skills else "No special skills detected"
-            stacking_note = "Stage start (0 stacks)" if getattr(p, "phase_index", 1) == 1 else ("⚠️ NEW BATTLE: DEF stacks reset to 0!" if getattr(p, "is_new_battle", False) else "Stacks carried over from previous phase")
+            stacking_note = (
+                "Stage start (0 stacks)"
+                if getattr(p, "phase_index", 1) == 1
+                else (
+                    "⚠️ NEW BATTLE: DEF stacks reset to 0!"
+                    if getattr(p, "is_new_battle", False)
+                    else "Stacks carried over from previous phase"
+                )
+            )
 
             lines.append(
                 f"- **Battle {getattr(p, 'battle_index', 1)} - Round {getattr(p, 'round_index', 1)} (Phase {getattr(p, 'phase_index', 1)})**: "
@@ -1680,7 +1741,19 @@ def render_stage_intel_rich(boss_stage: Any) -> Any:
         phase_label = f"B{getattr(p, 'battle_index', 1)} - R{getattr(p, 'round_index', 1)} (F{getattr(p, 'phase_index', 1)})"
 
         elem_name = getattr(p, "element_name", "")
-        elem_color = "bold green" if "TEQ" in elem_name else ("bold blue" if "AGL" in elem_name else ("bold red" if "STR" in elem_name else ("bold yellow" if "PHY" in elem_name else "bold magenta")))
+        elem_color = (
+            "bold green"
+            if "TEQ" in elem_name
+            else (
+                "bold blue"
+                if "AGL" in elem_name
+                else (
+                    "bold red"
+                    if "STR" in elem_name
+                    else ("bold yellow" if "PHY" in elem_name else "bold magenta")
+                )
+            )
+        )
         boss_text = Text(f"[{elem_name}] {b_name}", style=elem_color)
 
         hp_val = getattr(p, "hp", 0)
@@ -1689,7 +1762,11 @@ def render_stage_intel_rich(boss_stage: Any) -> Any:
         act_val = getattr(p, "actions_per_turn", 0)
         skills = getattr(p, "special_skills", [])
 
-        hp_str = f"{hp_val / 1_000_000:.0f}M" if hp_val >= 1_000_000 else (f"{hp_val:,}" if hp_val else "-")
+        hp_str = (
+            f"{hp_val / 1_000_000:.0f}M"
+            if hp_val >= 1_000_000
+            else (f"{hp_val:,}" if hp_val else "-")
+        )
         atk_str = f"{atk_val / 1_000:.0f}k / ~{sa_val / 1_000_000:.1f}M" if atk_val else "-"
         act_str = f"{act_val}/t" if act_val else "-"
         gimmicks_str = ", ".join(skills) if skills else "Nessuna"
@@ -1713,18 +1790,22 @@ def render_stage_intel_rich(boss_stage: Any) -> Any:
             stack_text,
         )
 
-    warning_text = ""
     if is_multi_battle:
+        from rich.console import Group
+
         warning_text = (
             "[bold yellow]⚠️ NOTA MULTI-BATTAGLIA:[/bold yellow] "
             "[bold red]Lo Stacking di ATK e DEF si AZZERA all'inizio di ciascuna nuova battaglia "
             "(i buff accumulati NON si trasferiscono tra Battaglia 1, 2 e 3)![/bold red]\n"
             "[dim]Le rotazioni A e B sono coppie d'ancoraggio sinergiche: puoi e devi adattarle "
-            "dinamicamente in base ai tipi e agli attacchi di ogni fase.[/dim]\n\n"
+            "dinamicamente in base ai tipi e agli attacchi di ogni fase.[/dim]\n"
         )
+        content = Group(warning_text, t)
+    else:
+        content = t
 
     return Panel(
-        t,
+        content,
         title=title,
         subtitle=f"[dim]Fasi totali: {len(phases)} | Difficoltà: {getattr(boss_stage, 'difficulty', 1)}[/dim]",
         border_style="cyan",
@@ -1746,4 +1827,3 @@ __all__ = [
     "format_stage_tactical_briefing",
     "render_stage_intel_rich",
 ]
-

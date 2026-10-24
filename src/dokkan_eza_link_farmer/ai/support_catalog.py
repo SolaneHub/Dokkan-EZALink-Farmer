@@ -74,7 +74,7 @@ CURATED_PERMANENT_MEMORIES: list[dict[str, Any]] = [
         "id": 10002,
         "name": "Goku Gets Married!",
         "categories": ["Goku's Family"],
-        "effect": '"Goku\'s Family" Category allies\' Ki +1 and ATK & DEF +20% in battle',
+        "effect": "\"Goku's Family\" Category allies' Ki +1 and ATK & DEF +20% in battle",
         "duration": "Tutta la durata della battaglia (Permanente)",
         "priority": 10,
     },
