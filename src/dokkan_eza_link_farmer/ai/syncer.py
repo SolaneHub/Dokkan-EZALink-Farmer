@@ -65,44 +65,46 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
 
     # 3. Dodge Chance %
     dodge_chance = 0
-    if (
-        re.search(r"evades?\s+enemy(?:'s)?\s+attacks?", text)
-        or "guaranteed to evade" in text
-        or "guaranteed to dodge" in text
-    ):
-        dodge_chance = 100
-    elif (
-        "great chance of evading" in text
-        or "great chance to evade" in text
-        or "great chance to dodge" in text
-        or "great chance of dodging" in text
-    ):
-        dodge_chance = 70
-    elif (
-        "high chance of evading" in text
-        or "high chance to evade" in text
-        or "high chance to dodge" in text
-        or "high chance of dodging" in text
-    ):
-        dodge_chance = 50
-    elif (
-        "medium chance of evading" in text
-        or "medium chance to evade" in text
-        or "medium chance to dodge" in text
-    ):
-        dodge_chance = 30
-    elif "rare chance of evading" in text or "rare chance to evade" in text:
-        dodge_chance = 15
-    elif "chance of evading" in text or "evasion" in text or "dodge" in text:
-        dodge_chance = 20
+    t_clean = " ".join(text.split())
+    if any(k in t_clean for k in ("evad", "evasion", "dodge")):
+        named = 0
+        if (
+            "guaranteed to evade" in t_clean
+            or "guaranteed to dodge" in t_clean
+            or "guaranteed evasion" in t_clean
+        ):
+            named = 100
+        elif "great chance" in t_clean:
+            named = 70
+        elif "high chance" in t_clean:
+            named = 50
+        elif "medium chance" in t_clean or "med chance" in t_clean:
+            named = 30
+        elif "rare chance" in t_clean:
+            named = 20
+        elif re.search(
+            r"(?<!chance of )(?<!chance to )(?<!great )(?<!high )(?<!medium )(?<!rare )(?<!med )(?<!guaranteed to )evades?\s+enemy(?:'s)?\s+attacks?",
+            t_clean,
+        ):
+            named = 100
 
-    explicit_dodge = re.findall(
-        r"(?:evasion rate|chance of evading enemy(?:'s)? attacks?|chance of dodging)\s*\+?\s*(\d+)%",
-        text,
-    )
-    if explicit_dodge:
-        with contextlib.suppress(ValueError):
-            dodge_chance = max(dodge_chance, max(int(m) for m in explicit_dodge))
+        explicit_vals: list[int] = []
+        for m in re.finditer(r"(\d+)%\s*chance of evading", t_clean):
+            explicit_vals.append(int(m.group(1)))
+        for m in re.finditer(
+            r"(?:chance of evading|chance to evade|chance of dodging|chance to dodge|evasion rate)\s*(?:enemy(?:'s)?\s+attacks?)?\s*(?:\([^)]*\))?\s*(?:rate\s*)?\+?\s*(\d+)%",
+            t_clean,
+        ):
+            explicit_vals.append(int(m.group(1)))
+        for m in re.finditer(r"\(up to (\d+)%\)", t_clean):
+            explicit_vals.append(int(m.group(1)))
+
+        valid_explicit = [v for v in explicit_vals if v <= 100]
+        if valid_explicit:
+            dodge_chance = max(named, max(valid_explicit))
+        else:
+            dodge_chance = named if named > 0 else 30
+
 
     # 4. Revive, Taunt, Support, Mechanics
     has_revive = "revive" in text or "revival" in text

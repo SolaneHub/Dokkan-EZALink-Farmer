@@ -127,24 +127,33 @@ class DokkanConstraintSolver:
         return 0
 
     @staticmethod
-    def is_slot1_viable(card: DokkanCard) -> bool:
+    def is_slot1_viable(card: DokkanCard, boss_stage: Any = None) -> bool:
         """
         Determines whether a card is viable as a defensive anchor in Slot 1 in its Base Form (Turns 1-3).
         A true Slot 1 anchor must have pre-attack defensive survival against Endgame Super Attacks:
         1. Guaranteed Guard against all attacks (excludes RNG chance of guarding or enemy guard disabling).
         2. High Damage Reduction (DR >= 50% against all attacks, excludes normal-attacks-only DR).
-        3. High/Guaranteed Dodge (>= 70% great chance or guaranteed to evade).
+        3. High/Guaranteed Dodge (>= 70% great chance or guaranteed to evade), neutralized if Boss cancels dodge.
         4. Explicit 1st Slot passive buffs granting Guard or DR >= 30% when placed in Slot 1.
-        Stacking DEF alone without Guard/High DR does NOT qualify as Slot 1 on Turn 1 (zero stacks pre-attack).
+        In long battles (>= 3 phases or multi-battle), temporary guard/DR (<= 6T) that expires is disqualified.
         """
         if card.is_tank_override is not None:
             return card.is_tank_override
 
         text = f"{card.passive_skill or ''} {card.super_attack or ''}".lower()
 
-        # 1. Guaranteed Guard
+        cancels_dodge = False
+        is_long_event = False
+        if boss_stage:
+            phases = getattr(boss_stage, "phases", [])
+            cancels_dodge = any(getattr(p, "cancels_dodge", False) for p in phases)
+            is_long_event = len(phases) >= 3 or getattr(boss_stage, "is_multi_battle", False)
+
+        # 1. Guaranteed Pre-Attack Guard (Start-of-Turn)
         has_guard = False
-        if (
+        if getattr(card, "is_guard_unconditional", False):
+            has_guard = True
+        elif (
             "guards all attacks" in text
             or "guards against all attacks" in text
             or "all attacks guarded" in text
@@ -166,6 +175,10 @@ class DokkanConstraintSolver:
         ):
             has_guard = False
 
+        # In long fights or multi-battles, timed guard <= 6 turns expires before the boss
+        if is_long_event and card.guard_turns_limit and card.guard_turns_limit <= 6 and not card.is_guard_permanent:
+            has_guard = False
+
         # 2. Damage Reduction %
         dr = 0
         if card.base_form and card.base_form.passive_tags:
@@ -181,20 +194,12 @@ class DokkanConstraintSolver:
             ):
                 dr = 0
 
-        # 3. Dodge %
-        dodge = 0
-        if card.base_form and card.base_form.passive_tags:
-            dodge = card.base_form.passive_tags.dodge_chance_percent
-        elif card.has_dodge:
-            dodge = 100
+        # In long fights or multi-battles, timed DR <= 6 turns expires before the boss
+        if is_long_event and card.dr_turns_limit and card.dr_turns_limit <= 6 and getattr(card, "permanent_damage_reduction_percent", 0) < 50:
+            dr = getattr(card, "permanent_damage_reduction_percent", 0)
 
-        if (
-            "great chance of evading" in text
-            or "great chance to evade" in text
-            or "guaranteed to evade" in text
-            or "guaranteed to dodge" in text
-        ):
-            dodge = max(dodge, 70)
+        # 3. Dodge % (Neutralized if boss cancels dodge)
+        dodge = 0 if cancels_dodge else card.dodge_chance_percent
 
         # 4. Slot 1 specific buffs
         slot1_exclusive = (
@@ -272,8 +277,10 @@ class DokkanConstraintSolver:
         Evaluates boss phase gimmicks and calculates score modifiers and tactical points:
         1. Type Advantage vs Disadvantage against final phase (mitigated if has_guard or DR >= 60%).
         2. Cancels Dodge: zero out dodge contribution and penalize unshielded dodge units.
-        3. AoE attacks: penalize floaters lacking start-of-turn Guard/DR.
-        4. Locks slots: bonus to slot 1 viable units, penalty to fragile units.
+        3. Multi-Battle Structure Mechanics (Stacking Resets & Turn 1 Safety).
+        4. Defensive Expiration in Multi-Phase Single Battles (>= 3 phases in 1 continuous battle).
+        5. AoE attacks: penalize floaters lacking start-of-turn Guard/DR.
+        6. Locks slots: bonus to slot 1 viable units, penalty to fragile units.
         """
         delta = 0.0
         counters: list[str] = []
@@ -283,29 +290,45 @@ class DokkanConstraintSolver:
             return delta, counters, penalties
 
         final_phase: BossPhase = boss_stage.phases[-1]
+        num_phases = len(boss_stage.phases)
         cancels_dodge_any = any(p.cancels_dodge for p in boss_stage.phases)
         has_aoe_any = any(p.has_aoe for p in boss_stage.phases)
         locks_slots_any = any(p.locks_slots for p in boss_stage.phases)
+        is_multi_battle = getattr(boss_stage, "is_multi_battle", False)
+        total_battles = getattr(boss_stage, "total_battles", 1)
 
         # 1. Type Matchup against Final Phase Element
         matchup = self.check_type_matchup(card.element, final_phase.element)
         if matchup > 0:
-            delta += 20.0
-            counters.append(f"Type Advantage against Boss Final Phase ({final_phase.element_name})")
+            delta += 5.0
+            counters.append(f"Type Advantage against Boss Final Phase ({final_phase.element_name}) (+5.0)")
         elif matchup < 0:
             # Check if type disadvantage is mitigated by Guard or DR >= 60%
-            dr_pct = card.damage_reduction_percent
+            is_long_event = (num_phases >= 3 or is_multi_battle)
+            dr_pct = (
+                card.permanent_damage_reduction_percent
+                if is_long_event
+                else card.damage_reduction_percent
+            )
             if (
                 card.base_form
                 and card.base_form.passive_tags
+                and (not is_long_event or card.base_form.passive_tags.is_dr_permanent)
                 and card.base_form.passive_tags.dr_base_percent > dr_pct
             ):
                 dr_pct = card.base_form.passive_tags.dr_base_percent
 
-            has_guard = card.has_guard or (
-                card.base_form is not None
-                and card.base_form.passive_tags is not None
-                and card.base_form.passive_tags.has_guard
+            has_guard = (
+                (card.is_guard_permanent and card.is_guard_unconditional)
+                if is_long_event
+                else (
+                    card.has_guard
+                    or (
+                        card.base_form is not None
+                        and card.base_form.passive_tags is not None
+                        and card.base_form.passive_tags.has_guard
+                    )
+                )
             )
 
             if has_guard or dr_pct >= 60:
@@ -321,25 +344,115 @@ class DokkanConstraintSolver:
 
         # 2. Cancels Dodge Gimmick
         if cancels_dodge_any:
-            dodge_pct = (
-                card.base_form.passive_tags.dodge_chance_percent
-                if (
+            dodge_pct = card.dodge_chance_percent
+            if dodge_pct > 0 or card.has_dodge:
+                effective_dodge_pct = dodge_pct if dodge_pct > 0 else 30
+                penalties.append(
+                    f"Dodge ({effective_dodge_pct}%) neutralized by Boss (Cancels Dodge)"
+                )
+
+                is_long_event = (num_phases >= 3 or is_multi_battle)
+                dr_base = max(
+                    card.damage_reduction_percent,
+                    card.base_form.passive_tags.dr_base_percent
+                    if card.base_form and card.base_form.passive_tags
+                    else 0,
+                )
+                effective_dr = (
+                    card.permanent_damage_reduction_percent
+                    if is_long_event
+                    else dr_base
+                )
+                has_guard_defense = (
+                    (card.is_guard_permanent and card.is_guard_unconditional)
+                    if is_long_event
+                    else (
+                        card.has_guard
+                        or (
+                            card.base_form is not None
+                            and card.base_form.passive_tags is not None
+                            and card.base_form.passive_tags.has_guard
+                        )
+                    )
+                )
+                has_stacking = card.has_stacking_def or (
+                    card.base_form is not None
+                    and card.base_form.sa_tags is not None
+                    and card.base_form.sa_tags.stacks_def
+                )
+
+                # In multi-battle events, stacking cannot be relied upon because it resets each battle
+                stacking_reliable = has_stacking and not is_multi_battle
+
+                # If card has only dodge without reliable Guard or DR against Cancels Dodge
+                if not has_guard_defense and (effective_dr == 0 or effective_dr < 40) and not stacking_reliable:
+                    delta -= 60.0
+                    penalties.append(
+                        "Severe Glass Cannon Vulnerability: relies on dodge but lacks Guard/DR against Cancels Dodge (-60.0)"
+                    )
+                else:
+                    counters.append(
+                        "Resilience preserved via Guard/DR/Stacking despite Cancels Dodge"
+                    )
+
+        # 3. Multi-Battle Structure Mechanics (Stacking Resets & Turn 1 Safety)
+        if is_multi_battle:
+            # Check for permanent or reliable multi-battle shield
+            # Note: Intro/Entrance guard only triggers in Battle 1 (once only per stage)!
+            is_intro_only = (
+                card.guard_turns_limit is not None and card.guard_turns_limit <= 6 and not card.is_guard_permanent
+            )
+            has_guard_reliable = (
+                (card.has_guard and not is_intro_only)
+                or (card.is_guard_permanent and card.is_guard_unconditional)
+                or bool(
                     card.base_form
                     and card.base_form.passive_tags
-                    and card.base_form.passive_tags.dodge_chance_percent > 0
+                    and card.base_form.passive_tags.has_guard
+                    and card.base_form.passive_tags.is_guard_permanent
                 )
-                else (100 if card.has_dodge else 0)
             )
-            if dodge_pct > 0:
-                # Neutralize dodge contribution to 0
-                dodge_penalty = (dodge_pct / 100.0) * 15.0
-                delta -= dodge_penalty
-                penalties.append(f"Dodge ({dodge_pct}%) neutralized by Boss (Cancels Dodge)")
-                if not card.has_guard and card.damage_reduction_percent < 30:
-                    delta -= 20.0
-                    penalties.append("High vulnerability: relies on dodge but lacks Guard/DR")
+            dr_any = max(
+                card.permanent_damage_reduction_percent,
+                card.base_form.passive_tags.permanent_dr_percent
+                if card.base_form and card.base_form.passive_tags
+                else (card.damage_reduction_percent if not card.dr_turns_limit or card.dr_turns_limit > 6 else 0),
+            )
+            has_turn1_shield = has_guard_reliable or dr_any >= 45
 
-        # 3. AoE Attacks Gimmick
+            if has_turn1_shield:
+                delta += 15.0
+                counters.append(
+                    f"Multi-Battle Reliability: Immediate Turn-1 Guard/DR ({dr_any}%) protects unit across all {total_battles} separate battles (+15.0)"
+                )
+            elif card.has_stacking_def and not has_turn1_shield:
+                delta -= 20.0
+                penalties.append(
+                    f"Stacking Reset Vulnerability: Stage has {total_battles} separate battles. DEF stacks reset to 0 at each battle start, exposing unit to Turn 1 fatal attacks (-20.0)"
+                )
+
+        # 4. Defensive Expiration in Long Battles (>= 3 phases or Multi-Battle)
+        if num_phases >= 3 or is_multi_battle:
+            if (
+                card.dr_turns_limit is not None
+                and card.dr_turns_limit <= 6
+                and card.permanent_damage_reduction_percent == 0
+            ):
+                delta -= 25.0
+                penalties.append(
+                    f"Defensive Expiration: DR ({card.damage_reduction_percent}%) expires after {card.dr_turns_limit} turn(s), leaving unit vulnerable in late game (-25.0)"
+                )
+            if (
+                card.guard_turns_limit is not None
+                and card.guard_turns_limit <= 6
+                and not card.is_guard_permanent
+            ):
+                delta -= 25.0
+                penalties.append(
+                    f"Guard Expiration: Guard expires after {card.guard_turns_limit} turn(s) / intro animation, leaving unit unprotected against late-game bosses (-25.0)"
+                )
+
+        # 5. AoE Attacks Gimmick
         if has_aoe_any:
             has_sot_def = card.has_guard or card.damage_reduction_percent >= 40
             if not has_sot_def:
@@ -351,7 +464,7 @@ class DokkanConstraintSolver:
                 delta += 15.0
                 counters.append("Start-of-turn Guard/DR mitigates Boss AoE attacks")
 
-        # 4. Locks Slots Gimmick
+        # 6. Locks Slots Gimmick
         if locks_slots_any:
             is_slot1 = self.is_slot1_viable(card)
             if is_slot1:

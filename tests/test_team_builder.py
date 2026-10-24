@@ -600,7 +600,7 @@ class TestGracefulDegradation:
 
         assert chosen.id == candidate_pool_sample[2].id
         assert "MUI Goku fornisce schivata critica" in reason
-        assert "Ollama Advisor Selection:" in reason
+        assert "Qwen Advisor:" in reason
 
     def test_malformed_json_fallback_to_candidate_1(
         self, candidate_pool_sample: list[DokkanCard], sample_boss_stage: BossStage
@@ -697,6 +697,10 @@ class TestFullTeamRecommendationIntegration:
             ),
             "CoT: Support and dodge needed for Broly",
         )
+        mock_client.analyze_team_strategy.return_value = (
+            "Tactical guide for Broly",
+            "Reasoning for rotations and items",
+        )
 
         tb = TeamBuilder(ai_client=mock_client)
         team_rec, shortlist = tb.select_best_team_for_boss(
@@ -711,10 +715,10 @@ class TestFullTeamRecommendationIntegration:
         assert len({c.id for c in team_rec.all_cards}) == 6
         assert team_rec.leader.id == sample_leader_200.id
 
-        # 2. Rotations A and B defined
+        # 2. Rotations A and B defined (with 7-unit combat team including Friend Leader, 3 floaters)
         assert team_rec.rotation_a is not None
         assert team_rec.rotation_b is not None
-        assert len(team_rec.floaters) == 2
+        assert len(team_rec.floaters) == 3
 
         # 3. Two-phase survival constraint (>= 2 slot 1 viable)
         slot1_count = sum(

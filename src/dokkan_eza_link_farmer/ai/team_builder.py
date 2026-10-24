@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+
 import itertools
 import json
 import logging
@@ -123,48 +125,88 @@ class TeamBuilder:
 
         return score, shared, shared_ki
 
-    def evaluate_rotation_pair(self, card_a: DokkanCard, card_b: DokkanCard) -> RotationPair:
+    @staticmethod
+    def calculate_slot1_def_priority(card: DokkanCard, boss_stage: Any = None) -> float:
+        """Evaluates defensive priority for Slot 1 anchor: Permanent Guard > Permanent DR > Taunt/Revive > Infinite DEF Stack."""
+        priority = 0.0
+        cancels_dodge = False
+        is_long_event = False
+        if boss_stage:
+            phases = getattr(boss_stage, "phases", [])
+            cancels_dodge = any(getattr(p, "cancels_dodge", False) for p in phases)
+            is_long_event = len(phases) >= 3 or getattr(boss_stage, "is_multi_battle", False)
+
+        if getattr(card, "is_guard_permanent", False) and getattr(card, "is_guard_unconditional", False):
+            priority += 50.0
+        elif card.has_guard:
+            if is_long_event and card.guard_turns_limit and card.guard_turns_limit <= 6:
+                priority += 5.0
+            else:
+                priority += 20.0
+
+        perm_dr = getattr(card, "permanent_damage_reduction_percent", 0)
+        if perm_dr > 0:
+            priority += float(perm_dr) * 1.0
+
+        dr_limit = getattr(card, "dr_turns_limit", None)
+        if dr_limit and dr_limit <= 6 and is_long_event:
+            priority += 2.0
+        elif dr_limit and dr_limit <= 3:
+            priority += 10.0
+        elif card.damage_reduction_percent >= 40 and not perm_dr:
+            priority += 15.0
+
+        if getattr(card, "has_target_taunt", False):
+            priority += 35.0
+        if getattr(card, "has_revive", False):
+            priority += 30.0
+
+        if card.has_stacking_def:
+            priority += 10.0 if getattr(boss_stage, "is_multi_battle", False) else 20.0
+
+        if not cancels_dodge:
+            dodge = getattr(card, "dodge_chance_percent", 0)
+            if dodge >= 70:
+                priority += 15.0
+            elif dodge >= 50:
+                priority += 10.0
+
+        if DokkanConstraintSolver.is_slot1_viable(card, boss_stage):
+            priority += 25.0
+
+        return priority
+
+    @classmethod
+    def calculate_slot1_anchor_weight(cls, card: DokkanCard, boss_stage: Any = None) -> float:
+        """Assigns rotation anchor fitness bonus: Heavily rewards god-tier permanent tanks in Slot 1."""
+        bonus = 0.0
+        if getattr(card, "is_guard_permanent", False) and getattr(card, "is_guard_unconditional", False):
+            bonus += 10.0
+        if getattr(card, "permanent_damage_reduction_percent", 0) >= 40:
+            bonus += 8.0
+        if card.has_target_taunt or card.has_revive:
+            bonus += 6.0
+        if DokkanConstraintSolver.is_slot1_viable(card, boss_stage):
+            bonus += 6.0
+        return bonus
+
+    def evaluate_rotation_pair(
+        self, card_a: DokkanCard, card_b: DokkanCard, boss_stage: Any = None
+    ) -> RotationPair:
         """Determines who should be in Slot 1 (tank/defensive anchor) and Slot 2 (damage/link partner)."""
         score, shared, shared_ki = self.calculate_link_synergy(card_a, card_b)
 
-        # Evaluate defensive priority for Slot 1: Guard > DR >= 40% > Infinite DEF Stack > Dodge
+        a_def_priority = self.calculate_slot1_def_priority(card_a, boss_stage=boss_stage)
+        b_def_priority = self.calculate_slot1_def_priority(card_b, boss_stage=boss_stage)
+
         kit_a, _ = card_a.evaluate_kit_power()
         kit_b, _ = card_b.evaluate_kit_power()
-
-        a_def_priority = 0
-        if card_a.has_guard:
-            a_def_priority += 40
-        if card_a.damage_reduction_percent >= 40:
-            a_def_priority += 35
-        elif card_a.has_damage_reduction:
-            a_def_priority += 20
-        if card_a.has_stacking_def:
-            a_def_priority += 25
-        if card_a.has_dodge:
-            a_def_priority += 15
-        if card_a.is_slot1_tank:
-            a_def_priority += 20
-
-        b_def_priority = 0
-        if card_b.has_guard:
-            b_def_priority += 40
-        if card_b.damage_reduction_percent >= 40:
-            b_def_priority += 35
-        elif card_b.has_damage_reduction:
-            b_def_priority += 20
-        if card_b.has_stacking_def:
-            b_def_priority += 25
-        if card_b.has_dodge:
-            b_def_priority += 15
-        if card_b.is_slot1_tank:
-            b_def_priority += 20
 
         if a_def_priority > b_def_priority:
             slot1, slot2 = card_a, card_b
         elif b_def_priority > a_def_priority:
             slot1, slot2 = card_b, card_a
         else:
-            # Tie-break: Higher kit power or LR rarity
             slot1, slot2 = (
                 (card_a, card_b) if (card_a.is_lr or kit_a >= kit_b) else (card_b, card_a)
             )
@@ -178,7 +220,7 @@ class TeamBuilder:
         )
 
     def optimize_rotations_for_team(
-        self, cards: list[DokkanCard]
+        self, cards: list[DokkanCard], boss_stage: Any = None
     ) -> tuple[RotationPair, RotationPair, list[DokkanCard]]:
         """
         Given 6 or 7 cards, finds the 2 optimal rotation pairs (Rotation A & Rotation B)
@@ -192,32 +234,76 @@ class TeamBuilder:
         best_rot_b: RotationPair | None = None
         best_floaters: list[DokkanCard] = []
 
-        # Evaluate combinations of 4 cards to form 2 pairs
-        for four_cards in itertools.combinations(cards, 4):
-            c1, c2, c3, c4 = four_cards
+        n = len(cards)
+        # Evaluate combinations of 4 card indices to form 2 rotation pairs
+        for idxs in itertools.combinations(range(n), 4):
+            i1, i2, i3, i4 = idxs
             pairings = [
-                ((c1, c2), (c3, c4)),
-                ((c1, c3), (c2, c4)),
-                ((c1, c4), (c2, c3)),
+                ((cards[i1], cards[i2]), (cards[i3], cards[i4])),
+                ((cards[i1], cards[i3]), (cards[i2], cards[i4])),
+                ((cards[i1], cards[i4]), (cards[i2], cards[i3])),
             ]
             for (p1_a, p1_b), (p2_a, p2_b) in pairings:
-                rot1 = self.evaluate_rotation_pair(p1_a, p1_b)
-                rot2 = self.evaluate_rotation_pair(p2_a, p2_b)
-                total = rot1.synergy_score + rot2.synergy_score
+                rot1 = self.evaluate_rotation_pair(p1_a, p1_b, boss_stage=boss_stage)
+                rot2 = self.evaluate_rotation_pair(p2_a, p2_b, boss_stage=boss_stage)
+                total = (rot1.synergy_score + rot2.synergy_score) + (
+                    self.calculate_slot1_anchor_weight(rot1.slot1, boss_stage=boss_stage)
+                    + self.calculate_slot1_anchor_weight(rot2.slot1, boss_stage=boss_stage)
+                )
 
                 if total > best_score:
                     best_score = total
                     best_rot_a = rot1
                     best_rot_b = rot2
-                    used_ids = {p1_a.id, p1_b.id, p2_a.id, p2_b.id}
-                    best_floaters = [c for c in cards if c.id not in used_ids]
+                    used_indices = {i1, i2, i3, i4}
+                    best_floaters = [cards[i] for i in range(n) if i not in used_indices]
 
         if best_rot_a is None or best_rot_b is None:
-            best_rot_a = self.evaluate_rotation_pair(cards[0], cards[1])
-            best_rot_b = self.evaluate_rotation_pair(cards[2], cards[3])
+            best_rot_a = self.evaluate_rotation_pair(cards[0], cards[1], boss_stage=boss_stage)
+            best_rot_b = self.evaluate_rotation_pair(cards[2], cards[3], boss_stage=boss_stage)
             best_floaters = cards[4:]
 
         return best_rot_a, best_rot_b, best_floaters
+
+    def select_best_friend_leader(
+        self, cards: list[DokkanCard], candidate_pool: list[DokkanCard]
+    ) -> DokkanCard:
+        """Selects the optimal complementary Friend Leader from candidate_pool for the team."""
+        if not candidate_pool:
+            lead = copy.copy(cards[0])
+            lead.is_friend_leader = True
+            return lead
+
+        best_cand = candidate_pool[0]
+        best_score = -1000.0
+
+        for cand in candidate_pool:
+            score = 0.0
+            covered_count = 0
+            for c in cards:
+                is_cov, boost, _ = c.is_covered_by_leader(cand)
+                if is_cov and boost >= 170.0:
+                    covered_count += 1
+                    score += boost * 0.1
+            if covered_count < 5:
+                score -= 100.0
+
+            kit, _ = cand.evaluate_kit_power()
+            score += kit * 0.2
+            if cand.is_slot1_tank:
+                score += 15.0
+            if getattr(cand, "permanent_damage_reduction_percent", 0) >= 40:
+                score += 20.0
+            if getattr(cand, "is_guard_permanent", False) and getattr(cand, "is_guard_unconditional", False):
+                score += 25.0
+
+            if score > best_score:
+                best_score = score
+                best_cand = cand
+
+        friend = copy.copy(best_cand)
+        friend.is_friend_leader = True
+        return friend
 
     def find_best_partners_for_card(
         self, card: DokkanCard, candidate_pool: list[DokkanCard], top_k: int = 5
@@ -233,12 +319,46 @@ class TeamBuilder:
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored[:top_k]
 
+    @staticmethod
+    def format_card_for_strategy(card: DokkanCard) -> str:
+        """Formats card name and key kit mechanics for tactical strategy analysis."""
+        tags = []
+        if card.has_guard:
+            tags.append("Guardia garantita")
+        dr_pct = getattr(card, "damage_reduction_percent", 0)
+        if dr_pct > 0:
+            tags.append(f"Riduzione danno {dr_pct}%")
+        elif getattr(card, "has_damage_reduction", False):
+            tags.append("Riduzione danno")
+        if getattr(card, "has_stacking_def", False):
+            tags.append("Stacking DEF")
+        if getattr(card, "has_target_taunt", False):
+            tags.append("Taunt/Bersaglio")
+        if getattr(card, "has_dodge", False):
+            tags.append("Schivata")
+        if getattr(card, "has_active_skill", False):
+            tags.append("Active Skill")
+        if getattr(card, "has_standby", False):
+            tags.append("Standby")
+        if getattr(card, "has_revive", False):
+            tags.append("Revive")
+        if getattr(card, "has_support", False):
+            tags.append("Supporto alleati")
+        if getattr(card, "has_orb_changing", False):
+            tags.append("Cambia-orbi")
+
+        kit_desc = f" [Kit: {', '.join(tags)}]" if tags else ""
+        return f"{card.full_name}{kit_desc}"
+
     def build_team_plan(
         self,
         cards: list[DokkanCard],
         boss_target: str | None = None,
         language: str = "it",
         generate_tactics: bool = True,
+        friend_leader: DokkanCard | None = None,
+        candidate_pool: list[DokkanCard] | None = None,
+        boss_stage: Any = None,
     ) -> TeamRecommendation:
         """
         Builds a full team recommendation following the 3-level priority hierarchy:
@@ -250,16 +370,34 @@ class TeamBuilder:
             raise ValueError(f"Need 6 cards for team formation, got {len(cards)}")
 
         leader = cards[0]
-        friend_leader = cards[6] if len(cards) >= 7 else leader
+        if friend_leader is not None:
+            friend = friend_leader
+        elif candidate_pool:
+            friend = self.select_best_friend_leader(cards, candidate_pool)
+        elif len(cards) >= 7:
+            friend = cards[6]
+        else:
+            friend = copy.copy(leader)
+            friend.is_friend_leader = True
 
-        rot_a, rot_b, floaters = self.optimize_rotations_for_team(cards[:6])
+        # Optimize rotations for the complete 7-unit battle team (Leader + 5 Subs + Friend Leader)
+        combat_team = list(cards[:6]) + [friend]
+        rot_a, rot_b, floaters = self.optimize_rotations_for_team(combat_team, boss_stage=boss_stage)
 
-        # Generate structured summary highlighting kit mechanics and links
+        def _label_card(c: DokkanCard) -> str:
+            badge = ""
+            if c is friend or getattr(c, "is_friend_leader", False):
+                badge = " [Friend Leader]"
+            elif c is leader:
+                badge = " [Leader]"
+            return f"{self.format_card_for_strategy(c)}{badge}"
+
+        # Generate structured summary highlighting kit mechanics and links (7 units across rotations & floaters)
         summary_lines = [
-            f"1. Leader: {leader.full_name} ({leader.leader_skill})",
-            f"2. Rotazione A: Slot 1 [{rot_a.slot1.full_name}] + Slot 2 [{rot_a.slot2.full_name}] (Link: {', '.join(rot_a.shared_links)})",
-            f"3. Rotazione B: Slot 1 [{rot_b.slot1.full_name}] + Slot 2 [{rot_b.slot2.full_name}] (Link: {', '.join(rot_b.shared_links)})",
-            f"4. Floaters (Slot 3): {', '.join(f.full_name for f in floaters)}",
+            f"- Leader Skill attiva: {leader.full_name} ({leader.leader_skill})",
+            f"- Rotazione A: Slot 1 [{_label_card(rot_a.slot1)}] + Slot 2 [{_label_card(rot_a.slot2)}] (Link: {', '.join(rot_a.shared_links)})",
+            f"- Rotazione B: Slot 1 [{_label_card(rot_b.slot1)}] + Slot 2 [{_label_card(rot_b.slot2)}] (Link: {', '.join(rot_b.shared_links)})",
+            f"- Floaters (Slot 3): {', '.join(_label_card(f) for f in floaters)}",
         ]
         summary_text = "\n".join(summary_lines)
 
@@ -277,23 +415,23 @@ class TeamBuilder:
                 logger.warning(f"AI strategy generation skipped due to error: {e}")
 
         if not tactical_guide:
-            # Algorithmic fallback guide adhering to the 3-level hierarchy
+            # Algorithmic fallback guide adhering to the clean bulleted structure
             tactical_guide = (
-                f"### Piano Tattico Deterministico (Gerarchia Dokkan):\n"
-                f"1. **Copertura Leader Skill**: Tutte le unità selezionate beneficiano del boost della Leader Skill ({leader.name}).\n"
-                f"2. **Kit & Ruoli Difensivi (Slot 1)**:\n"
-                f"   - **Rotazione A**: Mantieni {rot_a.slot1.name} in Slot 1 (difensore principale). {rot_a.slot2.name} in Slot 2 attiva {len(rot_a.shared_links)} link e gestisce i danni/Active.\n"
-                f"   - **Rotazione B**: {rot_b.slot1.name} in Slot 1 come baluardo difensivo. {rot_b.slot2.name} in Slot 2 attiva {len(rot_b.shared_links)} link.\n"
-                f"3. **Link Skill & Supporto (Slot 3 Floaters)**:\n"
-                f"   - Fai ruotare {', '.join(f.name for f in floaters)} in Slot 3 per Ki support, orbi e rotazione strategica.\n"
-                f"4. **Oggetti di Supporto Consigliati**: Whis (riduzione 40% per 2 turni) o Princess Snake (cura 55% + 30% riduzione danno)."
+                f"### 🛡️ Piano Tattico Deterministico - Rotazioni\n"
+                f"- **Rotazione A**: Mantieni **{rot_a.slot1.name}** in Slot 1 come difensore primario. **{rot_a.slot2.name}** in Slot 2 attiva {len(rot_a.shared_links)} link e massimizza i danni.\n"
+                f"- **Rotazione B**: **{rot_b.slot1.name}** in Slot 1 assorbe i colpi diretti. **{rot_b.slot2.name}** in Slot 2 guida la fase offensiva.\n"
+                f"- **Floaters (Slot 3)**: Fai ruotare **{', '.join(f.name for f in floaters)}** in Slot 3 per Ki support, gestione orbi e rotazione difensiva.\n\n"
+                f"### 💊 Gestione Oggetti di Supporto\n"
+                f"- **Whis**: Attivalo nei turni ad alto rischio o contro la Super Attack nemica per ridurre il danno del 40% per 2 turni.\n"
+                f"- **Ghost Usher**: Usalo se il floater in Slot 3 subisce troppi attacchi o per saltare un turno critico del boss.\n"
+                f"- **Princess Snake**: Usalo per recuperare il 55% di HP e ottenere il 30% di riduzione danno nei turni di emergenza."
             )
 
         items = ["Whis", "Ghost Usher", "Princess Snake"]
 
         return TeamRecommendation(
             leader=leader,
-            friend_leader=friend_leader,
+            friend_leader=friend,
             rotation_a=rot_a,
             rotation_b=rot_b,
             floaters=floaters,
@@ -301,6 +439,7 @@ class TeamBuilder:
             tactical_analysis=tactical_guide,
             recommended_items=items,
             ai_reasoning=ai_reasoning,
+            boss_stage=boss_stage,
         )
 
     # =========================================================================
@@ -706,13 +845,15 @@ class TeamBuilder:
 
         # 3. Build Team Recommendation Plan
         boss_target_str = (
-            f"{boss_stage.event_name} - {boss_stage.stage_name}" if boss_stage else None
+            format_stage_tactical_briefing(boss_stage, language=language) if boss_stage else None
         )
         team_rec = self.build_team_plan(
             team_cards,
             boss_target=boss_target_str,
             language=language,
             generate_tactics=generate_tactics,
+            candidate_pool=candidate_pool,
+            boss_stage=boss_stage,
         )
         if mission_batch is not None:
             team_rec.target_missions = list(getattr(mission_batch, "missions", []))
@@ -917,10 +1058,8 @@ class TeamBuilder:
 
         for ev in top_candidates[:5]:
             if ev.card.id == sel_id:
-                full_reason = f"Ollama Advisor Selection: {advisor_reason}"
-                if reasoning:
-                    full_reason += f" [CoT: {reasoning[:200]}...]"
-                logger.info(f"Ollama Advisor selected card {sel_id} ({ev.card.name})")
+                full_reason = f"Qwen Advisor: {advisor_reason}"
+                logger.info(f"Qwen Advisor selected card {sel_id} ({ev.card.name})")
                 return ev.card, full_reason
 
         return fallback_choice, "Algorithmic Solver Top-Ranked Choice (Offline / Graceful Fallback)"
@@ -1008,7 +1147,7 @@ def _resolve_category_name(cid: int, card: DokkanCard, leader: DokkanCard) -> st
 
 
 def format_team_summary_table(
-    team_cards: list[DokkanCard], leader: DokkanCard | None = None
+    team_cards: list[DokkanCard], leader: DokkanCard | None = None, boss_stage: Any = None
 ) -> str:
     """
     Renders a clear tabular summary for the 6 team slots:
@@ -1169,20 +1308,52 @@ def format_team_summary_table(
         has_guard = c.has_guard or bool(
             c.base_form and c.base_form.passive_tags and c.base_form.passive_tags.has_guard
         )
+        is_guard_perm = getattr(c, "is_guard_permanent", False)
+        is_guard_uncond = getattr(c, "is_guard_unconditional", False)
+        guard_limit = getattr(c, "guard_turns_limit", None)
+        if is_guard_perm and is_guard_uncond:
+            guard_label = "Guard (Perm)"
+        elif is_guard_perm:
+            guard_label = "Guard (Cond)"
+        elif guard_limit:
+            guard_label = f"Guard ({guard_limit}T)"
+        elif has_guard:
+            guard_label = "Guard"
+        else:
+            guard_label = "No Guard"
+
         dr_pct = max(
             c.damage_reduction_percent,
             c.base_form.passive_tags.dr_base_percent
             if c.base_form and c.base_form.passive_tags
             else 0,
         )
-        dodge_pct = max(
-            100 if c.has_dodge else 0,
-            c.base_form.passive_tags.dodge_chance_percent
-            if c.base_form and c.base_form.passive_tags
-            else 0,
-        )
-        guard_label = "Guard" if has_guard else "No Guard"
-        def_tags_str = f"{guard_label} / DR {dr_pct}% / Dodge {dodge_pct}%"
+        dr_limit = getattr(c, "dr_turns_limit", None)
+        perm_dr = getattr(c, "permanent_damage_reduction_percent", 0)
+        if dr_pct > 0:
+            if perm_dr == dr_pct and getattr(c, "is_dr_permanent", False):
+                dr_label = f"DR {dr_pct}% (Perm)"
+            elif dr_limit:
+                dr_label = f"DR {dr_pct}% ({dr_limit}T)"
+            else:
+                dr_label = f"DR {dr_pct}%"
+        else:
+            dr_label = "DR 0%"
+
+        dodge_pct = c.dodge_chance_percent
+        dodge_limit = getattr(c, "dodge_turns_limit", None)
+        cancels_dodge_boss = bool(boss_stage and any(getattr(p, "cancels_dodge", False) for p in getattr(boss_stage, "phases", [])))
+        if dodge_pct > 0:
+            if cancels_dodge_boss:
+                dodge_label = f"Dodge {dodge_pct}% [Nullificato]"
+            elif dodge_limit:
+                dodge_label = f"Dodge {dodge_pct}% ({dodge_limit}T)"
+            else:
+                dodge_label = f"Dodge {dodge_pct}%"
+        else:
+            dodge_label = "Dodge 0%"
+
+        def_tags_str = f"{guard_label} / {dr_label} / {dodge_label}"
 
         rows.append(
             [
@@ -1206,7 +1377,7 @@ def format_team_summary_table(
 
 
 def render_team_summary_table_rich(
-    team_cards: list[DokkanCard], leader: DokkanCard | None = None
+    team_cards: list[DokkanCard], leader: DokkanCard | None = None, boss_stage: Any = None
 ) -> Any:
     """Renders a rich.table.Table summary for the 6 team slots with Dokkan type colors:
     - Slot (1 to 6)
@@ -1342,20 +1513,52 @@ def render_team_summary_table_rich(
         has_guard = c.has_guard or bool(
             c.base_form and c.base_form.passive_tags and c.base_form.passive_tags.has_guard
         )
+        is_guard_perm = getattr(c, "is_guard_permanent", False)
+        is_guard_uncond = getattr(c, "is_guard_unconditional", False)
+        guard_limit = getattr(c, "guard_turns_limit", None)
+        if is_guard_perm and is_guard_uncond:
+            guard_part = "Guard (Perm)"
+        elif is_guard_perm:
+            guard_part = "Guard (Cond)"
+        elif guard_limit:
+            guard_part = f"Guard ({guard_limit}T)"
+        elif has_guard:
+            guard_part = "Guard"
+        else:
+            guard_part = "No Guard"
+
         dr_pct = max(
             c.damage_reduction_percent,
             c.base_form.passive_tags.dr_base_percent
             if c.base_form and c.base_form.passive_tags
             else 0,
         )
-        dodge_pct = max(
-            100 if c.has_dodge else 0,
-            c.base_form.passive_tags.dodge_chance_percent
-            if c.base_form and c.base_form.passive_tags
-            else 0,
-        )
-        guard_part = "Guard" if has_guard else "No Guard"
-        def_tags_str = f"{guard_part} / DR {dr_pct}% / Dodge {dodge_pct}%"
+        dr_limit = getattr(c, "dr_turns_limit", None)
+        perm_dr = getattr(c, "permanent_damage_reduction_percent", 0)
+        if dr_pct > 0:
+            if perm_dr == dr_pct and getattr(c, "is_dr_permanent", False):
+                dr_part = f"DR {dr_pct}% (Perm)"
+            elif dr_limit:
+                dr_part = f"DR {dr_pct}% ({dr_limit}T)"
+            else:
+                dr_part = f"DR {dr_pct}%"
+        else:
+            dr_part = "DR 0%"
+
+        dodge_pct = c.dodge_chance_percent
+        dodge_limit = getattr(c, "dodge_turns_limit", None)
+        cancels_dodge_boss = bool(boss_stage and any(getattr(p, "cancels_dodge", False) for p in getattr(boss_stage, "phases", [])))
+        if dodge_pct > 0:
+            if cancels_dodge_boss:
+                dodge_part = f"Dodge {dodge_pct}% [Nullificato]"
+            elif dodge_limit:
+                dodge_part = f"Dodge {dodge_pct}% ({dodge_limit}T)"
+            else:
+                dodge_part = f"Dodge {dodge_pct}%"
+        else:
+            dodge_part = "Dodge 0%"
+
+        def_tags_str = f"{guard_part} / {dr_part} / {dodge_part}"
 
         t.add_row(
             slot_str,
@@ -1367,6 +1570,165 @@ def render_team_summary_table_rich(
         )
 
     return t
+
+
+def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str:
+    """Formats complete multi-battle stage intelligence, HP, ATK, actions, immunities, and skills."""
+    if not boss_stage:
+        return ""
+    lines: list[str] = []
+    total_battles = getattr(boss_stage, "total_battles", 1)
+    is_multi_battle = getattr(boss_stage, "is_multi_battle", False)
+    phases = getattr(boss_stage, "phases", [])
+
+    if language == "it":
+        lines.append(f"**Evento**: {boss_stage.event_name} | **Stage**: {boss_stage.stage_name} (ID: {boss_stage.stage_id})")
+        lines.append(f"- **Struttura Evento**: {total_battles} Battagli{'a' if total_battles == 1 else 'e'} distinte ({len(phases)} Fasi totali)")
+        if is_multi_battle:
+            lines.append(
+                "> ⚠️ **AVVISO MECCANICA DI GIOCO (RESET STACKING)**: Questo evento è suddiviso in "
+                f"{total_battles} battaglie separate! Lo stacking permanente di ATK e DEF "
+                "NON si conserva tra una battaglia e l'altra (si azzera a 0 all'inizio di ogni battaglia). "
+                "I bonus 'Entrance Animation' si riattivano all'inizio di ciascuna battaglia."
+            )
+        lines.append("\n**Scheda Dettagliata Battaglie & Fasi Boss**:")
+        for p in phases:
+            b = p.bosses[0] if getattr(p, "bosses", None) else None
+            b_name = b.name if b else "Boss"
+            sub = f" ({b.subname})" if b and getattr(b, "subname", None) else ""
+            hp_val = getattr(p, "hp", 0)
+            atk_val = getattr(p, "atk", 0)
+            sa_est_val = getattr(p, "estimated_sa_damage", 0)
+            actions_val = getattr(p, "actions_per_turn", 0)
+            skills = getattr(p, "special_skills", [])
+
+            hp_str = f"{hp_val / 1_000_000:.0f}M" if hp_val >= 1_000_000 else (f"{hp_val:,}" if hp_val else "N/A")
+            atk_str = f"{atk_val / 1_000:.0f}k" if atk_val >= 1_000 else (str(atk_val) if atk_val else "N/A")
+            sa_est = f"~{sa_est_val / 1_000_000:.1f}M" if sa_est_val >= 1_000_000 else (f"~{sa_est_val:,}" if sa_est_val else "N/A")
+            actions_str = f"{actions_val} attacchi/turno" if actions_val else "Attacchi standard"
+            skills_str = ", ".join(skills) if skills else "Nessuna abilità speciale rilevata"
+            stacking_note = "Inizio evento (stacking da 0)" if getattr(p, "phase_index", 1) == 1 else ("⚠️ NUOVA BATTAGLIA (Stacking azzerato a 0!)" if getattr(p, "is_new_battle", False) else "Stacking conservato dalla fase precedente")
+
+            lines.append(
+                f"- **Battaglia {getattr(p, 'battle_index', 1)} - Round {getattr(p, 'round_index', 1)} (Fase {getattr(p, 'phase_index', 1)})**: "
+                f"**{b_name}{sub}** [{getattr(p, 'element_name', '')}]\n"
+                f"  - **HP**: {hp_str} | **ATK Base**: {atk_str} (Super Attack stimata: {sa_est}) | **Azioni**: {actions_str}\n"
+                f"  - **Abilità & Gimmick**: {skills_str}\n"
+                f"  - **Stato Stacking**: {stacking_note}"
+            )
+    else:
+        lines.append(f"**Event**: {boss_stage.event_name} | **Stage**: {boss_stage.stage_name} (ID: {boss_stage.stage_id})")
+        lines.append(f"- **Event Structure**: {total_battles} Distinct Battle(s) ({len(phases)} Total Phases)")
+        if is_multi_battle:
+            lines.append(
+                "> ⚠️ **CRITICAL GAME MECHANIC (STACKING RESET)**: This stage consists of "
+                f"{total_battles} separate battles! Permanent ATK & DEF stacking "
+                "DOES NOT carry over between battles (it resets to 0 at the start of each battle). "
+                "Entrance Animations re-trigger upon entry in each battle."
+            )
+        lines.append("\n**Detailed Battles, Phases, Damage & Boss Gimmicks**:")
+        for p in phases:
+            b = p.bosses[0] if getattr(p, "bosses", None) else None
+            b_name = b.name if b else "Boss"
+            sub = f" ({b.subname})" if b and getattr(b, "subname", None) else ""
+            hp_val = getattr(p, "hp", 0)
+            atk_val = getattr(p, "atk", 0)
+            sa_est_val = getattr(p, "estimated_sa_damage", 0)
+            actions_val = getattr(p, "actions_per_turn", 0)
+            skills = getattr(p, "special_skills", [])
+
+            hp_str = f"{hp_val / 1_000_000:.0f}M" if hp_val >= 1_000_000 else (f"{hp_val:,}" if hp_val else "N/A")
+            atk_str = f"{atk_val / 1_000:.0f}k" if atk_val >= 1_000 else (str(atk_val) if atk_val else "N/A")
+            sa_est = f"~{sa_est_val / 1_000_000:.1f}M" if sa_est_val >= 1_000_000 else (f"~{sa_est_val:,}" if sa_est_val else "N/A")
+            actions_str = f"{actions_val} attacks/turn" if actions_val else "Standard actions"
+            skills_str = ", ".join(skills) if skills else "No special skills detected"
+            stacking_note = "Stage start (0 stacks)" if getattr(p, "phase_index", 1) == 1 else ("⚠️ NEW BATTLE: DEF stacks reset to 0!" if getattr(p, "is_new_battle", False) else "Stacks carried over from previous phase")
+
+            lines.append(
+                f"- **Battle {getattr(p, 'battle_index', 1)} - Round {getattr(p, 'round_index', 1)} (Phase {getattr(p, 'phase_index', 1)})**: "
+                f"**{b_name}{sub}** [{getattr(p, 'element_name', '')}]\n"
+                f"  - **HP**: {hp_str} | **Normal ATK**: {atk_str} (Estimated Super Attack: {sa_est}) | **Actions**: {actions_str}\n"
+                f"  - **Skills & Gimmicks**: {skills_str}\n"
+                f"  - **Stacking Status**: {stacking_note}"
+            )
+    return "\n".join(lines)
+
+
+def render_stage_intel_rich(boss_stage: Any) -> Any:
+    """Renders a rich table of complete stage intelligence: Battles, HP, ATK, Actions, Immunities, and Stacking."""
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+
+    total_battles = getattr(boss_stage, "total_battles", 1)
+    is_multi_battle = getattr(boss_stage, "is_multi_battle", False)
+    phases = getattr(boss_stage, "phases", [])
+
+    title = f"🎯 Stage Intelligence: {boss_stage.event_name} - {boss_stage.stage_name} ({total_battles} Battagli{'e' if total_battles > 1 else 'a'})"
+    t = Table(show_header=True, header_style="bold magenta", expand=True)
+    t.add_column("Battaglia / Fase", style="bold cyan", width=18)
+    t.add_column("Boss Nemico", style="bold", width=26)
+    t.add_column("HP", justify="right", style="green", width=10)
+    t.add_column("ATK / Super", justify="right", style="yellow", width=18)
+    t.add_column("Azioni", justify="center", width=10)
+    t.add_column("Gimmick & Immunità", style="white")
+    t.add_column("Stacking DEF", justify="center", width=16)
+
+    for p in phases:
+        b = p.bosses[0] if getattr(p, "bosses", None) else None
+        b_name = b.name if b else "Boss"
+        phase_label = f"B{getattr(p, 'battle_index', 1)} - R{getattr(p, 'round_index', 1)} (F{getattr(p, 'phase_index', 1)})"
+
+        elem_name = getattr(p, "element_name", "")
+        elem_color = "bold green" if "TEQ" in elem_name else ("bold blue" if "AGL" in elem_name else ("bold red" if "STR" in elem_name else ("bold yellow" if "PHY" in elem_name else "bold magenta")))
+        boss_text = Text(f"[{elem_name}] {b_name}", style=elem_color)
+
+        hp_val = getattr(p, "hp", 0)
+        atk_val = getattr(p, "atk", 0)
+        sa_val = getattr(p, "estimated_sa_damage", 0)
+        act_val = getattr(p, "actions_per_turn", 0)
+        skills = getattr(p, "special_skills", [])
+
+        hp_str = f"{hp_val / 1_000_000:.0f}M" if hp_val >= 1_000_000 else (f"{hp_val:,}" if hp_val else "-")
+        atk_str = f"{atk_val / 1_000:.0f}k / ~{sa_val / 1_000_000:.1f}M" if atk_val else "-"
+        act_str = f"{act_val}/t" if act_val else "-"
+        gimmicks_str = ", ".join(skills) if skills else "Nessuna"
+
+        p_idx = getattr(p, "phase_index", 1)
+        is_new = getattr(p, "is_new_battle", False)
+        if p_idx == 1:
+            stack_text = Text("Inizio (0)", style="dim")
+        elif is_new:
+            stack_text = Text("⚠️ Reset a 0!", style="bold red")
+        else:
+            stack_text = Text("Mantiene", style="bold green")
+
+        t.add_row(
+            phase_label,
+            boss_text,
+            hp_str,
+            atk_str,
+            act_str,
+            gimmicks_str,
+            stack_text,
+        )
+
+    warning_text = ""
+    if is_multi_battle:
+        warning_text = (
+            "[bold yellow]⚠️ NOTA MULTI-BATTAGLIA:[/bold yellow] "
+            "[bold red]Lo Stacking di ATK e DEF si AZZERA all'inizio di ciascuna nuova battaglia "
+            "(i buff accumulati NON si trasferiscono tra Battaglia 1, 2 e 3)![/bold red]\n"
+            "[dim]Le rotazioni A e B sono coppie d'ancoraggio sinergiche: puoi e devi adattarle "
+            "dinamicamente in base ai tipi e agli attacchi di ogni fase.[/dim]\n\n"
+        )
+
+    return Panel(
+        t,
+        title=title,
+        subtitle=f"[dim]Fasi totali: {len(phases)} | Difficoltà: {getattr(boss_stage, 'difficulty', 1)}[/dim]",
+        border_style="cyan",
+    )
 
 
 __all__ = [
@@ -1381,4 +1743,7 @@ __all__ = [
     "ELEMENT_DISADVANTAGE",
     "format_team_summary_table",
     "render_team_summary_table_rich",
+    "format_stage_tactical_briefing",
+    "render_stage_intel_rich",
 ]
+

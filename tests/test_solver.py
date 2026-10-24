@@ -453,7 +453,7 @@ class TestBossGimmickOverrides:
             base_form=CardForm(form_id=2004, form_index=0, form_name="AGL Attacker", element=0),
         )
         delta, counters, _ = solver.evaluate_boss_gimmicks(agl_unit, boss)
-        assert delta == 20.0
+        assert delta == 5.0
         assert any("Type Advantage" in c for c in counters)
 
     def test_cancels_dodge_penalizes_unshielded_dodge(self, solver: DokkanConstraintSolver) -> None:
@@ -497,16 +497,16 @@ class TestBossGimmickOverrides:
         delta_unshielded, _, pen_unshielded = solver.evaluate_boss_gimmicks(unshielded_dodge, boss)
         delta_shielded, _, pen_shielded = solver.evaluate_boss_gimmicks(shielded_dodge, boss)
 
-        # Unshielded receives dodge neutralization (-10.5) PLUS vulnerability penalty (-20) = -30.5
-        assert delta_unshielded == pytest.approx(-30.5, abs=0.1)
+        # Unshielded receives severe glass cannon vulnerability penalty (-60.0)
+        assert delta_unshielded == pytest.approx(-60.0, abs=0.1)
         assert any("neutralized by Boss (Cancels Dodge)" in p for p in pen_unshielded)
         assert any(
-            "High vulnerability: relies on dodge but lacks Guard/DR" in p for p in pen_unshielded
+            "Severe Glass Cannon Vulnerability" in p for p in pen_unshielded
         )
 
-        # Shielded has dodge neutralized (-10.5) but does NOT suffer the extra -20 penalty
-        assert delta_shielded == pytest.approx(-10.5, abs=0.1)
-        assert not any("High vulnerability" in p for p in pen_shielded)
+        # Shielded has dodge neutralized but does NOT suffer the extra -60.0 glass cannon penalty
+        assert delta_shielded == pytest.approx(0.0, abs=0.1)
+        assert not any("Severe Glass Cannon Vulnerability" in p for p in pen_shielded)
 
     def test_cancels_dodge_penalizes_passive_text_dodge_fallback(
         self, solver: DokkanConstraintSolver
@@ -545,10 +545,10 @@ class TestBossGimmickOverrides:
 
         delta, _, penalties = solver.evaluate_boss_gimmicks(text_dodge_card, boss)
 
-        # Falls back to 100% dodge penalty (-15.0) plus high vulnerability (-20.0) = -35.0
-        assert delta == pytest.approx(-35.0, abs=0.1)
-        assert any("Dodge (100%) neutralized by Boss (Cancels Dodge)" in p for p in penalties)
-        assert any("High vulnerability: relies on dodge but lacks Guard/DR" in p for p in penalties)
+        # Great chance parses to 70% and suffers severe glass cannon penalty (-60.0)
+        assert delta == pytest.approx(-60.0, abs=0.1)
+        assert any("Dodge (70%) neutralized by Boss (Cancels Dodge)" in p for p in penalties)
+        assert any("Severe Glass Cannon Vulnerability" in p for p in penalties)
 
         # Also test auto-instantiated base form where passive_tags.dodge_chance_percent defaults to 0
         auto_card = DokkanCard(
@@ -558,9 +558,9 @@ class TestBossGimmickOverrides:
             passive_skill="Great chance of evading enemy attacks",
         )
         delta_auto, _, pen_auto = solver.evaluate_boss_gimmicks(auto_card, boss)
-        assert delta_auto == pytest.approx(-35.0, abs=0.1)
-        assert any("Dodge (100%) neutralized by Boss (Cancels Dodge)" in p for p in pen_auto)
-        assert any("High vulnerability: relies on dodge but lacks Guard/DR" in p for p in pen_auto)
+        assert delta_auto == pytest.approx(-60.0, abs=0.1)
+        assert any("Dodge (70%) neutralized by Boss (Cancels Dodge)" in p for p in pen_auto)
+        assert any("Severe Glass Cannon Vulnerability" in p for p in pen_auto)
 
     def test_has_aoe_gimmick(self, solver: DokkanConstraintSolver) -> None:
         boss = BossStage(
