@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.2.0] - 2026-10-24
+
+### Added
+- **Synthetic Box Scanner Test Harness (`tests/harness/`)**: Fully simulated in-memory ADB and synthetic card rendering frames for reproducible offline testing without physical devices.
+- **Selective Memory Telemetry Freezing**: Disabled observation frame accumulation in long-running farming tasks (EZA 999, link leveling) by default, with `--debug-telemetry` CLI flag for on-demand debugging.
+- **Live Box Scanner Diagnostic Tool (`scripts/self_improve_scanner.py`)**: Real-time diagnostic script for ADB box scans with automated debug crop dumps.
+
+### Changed
+- **Decomposed Box Scanner Architecture**: Monolithic `box_scanner.py` modularized into domain subpackages (`banner_extractor`, `detail_evaluator`, `catalog_matcher`, `box_storage`, `card_registry`, `filter_manager`, `swipe_controller`), maintaining complete backwards compatibility via `__all__`.
+- **Vision Prior Vertical ROI Optimization**: Accelerated template matching on tall aspect ratios (>=1600px) with deterministic vertical search windows and C-contiguous zero-overhead OpenCV processing.
+- **ADB Screencap Preallocated Frame Buffer**: Reused contiguous byte buffers across screenshot captures, eliminating GC overhead in fast polling loops.
+- **Discord Bot Decoupling**: Lazy-loaded Discord dependencies and wrapped notification callbacks to prevent event loop teardown exceptions from interrupting automation.
+
+---
+
 ## [v1.1.1] - 2026-10-19
 
 ### Added
