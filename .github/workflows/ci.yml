@@ -33,5 +33,5 @@ jobs:
       - name: Run Type Checking
         run: uv run pyright
 
-      - name: Run Test Suite
-        run: uv run pytest
+      - name: Run Fast Test Suite (<3s)
+        run: uv run python scripts/test_runner.py fast

@@ -56,6 +56,9 @@ jobs:
           uv run ruff format --check .
           uv run pyright
 
+      - name: Pre-Release Full Test Suite Matrix
+        run: uv run python scripts/test_runner.py full
+
       - name: Build Standalone Distribution
         run: uv run python scripts/build_dist.py
 
