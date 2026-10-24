@@ -73,7 +73,7 @@ cli:
     online: "ONLINE ✓"
     offline: "OFFLINE ✗ (Verifica che Ollama o LM Studio siano attivi su {url})"
     current_model: "Modello attivo: {model} (Famiglia: {family})"
-    reasoning_title: "Catena di Pensiero (DeepSeek-R1 Reasoning)"
+    reasoning_title: "Motivazione Selezione AI (Qwen 3.5)"
     tactical_title: "Guida Tattica & Rotazioni"
     switch_family_prompt: "Seleziona la famiglia del modello AI:"
     switch_model_name_prompt: "Nome del modello (es. qwen2.5:7b, deepseek-r1:8b, deepseek-r1:14b):"

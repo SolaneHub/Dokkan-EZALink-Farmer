@@ -2,15 +2,15 @@ ai:
   api_key: ollama
   base_url: http://localhost:11434/v1
   enabled: true
-  model_family: deepseek_r1
-  model_name: deepseek-r1:7b
+  model_family: qwen
+  model_name: qwen3.5:4b
   provider: ollama
-  temperature: 0.6
+  temperature: 0.3
 ai_teambuilder:
   confidence_threshold: 0.72
   enabled: true
   max_attempts: 10
-  ollama_model: deepseek-r1:7b
+  ollama_model: qwen3.5:4b
   ollama_url: http://localhost:11434
   timeout_seconds: 75
 bot:

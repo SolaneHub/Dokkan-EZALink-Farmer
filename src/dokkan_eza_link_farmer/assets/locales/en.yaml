@@ -73,7 +73,7 @@ cli:
     online: "ONLINE ✓"
     offline: "OFFLINE ✗ (Ensure Ollama or LM Studio is active at {url})"
     current_model: "Active Model: {model} (Family: {family})"
-    reasoning_title: "Chain of Thought (DeepSeek-R1 Reasoning)"
+    reasoning_title: "AI Selection Reasoning (Qwen 3.5)"
     tactical_title: "Tactical Guide & Rotations"
     switch_family_prompt: "Select AI Model Architecture Family:"
     switch_model_name_prompt: "Model identifier (e.g., qwen2.5:7b, deepseek-r1:8b, deepseek-r1:14b):"

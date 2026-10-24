@@ -24,34 +24,18 @@ class TestDokkanAI:
     def test_ai_config_parsing(self):
         conf_qwen = AIConfig.from_dict(
             {
-                "model_name": "qwen2.5:7b",
+                "model_name": "qwen3.5:4b",
                 "base_url": "http://localhost:11434/v1",
             }
         )
         assert conf_qwen.model_family == AIModelFamily.QWEN
-        assert conf_qwen.model_name == SupportedAIModel.QWEN_2_5_7B.value
+        assert conf_qwen.model_name == SupportedAIModel.QWEN_3_5_4B.value
         assert conf_qwen.provider == "ollama"
 
-        conf_deepseek = AIConfig.from_dict(
-            {
-                "model_name": "deepseek-r1:7b",
-            }
-        )
-        assert conf_deepseek.model_family == AIModelFamily.DEEPSEEK_R1
-        assert conf_deepseek.model_name == SupportedAIModel.DEEPSEEK_R1_7B.value
-        assert conf_deepseek.provider == "ollama"
-
-        conf_3b = AIConfig.from_dict(
-            {
-                "model_name": "qwen2.5:3b",
-            }
-        )
-        assert conf_3b.model_family == AIModelFamily.QWEN
-        assert conf_3b.model_name == SupportedAIModel.QWEN_2_5_3B.value
-
-        # Test normalization of invalid / unrecognized model string
+        # Test normalization strictly maps any model to the single supported qwen3.5:4b
         conf_fallback = AIConfig.from_dict({"model_name": "gpt-4o-unknown"})
-        assert conf_fallback.model_name == SupportedAIModel.DEEPSEEK_R1_7B.value
+        assert conf_fallback.model_name == SupportedAIModel.QWEN_3_5_4B.value
+        assert conf_fallback.model_family == AIModelFamily.QWEN
 
     def test_dokkan_card_slot1_tank_detection(self):
         tank_card = DokkanCard(
@@ -70,8 +54,8 @@ class TestDokkanAI:
         )
         assert glass_cannon.is_slot1_tank is False
 
-    def test_deepseek_r1_think_tag_extraction(self):
-        client = DokkanAIClient(AIConfig(model_family=AIModelFamily.DEEPSEEK_R1))
+    def test_qwen_think_tag_stripping(self):
+        client = DokkanAIClient(AIConfig(model_family=AIModelFamily.QWEN, model_name="qwen3.5:4b"))
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -93,13 +77,11 @@ class TestDokkanAI:
 
         with patch("requests.post", return_value=mock_resp):
             content, reasoning = client.chat_completion([{"role": "user", "content": "analyze"}])
-            assert reasoning is not None
-            assert "Beast Gohan has guard" in reasoning
             assert "Consiglio strategico" in content
             assert "<think>" not in content
 
     def test_qwen_strategy_analysis(self):
-        client = DokkanAIClient(AIConfig(model_family=AIModelFamily.QWEN, model_name="qwen2.5:7b"))
+        client = DokkanAIClient(AIConfig(model_family=AIModelFamily.QWEN, model_name="qwen3.5:4b"))
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200

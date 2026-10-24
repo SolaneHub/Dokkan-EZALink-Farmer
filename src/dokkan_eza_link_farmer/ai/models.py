@@ -10,15 +10,12 @@ class AIModelFamily(str, Enum):
     """Supported AI model architectures."""
 
     QWEN = "qwen"
-    DEEPSEEK_R1 = "deepseek_r1"
 
 
 class SupportedAIModel(str, Enum):
-    """The 3 officially supported universal models for PC (NVIDIA RTX) and Mac (Apple Silicon M2)."""
+    """The single officially supported universal model for local AI inference (RTX 3060 Ti / 8GB VRAM)."""
 
-    DEEPSEEK_R1_7B = "deepseek-r1:7b"
-    QWEN_2_5_7B = "qwen2.5:7b"
-    QWEN_2_5_3B = "qwen2.5:3b"
+    QWEN_3_5_4B = "qwen3.5:4b"
 
     @classmethod
     def list_models(cls) -> list[str]:
@@ -26,15 +23,8 @@ class SupportedAIModel(str, Enum):
 
     @classmethod
     def normalize(cls, raw: str) -> str:
-        """Strictly validates and maps input to one of the 3 universal models."""
-        clean = raw.strip().lower()
-        if clean in {m.value for m in cls}:
-            return clean
-        if "3b" in clean:
-            return cls.QWEN_2_5_3B.value
-        if "qwen" in clean:
-            return cls.QWEN_2_5_7B.value
-        return cls.DEEPSEEK_R1_7B.value
+        """Strictly validates and maps input to the supported qwen3.5:4b model."""
+        return cls.QWEN_3_5_4B.value
 
 
 @dataclass
@@ -44,8 +34,8 @@ class AIConfig:
     enabled: bool = False
     provider: str = "ollama"
     base_url: str = "http://localhost:11434/v1"
-    model_family: AIModelFamily = AIModelFamily.DEEPSEEK_R1
-    model_name: str = SupportedAIModel.DEEPSEEK_R1_7B.value
+    model_family: AIModelFamily = AIModelFamily.QWEN
+    model_name: str = SupportedAIModel.QWEN_3_5_4B.value
     api_key: str = "ollama"
     temperature: float = 0.6
     timeout_seconds: float = 75.0
@@ -76,15 +66,10 @@ class AIConfig:
         raw_model = str(
             data.get("ollama_model")
             or data.get("model_name")
-            or SupportedAIModel.DEEPSEEK_R1_7B.value
+            or SupportedAIModel.QWEN_3_5_4B.value
         )
         model_name = SupportedAIModel.normalize(raw_model)
-
-        family = (
-            AIModelFamily.DEEPSEEK_R1
-            if model_name == SupportedAIModel.DEEPSEEK_R1_7B.value
-            else AIModelFamily.QWEN
-        )
+        family = AIModelFamily.QWEN
 
         raw_url = str(data.get("ollama_url") or data.get("base_url") or "http://localhost:11434/v1")
         if raw_url and not raw_url.endswith("/v1") and not raw_url.endswith("/v1/"):

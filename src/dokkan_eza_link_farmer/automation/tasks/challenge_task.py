@@ -130,7 +130,7 @@ class ChallengeTask(BaseTask):
                         f"Rotation B: {team_rec.rotation_b.slot1.name} (Tank) + {team_rec.rotation_b.slot2.name}"
                     )
                     if team_rec.ai_reasoning:
-                        self.log(f"[AI CoT]: {team_rec.ai_reasoning[:160]}...")
+                        self.log(f"[AI Advisor]: {team_rec.ai_reasoning[:160]}...")
 
                 success = self._run_stage_attempt(
                     batch, team_rec, attempt_num=self.current_batch_attempts
