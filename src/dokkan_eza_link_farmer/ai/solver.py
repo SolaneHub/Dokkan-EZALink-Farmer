@@ -86,7 +86,9 @@ def _get_global_category_map() -> dict[int, str]:
                 if cat_map:
                     break
             except Exception as e:
-                logger.debug(f"Could not load global categories cache in solver from {cache_file}: {e}")
+                logger.debug(
+                    f"Could not load global categories cache in solver from {cache_file}: {e}"
+                )
 
     _GLOBAL_CATEGORIES_CACHE = cat_map
     return cat_map
@@ -879,9 +881,13 @@ class DokkanConstraintSolver:
                 cat_id = _get_category_id_by_name(req_cat, dokkandb=self.dokkandb)
                 if cat_id is not None:
                     try:
-                        category_leaders_by_cat[cat_id] = self.dokkandb.get_category_leaders_map(cat_id)
+                        category_leaders_by_cat[cat_id] = self.dokkandb.get_category_leaders_map(
+                            cat_id
+                        )
                     except Exception as e:
-                        logger.debug(f"Could not load category leaders for category {cat_id} ({req_cat}): {e}")
+                        logger.debug(
+                            f"Could not load category leaders for category {cat_id} ({req_cat}): {e}"
+                        )
 
         if category_leaders_by_cat:
             from dokkan_eza_link_farmer.ai.models import LeaderSkillSpec
@@ -894,7 +900,9 @@ class DokkanConstraintSolver:
                             c.leader_spec = LeaderSkillSpec(
                                 base_boost_pct=official_info["base_boost_pct"],
                                 extra_boost_pct=official_info["extra_boost_pct"],
-                                hp_stat_pct=official_info.get("hp_stat_pct", official_info["base_boost_pct"]),
+                                hp_stat_pct=official_info.get(
+                                    "hp_stat_pct", official_info["base_boost_pct"]
+                                ),
                                 atk_stat_pct=official_info["base_boost_pct"],
                                 def_stat_pct=official_info["base_boost_pct"],
                             )
@@ -1010,7 +1018,8 @@ class DokkanConstraintSolver:
                     continue
 
                 has_mission_reqs = bool(
-                    mission_batch is not None and getattr(mission_batch, "required_categories", None)
+                    mission_batch is not None
+                    and getattr(mission_batch, "required_categories", None)
                 )
 
                 # Analyze tier-wide leader skill coverage for mission categories
@@ -1045,7 +1054,9 @@ class DokkanConstraintSolver:
                     coverage_priority = 0
 
                     if has_mission_reqs:
-                        main_m, extra_m, personal_m = tier_cov_analysis.get(c.id, (False, False, False))
+                        main_m, extra_m, personal_m = tier_cov_analysis.get(
+                            c.id, (False, False, False)
+                        )
                         if tier_has_lead_spec_match:
                             if main_m:
                                 coverage_priority = 2

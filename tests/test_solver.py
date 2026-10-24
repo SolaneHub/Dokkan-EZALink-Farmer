@@ -756,9 +756,7 @@ class TestBossGimmickOverrides:
         assert any("Cancels Dodge" in p for p in penalties)
         assert any("Guard Expiration" in p for p in penalties)
 
-    def test_multi_enemy_and_rainbow_phase_gimmicks(
-        self, solver: DokkanConstraintSolver
-    ) -> None:
+    def test_multi_enemy_and_rainbow_phase_gimmicks(self, solver: DokkanConstraintSolver) -> None:
         # Create a stage having a 5-enemy rainbow phase lacking ATK debuff immunity
         rainbow_enemies = [
             BossEnemy(card_id=901, name="Ginyu (AGL)", element=20, type_name="Extreme AGL"),
@@ -797,7 +795,9 @@ class TestBossGimmickOverrides:
         assert aoe_guard_card.has_aoe is True
         assert aoe_guard_card.is_guard_unconditional is True
 
-        delta_aoe, counters_aoe, _ = solver.evaluate_boss_gimmicks(aoe_guard_card, multi_rainbow_stage)
+        delta_aoe, counters_aoe, _ = solver.evaluate_boss_gimmicks(
+            aoe_guard_card, multi_rainbow_stage
+        )
         # AoE (+25.0) + Omni-Guard (+15.0) = +40.0
         assert delta_aoe == pytest.approx(40.0)
         assert any("AoE Specialist" in c for c in counters_aoe)
@@ -814,7 +814,9 @@ class TestBossGimmickOverrides:
         assert debuff_dr_card.lowers_enemy_atk is True
         assert debuff_dr_card.damage_reduction_percent == 60
 
-        delta_debuff, counters_debuff, _ = solver.evaluate_boss_gimmicks(debuff_dr_card, multi_rainbow_stage)
+        delta_debuff, counters_debuff, _ = solver.evaluate_boss_gimmicks(
+            debuff_dr_card, multi_rainbow_stage
+        )
         # Debuff (+15.0) + High DR (+15.0) = +30.0
         assert delta_debuff == pytest.approx(30.0)
         assert any("Debuff Specialist" in c for c in counters_debuff)
@@ -833,7 +835,9 @@ class TestBossGimmickOverrides:
         assert fragile_card.is_guard_unconditional is False
         assert fragile_card.damage_reduction_percent < 50
 
-        delta_fragile, _, penalties_fragile = solver.evaluate_boss_gimmicks(fragile_card, multi_rainbow_stage)
+        delta_fragile, _, penalties_fragile = solver.evaluate_boss_gimmicks(
+            fragile_card, multi_rainbow_stage
+        )
         # Penalty for Rainbow Phase Vulnerability (-15.0)
         assert delta_fragile == pytest.approx(-15.0)
         assert any("Rainbow Phase Vulnerability" in p for p in penalties_fragile)
@@ -1363,7 +1367,9 @@ class TestFullSolverIntegration:
             DokkanCard(id=8202, name="U6 Sub 2", category_ids=[99], categories=["Universe 6"]),
         ]
         subs_t2 = [
-            DokkanCard(id=8300 + i, name=f"PS Sub {i}", category_ids=[17], categories=["Pure Saiyans"])
+            DokkanCard(
+                id=8300 + i, name=f"PS Sub {i}", category_ids=[17], categories=["Pure Saiyans"]
+            )
             for i in range(1, 6)
         ]
         res = solver.solve([lead_t1, lead_t2] + subs_t1 + subs_t2)
@@ -1520,7 +1526,7 @@ class TestFullSolverIntegration:
             phases=[BossPhase(phase_index=1, element=3)],  # STR
         )
         card_1030431.element = 1  # TEQ (disadvantage)
-        rival_lead.element = 0    # AGL (advantage)
+        rival_lead.element = 0  # AGL (advantage)
 
         res = solver.solve([card_1030431, rival_lead] + subs, boss_stage=boss)
         # Rival lead has type advantage (+10.0 score) and 1030431 no longer gets +25.0 free bonus
@@ -1633,7 +1639,9 @@ class TestFullSolverIntegration:
             name="Super Saiyan 3 Goku",
             category_ids=[9],
             categories=["Majin Buu Saga"],
-            leader_spec=LeaderSkillSpec(main_category_ids=[9], base_boost_pct=170),  # Will be enriched to 220%
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[9], base_boost_pct=170
+            ),  # Will be enriched to 220%
         )
         lead_170 = DokkanCard(
             id=1020000,
@@ -1643,7 +1651,9 @@ class TestFullSolverIntegration:
             leader_spec=LeaderSkillSpec(main_category_ids=[9], base_boost_pct=170),
         )
         subs = [
-            DokkanCard(id=5500 + i, name=f"Sub {i}", category_ids=[9], categories=["Majin Buu Saga"])
+            DokkanCard(
+                id=5500 + i, name=f"Sub {i}", category_ids=[9], categories=["Majin Buu Saga"]
+            )
             for i in range(1, 6)
         ]
 
@@ -1653,7 +1663,6 @@ class TestFullSolverIntegration:
         # SS3 Goku ID 1034201 should be enriched to 220%, chosen as Tier 1 leader over 170% leader
         assert res.leader.id == 1034201
         assert res.leader.leader_spec is not None and res.leader.leader_spec.base_boost_pct == 220.0
-
 
     def test_solver_multi_category_official_leader_isolation(self) -> None:
         from tests.harness.fake_dokkandb import FakeDokkanDBClient
@@ -1743,5 +1752,3 @@ class TestFullSolverIntegration:
         assert card2.leader_spec is not None
         assert card2.leader_spec.main_category_ids == [19]
         assert 8 not in card2.leader_spec.main_category_ids
-
-

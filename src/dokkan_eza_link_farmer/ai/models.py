@@ -1596,10 +1596,16 @@ class BossPhase:
         # Multi-enemy and rainbow naming enrichment
         if self.is_multi_enemy:
             if self.is_rainbow:
-                if not self.element_name or "Rainbow" not in self.element_name or ("(" not in self.element_name and "All 5 Types" not in self.element_name):
+                if (
+                    not self.element_name
+                    or "Rainbow" not in self.element_name
+                    or ("(" not in self.element_name and "All 5 Types" not in self.element_name)
+                ):
                     self.element_name = f"Rainbow ({self.enemy_count} Enemies: All 5 Types)"
             else:
-                if not self.element_name or ("Multi-Type" not in self.element_name and "Enemies" not in self.element_name):
+                if not self.element_name or (
+                    "Multi-Type" not in self.element_name and "Enemies" not in self.element_name
+                ):
                     self.element_name = f"Multi-Type ({len(self.bosses)} Enemies)"
 
         # Infer actions_per_turn from bosses if phase actions_per_turn == 0
@@ -1767,8 +1773,14 @@ class BossPhase:
                     mechanics=mechs,
                     hp=int(b.get("hp", 0)),
                     atk=int(b.get("atk", 0)),
-                    def_stat=int(b.get("def_stat") if b.get("def_stat") is not None else b.get("defence", 0)),
-                    actions_per_turn=int(b.get("actions_per_turn") if b.get("actions_per_turn") is not None else b.get("multi_atk_num", 0)),
+                    def_stat=int(
+                        b.get("def_stat") if b.get("def_stat") is not None else b.get("defence", 0)
+                    ),
+                    actions_per_turn=int(
+                        b.get("actions_per_turn")
+                        if b.get("actions_per_turn") is not None
+                        else b.get("multi_atk_num", 0)
+                    ),
                 )
             )
         idx = int(data.get("phase_index") or data.get("phase") or 1)

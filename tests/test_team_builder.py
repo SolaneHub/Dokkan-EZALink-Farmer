@@ -1160,9 +1160,7 @@ class TestFriendLeaderAndRotationConsistency:
         assert selected.id == 7777
         assert getattr(selected, "is_friend_leader", False) is True
 
-    def test_rotation_labeling_and_friend_leader_consistency(
-        self, sample_leader_200: DokkanCard
-    ):
+    def test_rotation_labeling_and_friend_leader_consistency(self, sample_leader_200: DokkanCard):
         tb = TeamBuilder()
         team = [sample_leader_200] + [
             DokkanCard(
@@ -1233,14 +1231,22 @@ class TestFriendLeaderAndRotationConsistency:
             leader_spec=LeaderSkillSpec(main_category_ids=[10], base_boost_pct=170),
             category_ids=[10],  # only 170%
             categories=["Realm of Gods"],
-            links=["Super Saiyan", "Prepared for Battle", "Fierce Battle", "Warrior Gods", "Godly Power"],
+            links=[
+                "Super Saiyan",
+                "Prepared for Battle",
+                "Fierce Battle",
+                "Warrior Gods",
+                "Godly Power",
+            ],
             base_form=CardForm(
                 form_id=6001,
                 passive_tags=PassiveTags(slot1_viable=True, dr_base_percent=40, has_guard=True),
             ),
         )
 
-        rec = tb.build_team_plan(team, friend_leader=friend_high_links_low_boost, generate_tactics=False)
+        rec = tb.build_team_plan(
+            team, friend_leader=friend_high_links_low_boost, generate_tactics=False
+        )
         assert getattr(rec.friend_leader, "is_friend_leader", False) is True
         assert rec.friend_leader.id in [f.id for f in rec.floaters]
         assert "[Friend Leader]" in rec.tactical_analysis
@@ -1254,11 +1260,51 @@ class TestMultiEnemyAdvisorAndBriefing:
         from dokkan_eza_link_farmer.ai.models import BossEnemy
 
         minions = [
-            BossEnemy(card_id=901, name="Cell Jr. (AGL)", element=0, type_name="AGL", hp=31_000_000, atk=400_000, actions_per_turn=1),
-            BossEnemy(card_id=902, name="Cell Jr. (TEQ)", element=1, type_name="TEQ", hp=31_000_000, atk=400_000, actions_per_turn=1),
-            BossEnemy(card_id=903, name="Cell Jr. (INT)", element=2, type_name="INT", hp=31_000_000, atk=400_000, actions_per_turn=1),
-            BossEnemy(card_id=904, name="Cell Jr. (STR)", element=3, type_name="STR", hp=31_000_000, atk=400_000, actions_per_turn=1),
-            BossEnemy(card_id=905, name="Cell Jr. (PHY)", element=4, type_name="PHY", hp=31_000_000, atk=400_000, actions_per_turn=1),
+            BossEnemy(
+                card_id=901,
+                name="Cell Jr. (AGL)",
+                element=0,
+                type_name="AGL",
+                hp=31_000_000,
+                atk=400_000,
+                actions_per_turn=1,
+            ),
+            BossEnemy(
+                card_id=902,
+                name="Cell Jr. (TEQ)",
+                element=1,
+                type_name="TEQ",
+                hp=31_000_000,
+                atk=400_000,
+                actions_per_turn=1,
+            ),
+            BossEnemy(
+                card_id=903,
+                name="Cell Jr. (INT)",
+                element=2,
+                type_name="INT",
+                hp=31_000_000,
+                atk=400_000,
+                actions_per_turn=1,
+            ),
+            BossEnemy(
+                card_id=904,
+                name="Cell Jr. (STR)",
+                element=3,
+                type_name="STR",
+                hp=31_000_000,
+                atk=400_000,
+                actions_per_turn=1,
+            ),
+            BossEnemy(
+                card_id=905,
+                name="Cell Jr. (PHY)",
+                element=4,
+                type_name="PHY",
+                hp=31_000_000,
+                atk=400_000,
+                actions_per_turn=1,
+            ),
         ]
         phase1 = BossPhase(
             phase_index=1,
@@ -1273,7 +1319,17 @@ class TestMultiEnemyAdvisorAndBriefing:
             phase_index=2,
             battle_index=1,
             round_index=2,
-            bosses=[BossEnemy(card_id=999, name="Perfect Cell", element=1, type_name="TEQ", hp=80_000_000, atk=850_000, actions_per_turn=8)],
+            bosses=[
+                BossEnemy(
+                    card_id=999,
+                    name="Perfect Cell",
+                    element=1,
+                    type_name="TEQ",
+                    hp=80_000_000,
+                    atk=850_000,
+                    actions_per_turn=8,
+                )
+            ],
             hp=80_000_000,
             atk=850_000,
             actions_per_turn=8,
@@ -1362,9 +1418,15 @@ class TestMultiEnemyAdvisorAndBriefing:
         system_content = next(m["content"] for m in call_args if m["role"] == "system")
         user_content = next(m["content"] for m in call_args if m["role"] == "user")
 
-        assert "When multi-enemy phases are present, strongly prioritize AoE attackers" in system_content
+        assert (
+            "When multi-enemy phases are present, strongly prioritize AoE attackers"
+            in system_content
+        )
         assert "unconditional Guard that protect against rainbow attacks" in system_content
-        assert "Phase 1: Rainbow (5 Enemies: All 5 Types) - Total HP: 155M, Actions: 5/turn" in user_content
+        assert (
+            "Phase 1: Rainbow (5 Enemies: All 5 Types) - Total HP: 155M, Actions: 5/turn"
+            in user_content
+        )
 
     def test_format_stage_tactical_briefing_multi_enemy(
         self,
@@ -1377,7 +1439,10 @@ class TestMultiEnemyAdvisorAndBriefing:
         assert "👥 5 Nemici [Rainbow (5 Enemies: All 5 Types)]" in briefing_it
         assert "**Cell Jr. (AGL)** [AGL]: HP 31M, ATK 400k" in briefing_it
         assert "💡 CONSIGLIO TATTICO: La fase contiene 5 nemici simultanei." in briefing_it
-        assert "Personaggi con Super Attacchi AoE o con Guardia incondizionata eccellono qui" in briefing_it
+        assert (
+            "Personaggi con Super Attacchi AoE o con Guardia incondizionata eccellono qui"
+            in briefing_it
+        )
 
         # English briefing
         briefing_en = format_stage_tactical_briefing(multi_enemy_boss_stage, language="en")
@@ -1404,5 +1469,3 @@ class TestMultiEnemyAdvisorAndBriefing:
         assert "👥 5 Nemici (Rainbow (5 Enemies: All 5 Types))" in plain_text
         assert "• [AGL] Cell Jr. (AGL)" in plain_text
         assert "• [STR] Cell Jr. (STR)" in plain_text
-
-

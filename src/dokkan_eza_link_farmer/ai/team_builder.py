@@ -261,6 +261,7 @@ class TeamBuilder:
                     (c for c in rot_units if getattr(c, "is_friend_leader", False)), None
                 )
                 if friend_in_rot is not None and leader_card.leader_spec:
+
                     def _get_boost(card: DokkanCard, lead: DokkanCard = leader_card) -> float:
                         is_cov, boost, _ = card.is_covered_by_leader(lead)
                         if (
@@ -268,7 +269,10 @@ class TeamBuilder:
                             and not card.category_ids
                             and lead.leader_spec
                             and lead.leader_spec.main_category_ids
-                            and any(c_name.lower() in lead.leader_skill.lower() for c_name in card.categories)
+                            and any(
+                                c_name.lower() in lead.leader_skill.lower()
+                                for c_name in card.categories
+                            )
                         ):
                             boost = max(boost, float(lead.leader_spec.base_boost_pct))
                         return boost
@@ -287,7 +291,11 @@ class TeamBuilder:
 
                     # If friend receives strictly lower boost than titular rotation units or titular floaters,
                     # or lacks 200/220% boost while displaced titolari have >= 200%, penalize heavily so friend floats
-                    if friend_boost < min_rot_boost or friend_boost < floaters_max_boost or (friend_boost < 200.0 and floaters_max_boost >= 200.0):
+                    if (
+                        friend_boost < min_rot_boost
+                        or friend_boost < floaters_max_boost
+                        or (friend_boost < 200.0 and floaters_max_boost >= 200.0)
+                    ):
                         diff = max(200.0 - friend_boost, floaters_max_boost - friend_boost, 30.0)
                         total -= diff * 2.0
 
@@ -500,6 +508,7 @@ class TeamBuilder:
                 logger.warning(f"AI strategy generation skipped due to error: {e}")
 
         if not tactical_guide:
+
             def _name_with_badge(c: DokkanCard) -> str:
                 badge = ""
                 if c is friend or getattr(c, "is_friend_leader", False):
@@ -1089,7 +1098,11 @@ class TeamBuilder:
             desc = f"Phase {p.phase_index}: {p.element_name}"
             if getattr(p, "is_multi_enemy", False):
                 hp_val = getattr(p, "hp", 0)
-                hp_str = f"{hp_val / 1_000_000:.0f}M" if hp_val >= 1_000_000 else (f"{hp_val:,}" if hp_val else "N/A")
+                hp_str = (
+                    f"{hp_val / 1_000_000:.0f}M"
+                    if hp_val >= 1_000_000
+                    else (f"{hp_val:,}" if hp_val else "N/A")
+                )
                 actions_val = getattr(p, "actions_per_turn", 0)
                 act_str = f"{actions_val}/turn" if actions_val else "standard"
                 desc += f" - Total HP: {hp_str}, Actions: {act_str}"
@@ -1101,7 +1114,9 @@ class TeamBuilder:
         if mission_batch is not None:
             summary = getattr(mission_batch, "summary", "")
             req_cats = getattr(mission_batch, "required_categories", [])
-            req_cats_str = ", ".join(f"{cnt}x '{cat}'" for cnt, cat in req_cats) if req_cats else "None"
+            req_cats_str = (
+                ", ".join(f"{cnt}x '{cat}'" for cnt, cat in req_cats) if req_cats else "None"
+            )
             requires_rainbow = getattr(mission_batch, "requires_rainbow", False)
             requires_all_super = getattr(mission_batch, "requires_all_super", False)
             requires_all_extreme = getattr(mission_batch, "requires_all_extreme", False)
@@ -1856,8 +1871,16 @@ def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str
                 lines.append("  - **Nemici Presenti**:")
                 for b in getattr(p, "bosses", []):
                     b_sub = f" ({b.subname})" if getattr(b, "subname", None) else ""
-                    b_hp = f"{b.hp / 1_000_000:.0f}M" if b.hp >= 1_000_000 else (f"{b.hp:,}" if b.hp else "N/A")
-                    b_atk = f"{b.atk / 1_000:.0f}k" if b.atk >= 1_000 else (str(b.atk) if b.atk else "N/A")
+                    b_hp = (
+                        f"{b.hp / 1_000_000:.0f}M"
+                        if b.hp >= 1_000_000
+                        else (f"{b.hp:,}" if b.hp else "N/A")
+                    )
+                    b_atk = (
+                        f"{b.atk / 1_000:.0f}k"
+                        if b.atk >= 1_000
+                        else (str(b.atk) if b.atk else "N/A")
+                    )
                     lines.append(
                         f"    - **{b.name}{b_sub}** [{b.type_name}]: HP {b_hp}, ATK {b_atk}"
                     )
@@ -1941,8 +1964,16 @@ def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str
                 lines.append("  - **Enemies Present**:")
                 for b in getattr(p, "bosses", []):
                     b_sub = f" ({b.subname})" if getattr(b, "subname", None) else ""
-                    b_hp = f"{b.hp / 1_000_000:.0f}M" if b.hp >= 1_000_000 else (f"{b.hp:,}" if b.hp else "N/A")
-                    b_atk = f"{b.atk / 1_000:.0f}k" if b.atk >= 1_000 else (str(b.atk) if b.atk else "N/A")
+                    b_hp = (
+                        f"{b.hp / 1_000_000:.0f}M"
+                        if b.hp >= 1_000_000
+                        else (f"{b.hp:,}" if b.hp else "N/A")
+                    )
+                    b_atk = (
+                        f"{b.atk / 1_000:.0f}k"
+                        if b.atk >= 1_000
+                        else (str(b.atk) if b.atk else "N/A")
+                    )
                     lines.append(
                         f"    - **{b.name}{b_sub}** [{b.type_name}]: HP {b_hp}, ATK {b_atk}"
                     )

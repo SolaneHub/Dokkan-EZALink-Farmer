@@ -705,10 +705,14 @@ class TerminalCLI:
                         border_style="magenta",
                         expand=True,
                     )
-                    t_boss.add_column("Phase", style="bold cyan", justify="center", width=12, no_wrap=True)
+                    t_boss.add_column(
+                        "Phase", style="bold cyan", justify="center", width=12, no_wrap=True
+                    )
                     t_boss.add_column("Boss Enemy", style="bold", ratio=3, no_wrap=False)
                     t_boss.add_column("Typing", style="bold yellow", width=15, no_wrap=True)
-                    t_boss.add_column("Key Mechanics & Immunities", style="dim", ratio=4, no_wrap=False)
+                    t_boss.add_column(
+                        "Key Mechanics & Immunities", style="dim", ratio=4, no_wrap=False
+                    )
 
                     for ph in boss_info["phases"]:
                         ph_num = ph.get("phase", 1)
@@ -1517,7 +1521,9 @@ class TerminalCLI:
                 border_style="green",
                 expand=True,
             )
-            t_items.add_column("Priorità", justify="center", style="bold yellow", width=10, no_wrap=True)
+            t_items.add_column(
+                "Priorità", justify="center", style="bold yellow", width=10, no_wrap=True
+            )
             t_items.add_column("Oggetto", style="bold white", width=18, no_wrap=False)
             t_items.add_column("Effetto Tattico", style="cyan", ratio=4, no_wrap=False)
             t_items.add_column("Utilizzo Consigliato", style="dim", ratio=4, no_wrap=False)

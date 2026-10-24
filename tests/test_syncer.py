@@ -442,8 +442,26 @@ class TestDokkanSyncer:
     def test_multi_enemy_and_rainbow_boss_phase_properties(self):
         """Verifies multi-enemy, rainbow detection, and action summation."""
         # 1. Multi-enemy non-rainbow (2 enemies: AGL, STR)
-        e1 = BossEnemy(card_id=101, name="Enemy 1", element=10, type_name="Super AGL", hp=1000, atk=200, def_stat=50, actions_per_turn=4)
-        e2 = BossEnemy(card_id=102, name="Enemy 2", element=13, type_name="Super STR", hp=1500, atk=250, def_stat=60, actions_per_turn=3)
+        e1 = BossEnemy(
+            card_id=101,
+            name="Enemy 1",
+            element=10,
+            type_name="Super AGL",
+            hp=1000,
+            atk=200,
+            def_stat=50,
+            actions_per_turn=4,
+        )
+        e2 = BossEnemy(
+            card_id=102,
+            name="Enemy 2",
+            element=13,
+            type_name="Super STR",
+            hp=1500,
+            atk=250,
+            def_stat=60,
+            actions_per_turn=3,
+        )
 
         phase_multi = BossPhase(bosses=[e1, e2])
         assert phase_multi.enemy_count == 2
@@ -456,7 +474,13 @@ class TestDokkanSyncer:
 
         # 2. Multi-enemy Rainbow (5 types: AGL, TEQ, INT, STR, PHY)
         rainbow_bosses = [
-            BossEnemy(card_id=200 + i, name=f"Enemy {i}", element=10 + i, type_name=f"Super Type {i}", actions_per_turn=2)
+            BossEnemy(
+                card_id=200 + i,
+                name=f"Enemy {i}",
+                element=10 + i,
+                type_name=f"Super Type {i}",
+                actions_per_turn=2,
+            )
             for i in range(5)
         ]
         phase_rainbow = BossPhase(bosses=rainbow_bosses)
@@ -491,11 +515,11 @@ class TestDokkanSyncer:
             type_name="Super INT",
             actions_per_turn=5,
             mechanics=[
-                BossMechanic(id=1, name="Cancels Dodge", description="Enemy attack cannot be evaded")
+                BossMechanic(
+                    id=1, name="Cancels Dodge", description="Enemy attack cannot be evaded"
+                )
             ],
         )
         phase_with_mech = BossPhase(bosses=[e_mech])
         assert phase_with_mech.cancels_dodge is True
         assert phase_with_mech.actions_per_turn == 5
-
-

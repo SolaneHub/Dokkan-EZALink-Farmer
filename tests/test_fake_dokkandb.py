@@ -66,7 +66,9 @@ class TestFakeDokkanDBHarness(unittest.TestCase):
         self.assertEqual(resp_img.status_code, 200)
         self.assertGreater(len(resp_img.content), 50)
 
-        resp_cat_lead = fake_dokkandb_requests_get("https://api.dokkandb.com/api/category-leaders?code=1")
+        resp_cat_lead = fake_dokkandb_requests_get(
+            "https://api.dokkandb.com/api/category-leaders?code=1"
+        )
         self.assertEqual(resp_cat_lead.status_code, 200)
         self.assertGreater(len(resp_cat_lead.json()), 0)
 

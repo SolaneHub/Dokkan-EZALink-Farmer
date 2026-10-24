@@ -1095,8 +1095,20 @@ class TestDokkanAI:
             leader=lead,
             friend_leader=friend,
             all_cards=[lead, sub1, sub2, sub3, sub4, sub5],
-            rotation_a=RotationPair(slot1=sub1, slot2=sub2, shared_links=["Godly Power"], shared_ki_links=[], synergy_score=8.0),
-            rotation_b=RotationPair(slot1=sub3, slot2=sub4, shared_links=["Warrior Gods"], shared_ki_links=[], synergy_score=7.5),
+            rotation_a=RotationPair(
+                slot1=sub1,
+                slot2=sub2,
+                shared_links=["Godly Power"],
+                shared_ki_links=[],
+                synergy_score=8.0,
+            ),
+            rotation_b=RotationPair(
+                slot1=sub3,
+                slot2=sub4,
+                shared_links=["Warrior Gods"],
+                shared_ki_links=[],
+                synergy_score=7.5,
+            ),
             floaters=[lead, sub5, friend],
             tactical_analysis="### 🛡️ Rotazioni\n- **Rotazione A**: Mantieni Beerus & Whis in Slot 1.",
         )
@@ -1106,7 +1118,11 @@ class TestDokkanAI:
             cli._render_team_presentation(rec)
 
         # 1. Find the rotations table
-        rot_tables = [obj for obj in printed_objects if isinstance(obj, Table) and "Rotazione" in [c.header for c in obj.columns]]
+        rot_tables = [
+            obj
+            for obj in printed_objects
+            if isinstance(obj, Table) and "Rotazione" in [c.header for c in obj.columns]
+        ]
         assert len(rot_tables) == 1
         table = rot_tables[0]
         assert table.expand is True
@@ -1132,4 +1148,3 @@ class TestDokkanAI:
         tactical_panel = next((p for p in panels if "⚔️" in str(p.title)), None)
         assert tactical_panel is not None
         assert isinstance(tactical_panel.renderable, Markdown)
-
