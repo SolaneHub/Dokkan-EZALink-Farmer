@@ -27,9 +27,7 @@ def verify_and_enforce_filters(task: Any) -> bool:
         task.vision.find_template(screen, "filters/tag_sort_released.png", threshold=0.75)
         or (hasattr(task.vision, "is_sort_released") and task.vision.is_sort_released(screen))
     )
-    filter_on = bool(
-        task.vision.find_template(screen, "filters/tag_filter_on.png", threshold=0.75)
-    )
+    filter_on = bool(task.vision.find_template(screen, "filters/tag_filter_on.png", threshold=0.75))
 
     if not filter_on:
         task.log("Filters not active on grid. Opening filter popup to configure UR+LR...")
@@ -44,9 +42,7 @@ def verify_and_enforce_filters(task: Any) -> bool:
         popup_screen = task.adb.screencap()
 
         ur_selected = bool(
-            task.vision.find_template(
-                popup_screen, "filters/btn_ur_selected.png", threshold=0.75
-            )
+            task.vision.find_template(popup_screen, "filters/btn_ur_selected.png", threshold=0.75)
         )
         if not ur_selected:
             ur_unsel_loc = task.vision.find_template(
@@ -59,9 +55,7 @@ def verify_and_enforce_filters(task: Any) -> bool:
             popup_screen = task.adb.screencap()
 
         lr_selected = bool(
-            task.vision.find_template(
-                popup_screen, "filters/btn_lr_selected.png", threshold=0.75
-            )
+            task.vision.find_template(popup_screen, "filters/btn_lr_selected.png", threshold=0.75)
         )
         if not lr_selected:
             lr_unsel_loc = task.vision.find_template(
@@ -73,9 +67,7 @@ def verify_and_enforce_filters(task: Any) -> bool:
                 task.adb.tap(int(w * 0.84), int(h * 0.638), delay_after=0.5)
             popup_screen = task.adb.screencap()
 
-        ok_loc = task.vision.find_template(
-            popup_screen, "buttons/button_ok.png", threshold=0.75
-        )
+        ok_loc = task.vision.find_template(popup_screen, "buttons/button_ok.png", threshold=0.75)
         if ok_loc:
             task.adb.tap(ok_loc[0], ok_loc[1], delay_after=1.0)
         else:

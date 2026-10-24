@@ -70,12 +70,18 @@ def init_thumbnails(
         except Exception as e:
             logger.warning(f"Error reading dokkan_characters.json: {e}")
 
-    thumb_files = [f for f in os.listdir(thumbs_dir) if f.startswith("card_") and f.endswith("_thumb.png")]
+    thumb_files = [
+        f for f in os.listdir(thumbs_dir) if f.startswith("card_") and f.endswith("_thumb.png")
+    ]
     if len(thumb_files) < 10 and syncer and catalog:
         scanner.log("Downloading character thumbnails from Supabase mirror...")
         try:
             syncer.sync_thumbnails(cards=catalog)
-            thumb_files = [f for f in os.listdir(thumbs_dir) if f.startswith("card_") and f.endswith("_thumb.png")]
+            thumb_files = [
+                f
+                for f in os.listdir(thumbs_dir)
+                if f.startswith("card_") and f.endswith("_thumb.png")
+            ]
         except Exception as e:
             logger.warning(f"Could not auto-download thumbnails from Supabase: {e}")
 
@@ -103,24 +109,34 @@ def init_thumbnails(
             y1, x1 = pts.min(axis=0)
             y2, x2 = pts.max(axis=0)
             p_cy, p_cx = int(np.mean(pts[:, 0])), int(np.mean(pts[:, 1]))
-            crop = im[max(0, p_cy - 55) : min(im.shape[0], p_cy + 55), max(0, p_cx - 55) : min(im.shape[1], p_cx + 55), :3]
+            crop = im[
+                max(0, p_cy - 55) : min(im.shape[0], p_cy + 55),
+                max(0, p_cx - 55) : min(im.shape[1], p_cx + 55),
+                :3,
+            ]
             face_patch = cv2.resize(crop, (int(crop.shape[1] * 0.84), int(crop.shape[0] * 0.84)))
             char_bgr = im[y1:y2, x1:x2, :3]
             char_mask = (alpha[y1:y2, x1:x2] > 80).astype(np.uint8) * 255
             card_id = int(info.get("id") or (tid + 1))
             elem_norm = type_map.get(str(info.get("type", "")), str(info.get("type", "")))
-            loaded_thumbs.append({
-                "thumb_id": tid,
-                "card_id": card_id,
-                "name": info.get("name") or f"Card_{card_id}",
-                "subname": info.get("subname") or "",
-                "rarity": 5 if info.get("rarity") == "LR" else (4 if info.get("rarity") == "UR" else 3),
-                "type": elem_norm,
-                "has_survival_passive": bool(info.get("has_survival_passive", False)),
-                "face_patch": face_patch,
-                "masked_bgr": cv2.resize(char_bgr, (0, 0), fx=0.84, fy=0.84),
-                "masked_mask": cv2.resize(char_mask, (0, 0), fx=0.84, fy=0.84, interpolation=cv2.INTER_NEAREST),
-            })
+            loaded_thumbs.append(
+                {
+                    "thumb_id": tid,
+                    "card_id": card_id,
+                    "name": info.get("name") or f"Card_{card_id}",
+                    "subname": info.get("subname") or "",
+                    "rarity": 5
+                    if info.get("rarity") == "LR"
+                    else (4 if info.get("rarity") == "UR" else 3),
+                    "type": elem_norm,
+                    "has_survival_passive": bool(info.get("has_survival_passive", False)),
+                    "face_patch": face_patch,
+                    "masked_bgr": cv2.resize(char_bgr, (0, 0), fx=0.84, fy=0.84),
+                    "masked_mask": cv2.resize(
+                        char_mask, (0, 0), fx=0.84, fy=0.84, interpolation=cv2.INTER_NEAREST
+                    ),
+                }
+            )
 
     lr_thumbs = [t for t in loaded_thumbs if t.get("rarity") == 5]
     return loaded_thumbs, lr_thumbs

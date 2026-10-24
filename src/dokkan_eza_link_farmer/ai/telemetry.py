@@ -46,14 +46,15 @@ _DEBUG_TELEMETRY: bool = False
 
 def is_debug_telemetry_enabled() -> bool:
     """Returns True if extended telemetry observation is enabled."""
-    return _DEBUG_TELEMETRY or (os.environ.get("DEBUG_TELEMETRY", "").lower() in ("1", "true", "yes"))
+    return _DEBUG_TELEMETRY or (
+        os.environ.get("DEBUG_TELEMETRY", "").lower() in ("1", "true", "yes")
+    )
 
 
 def set_debug_telemetry(enabled: bool) -> None:
     """Explicitly enables or disables extended telemetry observation."""
     global _DEBUG_TELEMETRY
     _DEBUG_TELEMETRY = enabled
-
 
 
 @dataclass
@@ -913,7 +914,9 @@ class CombatTelemetryTracker:
         capacity: int = 4,
         debug_telemetry: bool | None = None,
     ) -> None:
-        self.ring_buffer = ring_buffer if ring_buffer is not None else CombatRingBuffer(capacity=capacity)
+        self.ring_buffer = (
+            ring_buffer if ring_buffer is not None else CombatRingBuffer(capacity=capacity)
+        )
         self.episodic_memory = episodic_memory or EpisodicMemory()
         self.current_turn: int = 1
         self.current_phase_index: int = 1

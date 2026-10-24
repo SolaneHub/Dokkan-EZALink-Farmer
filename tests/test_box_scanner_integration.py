@@ -45,8 +45,16 @@ class FastSyntheticOCR:
                 c = self.card_map.get(int(px[0]))
                 if c:
                     return [
-                        [[[50.0, 100.0], [200.0, 100.0], [200.0, 140.0], [50.0, 140.0]], c["subname"], 0.99],
-                        [[[50.0, 200.0], [300.0, 200.0], [300.0, 250.0], [50.0, 250.0]], c["name"], 0.99],
+                        [
+                            [[50.0, 100.0], [200.0, 100.0], [200.0, 140.0], [50.0, 140.0]],
+                            c["subname"],
+                            0.99,
+                        ],
+                        [
+                            [[50.0, 200.0], [300.0, 200.0], [300.0, 250.0], [50.0, 250.0]],
+                            c["name"],
+                            0.99,
+                        ],
                     ], 0.0
 
         # 2. Badge crop: 100..150 height, 100..200 width
@@ -56,8 +64,16 @@ class FastSyntheticOCR:
                 c = self.card_map.get(int(px[0]))
                 if c:
                     return [
-                        [[[10.0, 20.0], [80.0, 20.0], [80.0, 45.0], [10.0, 45.0]], c["class"], 0.99],
-                        [[[10.0, 60.0], [80.0, 60.0], [80.0, 95.0], [10.0, 95.0]], c["element"], 0.99],
+                        [
+                            [[10.0, 20.0], [80.0, 20.0], [80.0, 45.0], [10.0, 45.0]],
+                            c["class"],
+                            0.99,
+                        ],
+                        [
+                            [[10.0, 60.0], [80.0, 60.0], [80.0, 95.0], [10.0, 95.0]],
+                            c["element"],
+                            0.99,
+                        ],
                     ], 0.0
 
         # 3. Super Attack crop: around 84 height, 151 width (SA_CROP_Y: 0.805..0.840, SA_CROP_X: 0.02..0.16)
@@ -66,7 +82,9 @@ class FastSyntheticOCR:
 
         # 4. Level crop: around 108 height, 324 width (LEVEL_CROP_Y: 0.710..0.755, LEVEL_CROP_X: 0.14..0.44)
         if 80 <= h <= 130 and 250 <= w <= 380:
-            return [[[[10.0, 10.0], [80.0, 10.0], [80.0, 30.0], [10.0, 30.0]], "150/150", 0.99]], 0.0
+            return [
+                [[[10.0, 10.0], [80.0, 10.0], [80.0, 30.0], [10.0, 30.0]], "150/150", 0.99]
+            ], 0.0
 
         return None, 0.0
 
@@ -190,9 +208,13 @@ def test_box_scanner_synthetic_integration_end_to_end() -> None:
 
         # Ensure compatibility helper aliases on scanner if running decoupled scanner architecture
         if not hasattr(scanner, "_extract_banner_text"):
-            scanner._extract_banner_text = lambda img: scanner_module.extract_banner_text(img, ocr=scanner._ocr)  # type: ignore[attr-defined]
+            scanner._extract_banner_text = lambda img: scanner_module.extract_banner_text(
+                img, ocr=scanner._ocr
+            )  # type: ignore[attr-defined]
         if not hasattr(scanner, "_extract_element_badge"):
-            scanner._extract_element_badge = lambda img: scanner_module.extract_element_badge(img, ocr=scanner._ocr)  # type: ignore[attr-defined]
+            scanner._extract_element_badge = lambda img: scanner_module.extract_element_badge(
+                img, ocr=scanner._ocr
+            )  # type: ignore[attr-defined]
         if not hasattr(scanner, "_match_card_candidate"):
             scanner._match_card_candidate = lambda txt, detected_class=None, detected_elem=None: (  # type: ignore[attr-defined]
                 scanner_module.CatalogMatcher(scanner._catalog).match_card_candidate(
@@ -200,8 +222,10 @@ def test_box_scanner_synthetic_integration_end_to_end() -> None:
                 )
             )
         if not hasattr(scanner, "_extract_level_and_sa"):
-            scanner._extract_level_and_sa = lambda img, rarity=4: scanner_module.extract_level_and_sa(  # type: ignore[attr-defined]
-                img, ocr=scanner._ocr, rarity=rarity
+            scanner._extract_level_and_sa = lambda img, rarity=4: (
+                scanner_module.extract_level_and_sa(  # type: ignore[attr-defined]
+                    img, ocr=scanner._ocr, rarity=rarity
+                )
             )
         if not hasattr(scanner, "_extract_potential_and_rainbow"):
             scanner._extract_potential_and_rainbow = (  # type: ignore[attr-defined]
