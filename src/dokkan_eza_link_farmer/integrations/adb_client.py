@@ -47,6 +47,7 @@ class ADBClient:
         self.serial = serial
         self._screen_size: tuple[int, int] | None = None
         self._scrcpy_proc: subprocess.Popen[Any] | None = None
+        self._frame_buffer: np.ndarray | None = None
 
     def is_connected(self) -> bool:
         """Returns True if a device is currently selected and screen size resolved."""
@@ -206,10 +207,18 @@ class ADBClient:
                 w, h, _fmt = np.frombuffer(raw[:12], dtype=np.int32)
                 expected_bytes = int(w) * int(h) * 4
                 if len(raw) >= 16 + expected_bytes and w > 0 and h > 0:
+                    ih, iw = int(h), int(w)
                     img_raw = np.frombuffer(raw[16 : 16 + expected_bytes], dtype=np.uint8).reshape(
-                        (int(h), int(w), 4)
+                        (ih, iw, 4)
                     )
-                    return cv2.cvtColor(img_raw, cv2.COLOR_RGBA2BGR)
+                    if (
+                        self._frame_buffer is None
+                        or self._frame_buffer.shape != (ih, iw, 3)
+                        or not self._frame_buffer.flags.c_contiguous
+                    ):
+                        self._frame_buffer = np.empty((ih, iw, 3), dtype=np.uint8)
+                    cv2.cvtColor(img_raw, cv2.COLOR_RGBA2BGR, dst=self._frame_buffer)
+                    return self._frame_buffer.copy()
         except Exception as e:
             logger.debug(f"Fast raw screencap failed, falling back to PNG: {e}")
 

@@ -96,6 +96,67 @@ class Vision:
         self._template_cache[norm_key] = img
         return img
 
+    # Prior vertical regions of interest (ymin_ratio, ymax_ratio) for common templates
+    # to avoid scanning unnecessary parts of tall mobile screens (e.g. 1080x2400)
+    TEMPLATE_VERTICAL_ROIS: dict[str, tuple[float, float]] = {
+        "button_start": (0.60, 0.98),
+        "button_confirm_formation": (0.50, 0.98),
+        "button_deck_remove_all": (0.15, 0.45),
+        "button_team_formation": (0.30, 0.55),
+        "tag_sort_released": (0.75, 1.0),
+        "btn_released_selected": (0.15, 0.55),
+        "header_link_skill_level": (0.30, 0.60),
+        "button_remove_all": (0.55, 0.85),
+        "button_ok": (0.35, 0.98),
+        "button_attempt_again": (0.60, 0.95),
+        "button_cancel": (0.45, 0.85),
+        "button_close": (0.45, 0.85),
+        "button_dont_send": (0.50, 0.85),
+        "popup_friend_request": (0.20, 0.50),
+        "popup_stamina_empty": (0.25, 0.55),
+        "header_restore_sta": (0.25, 0.55),
+        "button_use_meat": (0.40, 0.80),
+        "popup_game_over": (0.25, 0.60),
+        "header_character_list": (0.05, 0.25),
+        "header_team_formation": (0.05, 0.25),
+        "header_clear": (0.10, 0.40),
+        "header_rewards": (0.10, 0.40),
+        "header_select_friend": (0.05, 0.25),
+        "button_friend_refresh": (0.10, 0.35),
+        "button_friend_auto": (0.10, 0.35),
+        "diff_super": (0.25, 0.65),
+        "diff_z_hard": (0.30, 0.70),
+        "diff_super2": (0.20, 0.60),
+        "stage_saiyan_training": (0.20, 0.55),
+        "button_boost_off": (0.45, 0.75),
+        "button_battle_menu": (0.0, 0.20),
+        "button_auto_battle": (0.0, 0.20),
+        "battle_auto_on": (0.0, 0.20),
+        "battle_auto_off": (0.0, 0.20),
+        "button_item": (0.75, 1.0),
+        "battle_speed_2x": (0.75, 1.0),
+        "battle_speed_1x": (0.75, 1.0),
+        "btn_auto_map_off": (0.05, 0.25),
+        "btn_auto_map_on": (0.05, 0.25),
+        "btn_auto_battle_off": (0.05, 0.25),
+        "btn_auto_battle_on": (0.05, 0.25),
+        "map_auto_on": (0.05, 0.25),
+        "map_auto_off": (0.05, 0.25),
+        "button_eza_battle_info": (0.60, 0.95),
+        "button_eza_select_lv": (0.60, 0.95),
+        "button_eza_fight": (0.70, 0.98),
+        "text_eza_fight": (0.70, 0.98),
+        "tag_lv_999": (0.15, 0.98),
+        "tag_next_lv": (0.15, 0.98),
+        "num_999": (0.15, 0.98),
+        "badge_area_39": (0.15, 0.85),
+        "badge_area_35": (0.15, 0.85),
+        "stage_area39_3": (0.15, 0.85),
+        "stage_area35_1": (0.15, 0.85),
+        "text_chapter_6": (0.05, 0.35),
+        "button_quest": (0.30, 0.60),
+    }
+
     def find_template(
         self,
         screen: np.ndarray,
@@ -113,23 +174,56 @@ class Vision:
         if template is None:
             return None
 
+        # Ensure contiguous screen array for zero-overhead OpenCV processing
+        if not screen.flags.c_contiguous:
+            screen = np.ascontiguousarray(screen)
+
         thresh = threshold if threshold is not None else self.default_threshold
         t_h, t_w = template.shape[:2]
         s_h, s_w = screen.shape[:2]
 
+        # Prior vertical ROI optimization: crop vertical scan area if known a priori
+        clean_name = os.path.splitext(os.path.basename(template_name))[0]
+        y_offset = 0
+        search_img = screen
+        if s_h >= 1600 and clean_name in self.TEMPLATE_VERTICAL_ROIS:
+            ymin_r, ymax_r = self.TEMPLATE_VERTICAL_ROIS[clean_name]
+            y1 = max(0, int(s_h * ymin_r))
+            y2 = min(s_h, int(s_h * ymax_r))
+            if (y2 - y1) >= t_h and s_w >= t_w:
+                search_img = screen[y1:y2, :]
+                y_offset = y1
+
+        curr_h, curr_w = search_img.shape[:2]
+
         # 1. Check 1.0 scale first for instant matching on native resolution
-        if t_w <= s_w and t_h <= s_h:
-            res = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+        if t_w <= curr_w and t_h <= curr_h:
+            res = cv2.matchTemplate(search_img, template, cv2.TM_CCOEFF_NORMED)
             _, max_val, _, max_loc = cv2.minMaxLoc(res)
             if max_val >= thresh:
                 center_x = max_loc[0] + t_w // 2
-                center_y = max_loc[1] + t_h // 2
+                center_y = max_loc[1] + y_offset + t_h // 2
                 return (int(center_x), int(center_y), float(max_val))
             best_val = max_val
             best_loc = max_loc
         else:
             best_val = -1.0
             best_loc = None
+
+        # Fallback to full screen if ROI search missed with scale 1.0 (e.g. unexpected layout / test canvas)
+        if best_val < 0.65 and y_offset > 0 and t_w <= s_w and t_h <= s_h:
+            res_full = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+            _, max_f, _, loc_f = cv2.minMaxLoc(res_full)
+            if max_f >= thresh:
+                center_x = loc_f[0] + t_w // 2
+                center_y = loc_f[1] + t_h // 2
+                return (int(center_x), int(center_y), float(max_f))
+            if max_f > best_val:
+                best_val = max_f
+                best_loc = loc_f
+                search_img = screen
+                curr_h, curr_w = s_h, s_w
+                y_offset = 0
 
         best_w, best_h = t_w, t_h
 
@@ -141,13 +235,13 @@ class Vision:
                 scaled_w = int(t_w * scale)
                 scaled_h = int(t_h * scale)
 
-                if scaled_w > s_w or scaled_h > s_h or scaled_w < 10 or scaled_h < 10:
+                if scaled_w > curr_w or scaled_h > curr_h or scaled_w < 10 or scaled_h < 10:
                     continue
 
                 scaled_template = cv2.resize(
                     template, (scaled_w, scaled_h), interpolation=cv2.INTER_AREA
                 )
-                res = cv2.matchTemplate(screen, scaled_template, cv2.TM_CCOEFF_NORMED)
+                res = cv2.matchTemplate(search_img, scaled_template, cv2.TM_CCOEFF_NORMED)
                 _, max_val, _, max_loc = cv2.minMaxLoc(res)
 
                 if max_val > best_val:
@@ -159,7 +253,7 @@ class Vision:
 
         if best_val >= thresh and best_loc is not None:
             center_x = best_loc[0] + best_w // 2
-            center_y = best_loc[1] + best_h // 2
+            center_y = best_loc[1] + y_offset + best_h // 2
             return (int(center_x), int(center_y), float(best_val))
 
         return None
@@ -219,13 +313,29 @@ class Vision:
         if template is None:
             return None
 
+        # Ensure contiguous screen array for zero-overhead OpenCV processing
+        if not screen.flags.c_contiguous:
+            screen = np.ascontiguousarray(screen)
+
         s_h, s_w = screen.shape[:2]
-        res = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+
+        # Prior vertical ROI: OK buttons in Dokkan are exclusively within 35%..98% Y
+        # For tall screens (>= 1600px), crop this vertical region to avoid unnecessary scanning
+        y_offset = 0
+        search_img = screen
+        if s_h >= 1600:
+            y1 = int(s_h * 0.35)
+            y2 = int(s_h * 0.98)
+            if (y2 - y1) >= template.shape[0] and s_w >= template.shape[1]:
+                search_img = screen[y1:y2, :]
+                y_offset = y1
+
+        res = cv2.matchTemplate(search_img, template, cv2.TM_CCOEFF_NORMED)
         loc = np.where(res >= threshold)
 
         candidates = []
         for pt in zip(*loc[::-1], strict=False):
-            candidates.append((pt[0], pt[1], float(res[pt[1], pt[0]])))
+            candidates.append((pt[0], pt[1] + y_offset, float(res[pt[1], pt[0]])))
 
         if not candidates:
             return None
