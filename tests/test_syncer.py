@@ -5,8 +5,6 @@ import os
 import tempfile
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from dokkan_eza_link_farmer.ai.models import (
     BossEnemy,
     BossMechanic,
@@ -20,6 +18,7 @@ from dokkan_eza_link_farmer.ai.syncer import (
     parse_passive_tags,
     parse_sa_tags,
 )
+from tests.harness.fake_dokkandb import fake_dokkandb_requests_get
 
 
 class TestDokkanSyncer:
@@ -42,28 +41,7 @@ class TestDokkanSyncer:
         with tempfile.TemporaryDirectory() as tmpdir:
             syncer = DokkanSyncer(cache_dir=tmpdir)
 
-            chunk1 = [
-                {"id": 1001, "name": "LR Goku", "rarity": 5},
-                {"id": 1002, "name": "UR Vegeta", "rarity": 4},
-                {"id": 1003, "name": "SSR Raditz", "rarity": 3},  # Included by default {3, 4, 5}
-            ]
-            chunk2 = [
-                {"id": 1004, "name": "R Saibaman", "rarity": 2},  # Excluded (< 3)
-                {"id": 1005, "name": "LR Gohan", "rarity": 5},
-            ]
-
-            def mock_get(url, *_args, **_kwargs):
-                resp = MagicMock()
-                resp.status_code = 200
-                if "chunk=1" in url:
-                    resp.json.return_value = chunk1
-                elif "chunk=2" in url:
-                    resp.json.return_value = chunk2
-                else:
-                    resp.json.return_value = []
-                return resp
-
-            with patch("requests.get", side_effect=mock_get):
+            with patch("requests.get", side_effect=fake_dokkandb_requests_get):
                 catalog = syncer.sync_catalog(force=True)
                 assert len(catalog) == 4
                 ids = [c["id"] for c in catalog]
@@ -123,13 +101,7 @@ class TestDokkanSyncer:
                 {"id": 1003211, "name": "SS3 Goku"},
             ]
 
-            fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 200
-
-            mock_resp = MagicMock()
-            mock_resp.status_code = 200
-            mock_resp.content = fake_png
-
-            with patch("requests.get", return_value=mock_resp):
+            with patch("requests.get", side_effect=fake_dokkandb_requests_get):
                 downloaded = syncer.sync_thumbnails(cards=cards, max_workers=2)
 
             assert downloaded == 2
@@ -170,47 +142,14 @@ class TestDokkanSyncer:
 
             fetched_codes = []
 
-            def mock_get(url, *_args, **_kwargs):
-                resp = MagicMock()
-                resp.status_code = 200
+            def tracked_fake_get(url, *args, **kwargs):
                 if "code=1001" in url:
                     fetched_codes.append(1001)
-                    resp.json.return_value = [
-                        {
-                            "id": 1001,
-                            "name": "EZA Broly",
-                            "rarity": 5,
-                            "element": 23,
-                            "leader_skill": "Extreme Class Ki +3, Stats +120%",
-                            "eza_leader_skill": "Extreme Class Ki +4, Stats +150%",
-                            "passive_skill_description": "Base Passive",
-                            "eza_passive_skill_description": "Guards all attacks; reduces damage received by 60%",
-                            "special_descriptions": ["Causes colossal damage"],
-                            "special_descriptions_eza": [
-                                "Greatly raises DEF and causes mega-colossal damage"
-                            ],
-                        }
-                    ]
                 elif "code=1002" in url:
                     fetched_codes.append(1002)
-                    resp.json.return_value = [
-                        {
-                            "id": 1002,
-                            "name": "Base Goku",
-                            "rarity": 4,
-                            "element": 10,
-                            "leader_skill": "Super Class Ki +3, Stats +120%",
-                            "passive_skill_description": "ATK +120%",
-                            "special_descriptions": ["Raises ATK & DEF for 1 turn"],
-                        }
-                    ]
-                elif "categories" in url:
-                    resp.json.return_value = [{"id": 1, "name": "Pure Saiyans"}]
-                else:
-                    pytest.fail(f"Unexpected card code requested: {url}")
-                return resp
+                return fake_dokkandb_requests_get(url, *args, **kwargs)
 
-            with patch("requests.get", side_effect=mock_get):
+            with patch("requests.get", side_effect=tracked_fake_get):
                 cards = syncer.sync_user_box_details(user_box_file=box_file, concurrency=2)
 
             assert len(cards) == 2

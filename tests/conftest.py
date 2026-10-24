@@ -6,12 +6,17 @@ and 'fast' (purely logical in-memory tests).
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from tests.harness.fake_dokkandb import FakeDokkanDBClient, fake_dokkandb_requests_get
+
 SLOW_MODULE_NAMES = {
     "test_eza_farm_integration",
+    "test_link_level_integration",
     "test_link_leveling",
     "test_stage_farm",
     "test_box_scanner",
@@ -44,3 +49,16 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(slow_mark)
         else:
             item.add_marker(fast_mark)
+
+
+@pytest.fixture
+def fake_dokkandb() -> FakeDokkanDBClient:
+    """Provides a fresh in-memory FakeDokkanDBClient instance."""
+    return FakeDokkanDBClient()
+
+
+@pytest.fixture
+def mock_dokkandb_requests() -> Generator[None, None, None]:
+    """Intercepts requests.get to simulate DokkanDB API endpoints completely in-memory."""
+    with patch("requests.get", side_effect=fake_dokkandb_requests_get):
+        yield

@@ -11,12 +11,12 @@ from dokkan_eza_link_farmer.automation.game_state import GameState, StateDetecto
 from dokkan_eza_link_farmer.automation.tasks.link_level_farm import LinkLevelFarmTask
 from dokkan_eza_link_farmer.automation.vision import Vision
 from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
-from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
+from tests.harness.fake_dokkandb import FakeDokkanDBClient
 
 
 class TestLinkLeveling(unittest.TestCase):
     def setUp(self):
-        self.dokkandb = DokkanDBClient()
+        self.dokkandb = FakeDokkanDBClient()
         self.vision = Vision("templates/glb")
         self.detector = StateDetector(self.vision)
 
