@@ -620,24 +620,70 @@ class DokkanDBClient:
         else:
             enemy_info = enemy_info_raw
 
+        # 1. Parse battles and rounds from sugoroku events (type 301) or fallback to enemy_info
+        payload = stage_data.get("payload", {})
+        sug = payload.get("sugoroku", {}) if isinstance(payload, dict) else {}
+        events = sug.get("events", {}) if isinstance(sug, dict) else {}
+
+        battle_events = []
+        if isinstance(events, dict):
+            for k in sorted(events.keys(), key=lambda x: int(x) if x.isdigit() else 0):
+                ev = events[k]
+                if isinstance(ev, dict) and ev.get("type") == 301:
+                    battle_events.append(ev)
+
+        parsed_battles: list[dict[str, Any]] = []
+        if battle_events:
+            for b_idx, b_ev in enumerate(battle_events, start=1):
+                rounds_list = b_ev.get("content", {}).get("enemies", [])
+                rounds_data_b = []
+                for r_idx, r_enemies in enumerate(rounds_list, start=1):
+                    rounds_data_b.append(
+                        {
+                            "round_no": r_idx,
+                            "enemies": r_enemies if isinstance(r_enemies, list) else [r_enemies],
+                        }
+                    )
+                parsed_battles.append({"battle_no": b_idx, "rounds": rounds_data_b})
+        else:
+            enemy_info_raw = stage_data.get("enemy_info")
+            enemy_info = {}
+            if isinstance(enemy_info_raw, str):
+                try:
+                    enemy_info = json.loads(enemy_info_raw)
+                except Exception:
+                    enemy_info = {}
+            elif isinstance(enemy_info_raw, dict):
+                enemy_info = enemy_info_raw
+
+            for b_idx, b in enumerate(enemy_info.get("battles", []), start=1):
+                parsed_battles.append(
+                    {
+                        "battle_no": b_idx,
+                        "rounds": [
+                            {
+                                "round_no": int(r.get("round_no", idx)),
+                                "enemies": r.get("enemies", []),
+                            }
+                            for idx, r in enumerate(b.get("rounds", []), start=1)
+                        ],
+                    }
+                )
+
+        if not parsed_battles:
+            return None
+
         all_card_ids: set[int] = set()
         all_skill_ids: set[int] = set()
-        rounds_data: list[dict[str, Any]] = []
-
-        for battle in enemy_info.get("battles", []):
-            for r in battle.get("rounds", []):
-                r_no = int(r.get("round_no", 1))
-                enemies = r.get("enemies", [])
-                round_entry: dict[str, Any] = {"round": r_no, "enemies": []}
-                for en in enemies:
+        for b in parsed_battles:
+            for r in b.get("rounds", []):
+                for en in r.get("enemies", []):
                     cid = int(en.get("card_id") or 0)
                     sids = [int(s) for s in en.get("enemy_skill_ids", []) if s is not None]
                     if cid:
                         all_card_ids.add(cid)
                     for sid in sids:
                         all_skill_ids.add(sid)
-                    round_entry["enemies"].append({"card_id": cid, "skill_ids": sids})
-                rounds_data.append(round_entry)
 
         # Batch resolve cards and skills
         cards_list = self.get_cards_by_ids(list(all_card_ids), region=region)
@@ -652,36 +698,82 @@ class DokkanDBClient:
             "event_name": stage_data.get("name", "Unknown Event"),
             "stage_name": stage_data.get("quest_name", "Unknown Stage"),
             "difficulty": stage_data.get("difficulty", 1),
+            "total_battles": len(parsed_battles) if parsed_battles else 1,
+            "is_multi_battle": len(parsed_battles) > 1,
             "phases": [],
         }
 
-        for r in rounds_data:
-            phase_entry: dict[str, Any] = {"phase": r["round"], "bosses": []}
-            for en in r["enemies"]:
-                card = cards_map.get(en["card_id"], {})
-                skills = [skills_map.get(sid, {}) for sid in en["skill_ids"]]
-                elem = int(card.get("element") or 0)
-                phase_entry["bosses"].append(
-                    {
-                        "name": card.get("name", "Unknown Boss"),
-                        "subname": card.get("subname", ""),
-                        "card_id": en["card_id"],
-                        "element": elem,
-                        "type_name": self.ELEMENT_NAMES.get(elem, f"Type {elem}"),
-                        "mechanics": [
-                            {
-                                "id": s.get("id"),
-                                "name": s.get("name"),
-                                "description": s.get("description") or s.get("effect", ""),
-                            }
-                            for s in skills
-                            if s.get("name")
-                        ],
-                    }
-                )
-            summary["phases"].append(phase_entry)
+        total_phase_index = 0
+        for b in parsed_battles:
+            b_no = b["battle_no"]
+            for r in b["rounds"]:
+                total_phase_index += 1
+                r_no = r["round_no"]
+                is_new_battle = (r_no == 1)
+                phase_hp = 0
+                phase_atk = 0
+                phase_def = 0
+                phase_actions = 0
+                bosses = []
+
+                for en in r["enemies"]:
+                    cid = int(en.get("card_id") or 0)
+                    card = cards_map.get(cid, {})
+                    skills = [skills_map.get(sid, {}) for sid in en.get("enemy_skill_ids", [])]
+                    elem = int(card.get("element") or 0)
+
+                    e_hp = int(en.get("hp") or 0)
+                    e_atk = int(en.get("attack") or 0)
+                    e_def = int(en.get("defence") or 0)
+                    e_actions = int(en.get("multi_atk_num") or 0)
+
+                    phase_hp += e_hp
+                    phase_atk = max(phase_atk, e_atk)
+                    phase_def = max(phase_def, e_def)
+                    phase_actions = max(phase_actions, e_actions)
+
+                    bosses.append(
+                        {
+                            "name": card.get("name", "Unknown Boss"),
+                            "subname": card.get("subname", ""),
+                            "card_id": cid,
+                            "element": elem,
+                            "type_name": self.ELEMENT_NAMES.get(elem, f"Type {elem}"),
+                            "hp": e_hp,
+                            "atk": e_atk,
+                            "defence": e_def,
+                            "multi_atk_num": e_actions,
+                            "mechanics": [
+                                {
+                                    "id": s.get("id"),
+                                    "name": s.get("name"),
+                                    "description": s.get("description") or s.get("effect", ""),
+                                }
+                                for s in skills
+                                if s.get("name")
+                            ],
+                        }
+                    )
+
+                phase_entry: dict[str, Any] = {
+                    "phase_index": total_phase_index,
+                    "phase": total_phase_index,
+                    "battle_index": b_no,
+                    "round_index": r_no,
+                    "is_new_battle": is_new_battle,
+                    "element": bosses[0]["element"] if bosses else 0,
+                    "element_name": bosses[0]["type_name"] if bosses else "",
+                    "hp": phase_hp,
+                    "atk": phase_atk,
+                    "def_stat": phase_def,
+                    "actions_per_turn": phase_actions,
+                    "estimated_sa_damage": int(phase_atk * 2.5) if phase_atk > 0 else 0,
+                    "bosses": bosses,
+                }
+                summary["phases"].append(phase_entry)
 
         return summary
+
 
     def get_event_missions(
         self, event_id: int, region: str = "glb", force_refresh: bool = False
