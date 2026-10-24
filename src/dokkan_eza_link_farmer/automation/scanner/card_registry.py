@@ -98,9 +98,11 @@ def register_card(
             {
                 "id": cid,
                 "name": cname,
+                "title": csub,
                 "subname": csub,
                 "rarity": rarity,
                 "element": elem,
+                "rainbow": is_rainbow,
                 "is_rainbow": is_rainbow,
                 "is_eza": is_eza,
                 "is_seza": is_seza,
@@ -111,6 +113,8 @@ def register_card(
                 "scanned_at": datetime.now(timezone.utc).isoformat(),
             }
         )
+        card_record.setdefault("leader_skill", "")
+        card_record.setdefault("categories", [])
         for k in (
             "leader_spec",
             "passive_tags",
@@ -123,11 +127,10 @@ def register_card(
             "passive_skill",
             "best_in_box_partners",
         ):
-            if k not in card_record:
-                if k in cat_card:
-                    card_record[k] = cat_card[k]
-                elif k in cand:
-                    card_record[k] = cand[k]
+            if k in cat_card:
+                card_record[k] = cat_card[k]
+            elif k in cand:
+                card_record[k] = cand[k]
         task.scanned_cards[cid] = card_record
         task._session_seen_ids.add(cid)
         task._last_registered_card_id = cid

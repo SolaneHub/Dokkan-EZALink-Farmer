@@ -33,6 +33,7 @@ from dokkan_eza_link_farmer.automation.scanner.detail_evaluator import (
     extract_element_badge,
     extract_level_and_sa,
     extract_potential_and_rainbow,
+    save_diagnostic_crops,
     scan_detail_screen,
 )
 from dokkan_eza_link_farmer.automation.scanner.filter_manager import (
@@ -82,6 +83,7 @@ __all__ = [
     "register_card",
     "resolve_box_path",
     "save_box",
+    "save_diagnostic_crops",
     "scan_detail_screen",
     "scroll_to_top",
     "stitch_marquee_text",

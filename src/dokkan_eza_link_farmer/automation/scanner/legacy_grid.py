@@ -184,6 +184,15 @@ def match_slot_thumbnail_with_delta(
             delta = best_s - second_ms
 
     if best_s < 0.75 and delta < 0.06:
+        cand_name = best_cand.get("name") if best_cand else "None"
+        cand_id = best_cand.get("card_id") if best_cand else "None"
+        logger.debug(
+            "[TRANSPARENCY] Rejecting ambiguous thumbnail match: best candidate [%s] '%s' score %.3f < 0.75, delta %.3f < 0.06",
+            cand_id,
+            cand_name,
+            best_s,
+            delta,
+        )
         return None, best_s, delta
 
     return best_cand, best_s, delta

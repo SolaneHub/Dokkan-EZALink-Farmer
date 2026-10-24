@@ -286,18 +286,44 @@ def test_box_scanner_synthetic_integration_end_to_end() -> None:
 
         card_by_id = {c["id"]: c for c in cards}
 
+        # Verify required contract schema fields on all cards:
+        # id, name, title, rarity, element, rainbow, copies, leader_skill, categories
+        for c in cards:
+            for required_field in (
+                "id",
+                "name",
+                "title",
+                "rarity",
+                "element",
+                "rainbow",
+                "copies",
+                "leader_skill",
+                "categories",
+            ):
+                assert required_field in c, (
+                    f"Missing required field '{required_field}' in card {c.get('id')}"
+                )
+
         # Verify Goku (ID 1001) - 2 copies scanned consecutively, rainbow
         assert 1001 in card_by_id
         goku = card_by_id[1001]
         assert goku["name"] == "Super Saiyan Goku"
+        assert goku["title"] == "Warrior Awakening"
         assert goku["subname"] == "Warrior Awakening"
+        assert goku["rainbow"] is True
         assert goku["is_rainbow"] is True
         assert goku["copies"] == 2
+        assert isinstance(goku["leader_skill"], str)
+        assert isinstance(goku["categories"], list)
 
         # Verify Vegeta (ID 1002) - 1 copy, not rainbow
         assert 1002 in card_by_id
         vegeta = card_by_id[1002]
         assert vegeta["name"] == "Super Saiyan Vegeta"
+        assert vegeta["title"] == "Proud Prince"
         assert vegeta["subname"] == "Proud Prince"
+        assert vegeta["rainbow"] is False
         assert vegeta["is_rainbow"] is False
         assert vegeta["copies"] == 1
+        assert isinstance(vegeta["leader_skill"], str)
+        assert isinstance(vegeta["categories"], list)

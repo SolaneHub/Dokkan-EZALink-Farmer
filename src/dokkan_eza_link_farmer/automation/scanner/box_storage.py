@@ -100,12 +100,21 @@ def save_box(
                             ec["copies"] = orig.get("copies", 1)
                             ec["swipe_page"] = orig.get("swipe_page", 0)
                             ec["grid_slot"] = orig.get("grid_slot", 0)
-                            ec["is_rainbow"] = orig.get("is_rainbow", False)
+                            ec["title"] = (
+                                orig.get("title") or orig.get("subname") or ec.get("subname", "")
+                            )
+                            ec["subname"] = (
+                                orig.get("subname") or orig.get("title") or ec.get("subname", "")
+                            )
+                            ec["rainbow"] = orig.get("rainbow", orig.get("is_rainbow", False))
+                            ec["is_rainbow"] = orig.get("is_rainbow", orig.get("rainbow", False))
                             ec["is_eza"] = orig.get("is_eza", False)
                             ec["is_seza"] = orig.get("is_seza", False)
                             ec["potential_percent"] = orig.get("potential_percent", 0)
                             if "scanned_at" in orig:
                                 ec["scanned_at"] = orig["scanned_at"]
+                            ec.setdefault("leader_skill", orig.get("leader_skill", ""))
+                            ec.setdefault("categories", orig.get("categories", []))
                             for k in (
                                 "leader_spec",
                                 "passive_tags",
@@ -114,6 +123,7 @@ def save_box(
                                 "category_ids",
                                 "links",
                                 "categories",
+                                "leader_skill",
                                 "best_in_box_partners",
                             ):
                                 if k not in ec and k in orig:
@@ -121,6 +131,14 @@ def save_box(
                             scanned_cards[cid] = ec
         except Exception as exc:
             logger.warning("Error enriching box with DokkanDB: %s", exc)
+
+    # Ensure base contract guarantees on all card dictionaries in card_list
+    for c in card_list:
+        if isinstance(c, dict):
+            c.setdefault("title", c.get("subname", ""))
+            c.setdefault("rainbow", c.get("is_rainbow", False))
+            c.setdefault("leader_skill", "")
+            c.setdefault("categories", [])
 
     total_instances = sum(int(c.get("copies", 1)) for c in scanned_cards.values())
     payload = {
