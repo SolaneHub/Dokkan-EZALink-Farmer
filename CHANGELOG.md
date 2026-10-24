@@ -1,5 +1,18 @@
 # Changelog
 
+## [v1.4.0] - 2026-10-24
+
+### Added
+- **AI Endgame Subsystem Isolation (`ai.endgame`)**: Decomposed monolithic endgame runner and combat telemetry into a self-contained subpackage with thread-safe lazy exports (`__getattr__`) and zero-import decoupling for core bot engines.
+- **In-Memory DokkanDB Test Harness (`tests/harness/fake_dokkandb.py`)**: Authoritative, in-memory client and HTTP requests interceptor simulating DokkanDB catalogs, events, and stages with zero network latency.
+- **Dual-Granularity Test Runner (`scripts/test_runner.py`)**: Cross-platform CLI runner enforcing sub-3s feedback loops for fast tests (`pytest -m fast`) and comprehensive matrices for pre-release verification (`pytest`).
+- **Black-Box Synthetic Integration Tests**: Multi-stage regression suites for EZA climb loops (`EZAFarmTask`) and Link Leveling deck rebuilds (`LinkLevelFarmTask`) powered by synthetic screen generators.
+- **Diagnostic Crop Dumps (`save_diagnostic_crops`)**: Automatic persistence of raw screen, banner, and level crops during scanner low-confidence OCR conditions (< 0.85).
+
+### Changed
+- **Scanner Schema Contract Hardening**: Enforced normalized `title`, `rainbow`, `leader_skill`, and `categories` defaults across all serialized card dictionaries.
+- **CI/CD Optimization**: Streamlined PR/push CI on fast tests (< 3s) while gating release builds behind the complete multi-OS test matrix.
+
 ## [v1.3.0] - 2026-10-24
 
 ### Added
