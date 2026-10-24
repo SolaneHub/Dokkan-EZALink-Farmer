@@ -7,6 +7,9 @@ level / SA counters, back button, and navigation arrows.
 
 from __future__ import annotations
 
+import contextlib
+from typing import Any
+
 import cv2
 import numpy as np
 
@@ -186,4 +189,209 @@ def create_synthetic_card_detail_frame(
         max_sa=max_sa,
     )
 
+    return frame
+
+
+def paste_template_on_canvas(
+    canvas: np.ndarray,
+    template_name: str,
+    cx: int,
+    cy: int,
+    vision: Any = None,
+) -> tuple[int, int]:
+    """Pastes an existing template centered at (cx, cy) onto the canvas.
+
+    If vision is not provided, instantiates a default Vision().
+    """
+    if vision is None:
+        from dokkan_eza_link_farmer.automation.vision import Vision
+
+        vision = Vision()
+
+    tmpl = vision.load_template(template_name)
+    if tmpl is None:
+        raise ValueError(f"Template '{template_name}' not found by Vision.")
+
+    th, tw = tmpl.shape[:2]
+    x1 = max(0, cx - tw // 2)
+    y1 = max(0, cy - th // 2)
+    x2 = min(canvas.shape[1], x1 + tw)
+    y2 = min(canvas.shape[0], y1 + th)
+    canvas[y1:y2, x1:x2] = tmpl[0 : y2 - y1, 0 : x2 - x1]
+    return (cx, cy)
+
+
+def create_synthetic_eza_select_frame(
+    width: int = 1080,
+    height: int = 2400,
+    vision: Any = None,
+) -> np.ndarray:
+    """Creates a synthetic Extreme Z-Battle Level Select screen.
+
+    Pastes button_eza_fight or text_eza_fight at standard EZA coordinates (Y ~ 0.69 - 0.75 H).
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+    # EZA fight button is located around center X and ~75% Y (within TEMPLATE_VERTICAL_ROIS 0.70..0.98)
+    fight_x = int(width * 0.50)
+    fight_y = int(height * 0.75)
+    paste_template_on_canvas(frame, "button_eza_fight", fight_x, fight_y, vision=vision)
+    return frame
+
+
+def create_synthetic_battle_frame(
+    width: int = 1080,
+    height: int = 2400,
+    auto_active: bool = True,
+    vision: Any = None,
+) -> np.ndarray:
+    """Creates a synthetic Dokkan Battle active screen.
+
+    Pastes battle_menu, auto_battle toggle (btn_auto_battle_on/off), and button_item.
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+    menu_x, menu_y = int(width * 0.15), int(height * 0.10)
+    paste_template_on_canvas(frame, "button_battle_menu", menu_x, menu_y, vision=vision)
+
+    auto_tmpl = "btn_auto_battle_on" if auto_active else "btn_auto_battle_off"
+    auto_x, auto_y = int(width * 0.85), int(height * 0.10)
+    paste_template_on_canvas(frame, auto_tmpl, auto_x, auto_y, vision=vision)
+
+    # Item button at bottom right (ROI 0.75..1.0)
+    item_x, item_y = int(width * 0.88), int(height * 0.88)
+    paste_template_on_canvas(frame, "button_item", item_x, item_y, vision=vision)
+    return frame
+
+
+def create_synthetic_results_frame(
+    width: int = 1080,
+    height: int = 2400,
+    has_attempt_again: bool = True,
+    vision: Any = None,
+) -> np.ndarray:
+    """Creates a synthetic victory / stage clear results screen.
+
+    Pastes Attempt Again button (left) and OK button (right), or centered OK button.
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+    if has_attempt_again:
+        again_x = int(width * 0.28)
+        again_y = int(height * 0.85)
+        paste_template_on_canvas(frame, "button_attempt_again", again_x, again_y, vision=vision)
+        ok_x = int(width * 0.72)
+        ok_y = int(height * 0.85)
+        paste_template_on_canvas(frame, "button_ok", ok_x, ok_y, vision=vision)
+    else:
+        ok_x = int(width * 0.50)
+        ok_y = int(height * 0.85)
+        paste_template_on_canvas(frame, "button_ok", ok_x, ok_y, vision=vision)
+    return frame
+
+
+def create_synthetic_quest_stage_frame(
+    stage: str = "area_39_3",
+    width: int = 1080,
+    height: int = 2400,
+    vision: Any = None,
+) -> np.ndarray:
+    """Creates a synthetic Quest stage selection screen (Area 39-3 or 35-1).
+
+    Pastes the corresponding stage badge / card template within ROI (0.15..0.85 H).
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+    tmpl_name = "stage_area39_3" if stage == "area_39_3" else "stage_area35_1"
+    stage_x = int(width * 0.50)
+    stage_y = int(height * 0.35)
+    paste_template_on_canvas(frame, tmpl_name, stage_x, stage_y, vision=vision)
+    return frame
+
+
+def create_synthetic_friend_select_frame(
+    width: int = 1080,
+    height: int = 2400,
+    vision: Any = None,
+) -> np.ndarray:
+    """Creates a synthetic Friend Supporter Selection screen."""
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+    # Friend refresh button at top right (ROI 0.10..0.35 H)
+    rx, ry = int(width * 0.82), int(height * 0.18)
+    paste_template_on_canvas(frame, "button_friend_refresh", rx, ry, vision=vision)
+    return frame
+
+
+def create_synthetic_team_confirm_frame(
+    width: int = 1080,
+    height: int = 2400,
+    vision: Any = None,
+) -> np.ndarray:
+    """Creates a synthetic Team Confirmation screen (button_start and button_team_formation)."""
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+    # Team formation button (ROI 0.30..0.55 H)
+    fx, fy = int(width * 0.80), int(height * 0.49)
+    paste_template_on_canvas(frame, "button_team_formation", fx, fy, vision=vision)
+
+    # Start button at bottom right (ROI 0.60..0.98 H)
+    sx, sy = int(width * 0.75), int(height * 0.88)
+    paste_template_on_canvas(frame, "button_start", sx, sy, vision=vision)
+    return frame
+
+
+def create_synthetic_team_edit_frame(
+    width: int = 1080,
+    height: int = 2400,
+    filled_slots: int = 6,
+    vision: Any = None,
+) -> np.ndarray:
+    """Creates a synthetic Team Edit / Formation screen."""
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+    # Confirm formation button at bottom right (ROI 0.50..0.98 H)
+    cx, cy = int(width * 0.88), int(height * 0.88)
+    paste_template_on_canvas(frame, "button_confirm_formation", cx, cy, vision=vision)
+
+    # Deck remove all button (ROI 0.15..0.45 H)
+    rx, ry = int(width * 0.91), int(height * 0.30)
+    paste_template_on_canvas(frame, "button_deck_remove_all", rx, ry, vision=vision)
+
+    # Paste team slot badges
+    for slot in range(1, filled_slots + 1):
+        with contextlib.suppress(Exception):
+            paste_template_on_canvas(
+                frame, f"badge_team_slot_{slot}", 100 + slot * 120, 500, vision=vision
+            )
+    return frame
+
+
+def create_synthetic_stamina_empty_frame(
+    width: int = 1080,
+    height: int = 2400,
+    vision: Any = None,
+) -> np.ndarray:
+    """Creates a synthetic Stamina Empty / Restore STA popup screen.
+
+    Pastes header_restore_sta and button_cancel within their vertical ROIs.
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+    header_x = int(width * 0.50)
+    header_y = int(height * 0.38)
+    paste_template_on_canvas(frame, "header_restore_sta", header_x, header_y, vision=vision)
+
+    cancel_x = int(width * 0.50)
+    cancel_y = int(height * 0.70)
+    paste_template_on_canvas(frame, "button_cancel", cancel_x, cancel_y, vision=vision)
+    return frame
+
+
+def create_synthetic_difficulty_frame(
+    width: int = 1080,
+    height: int = 2400,
+    vision: Any = None,
+) -> np.ndarray:
+    """Creates a synthetic Difficulty Selection screen (diff_super and diff_z_hard)."""
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+    # diff_super (ROI 0.25..0.65 H)
+    sx, sy = int(width * 0.50), int(height * 0.40)
+    paste_template_on_canvas(frame, "diff_super", sx, sy, vision=vision)
+
+    # diff_z_hard (ROI 0.30..0.70 H)
+    zx, zy = int(width * 0.50), int(height * 0.55)
+    paste_template_on_canvas(frame, "diff_z_hard", zx, zy, vision=vision)
     return frame
