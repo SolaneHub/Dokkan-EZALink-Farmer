@@ -81,7 +81,7 @@ class TeamBuilder:
     ):
         self.dokkandb = dokkandb or DokkanDBClient()
         self.ai_client = ai_client
-        self.solver = solver or DokkanConstraintSolver()
+        self.solver = solver or DokkanConstraintSolver(dokkandb=self.dokkandb)
         self.settings_path = settings_path
 
     # =========================================================================
@@ -254,6 +254,43 @@ class TeamBuilder:
                     + self.calculate_slot1_anchor_weight(rot2.slot1, boss_stage=boss_stage)
                 )
 
+                # Rotation consistency: Friend Leader should not displace a core unit if receiving lower boost
+                leader_card = cards[0]
+                rot_units = [rot1.slot1, rot1.slot2, rot2.slot1, rot2.slot2]
+                friend_in_rot = next(
+                    (c for c in rot_units if getattr(c, "is_friend_leader", False)), None
+                )
+                if friend_in_rot is not None and leader_card.leader_spec:
+                    def _get_boost(card: DokkanCard, lead: DokkanCard = leader_card) -> float:
+                        is_cov, boost, _ = card.is_covered_by_leader(lead)
+                        if (
+                            (not is_cov or boost < 170.0)
+                            and not card.category_ids
+                            and lead.leader_spec
+                            and lead.leader_spec.main_category_ids
+                            and any(c_name.lower() in lead.leader_skill.lower() for c_name in card.categories)
+                        ):
+                            boost = max(boost, float(lead.leader_spec.base_boost_pct))
+                        return boost
+
+                    friend_boost = _get_boost(friend_in_rot)
+                    non_friends_in_rot = [
+                        c for c in rot_units if not getattr(c, "is_friend_leader", False)
+                    ]
+                    min_rot_boost = min(
+                        (_get_boost(c) for c in non_friends_in_rot),
+                        default=200.0,
+                    )
+                    # Candidate floaters in this formation
+                    cand_floaters = [cards[i] for i in range(n) if i not in idxs]
+                    floaters_max_boost = max((_get_boost(c) for c in cand_floaters), default=0.0)
+
+                    # If friend receives strictly lower boost than titular rotation units or titular floaters,
+                    # or lacks 200/220% boost while displaced titolari have >= 200%, penalize heavily so friend floats
+                    if friend_boost < min_rot_boost or friend_boost < floaters_max_boost or (friend_boost < 200.0 and floaters_max_boost >= 200.0):
+                        diff = max(200.0 - friend_boost, floaters_max_boost - friend_boost, 30.0)
+                        total -= diff * 2.0
+
                 if total > best_score:
                     best_score = total
                     best_rot_a = rot1
@@ -272,24 +309,60 @@ class TeamBuilder:
         self, cards: list[DokkanCard], candidate_pool: list[DokkanCard]
     ) -> DokkanCard:
         """Selects the optimal complementary Friend Leader from candidate_pool for the team."""
+        if not cards:
+            raise ValueError("Cannot select friend leader for an empty team")
+
+        leader = cards[0]
         if not candidate_pool:
-            lead = copy.copy(cards[0])
+            lead = copy.copy(leader)
             lead.is_friend_leader = True
             return lead
 
-        best_cand = candidate_pool[0]
+        # 1. Top priority: exact same card (card.id == leader.id) if present in pool
+        for cand in candidate_pool:
+            if cand.id == leader.id:
+                friend = copy.copy(cand)
+                friend.is_friend_leader = True
+                return friend
+
+        # 2. Alternative: candidates with compatible leader skill covering leader's main_category_ids,
+        # verifying they cover at least 5 team members with boost >= 170.0.
+        leader_main_cats = set()
+        if leader.leader_spec and leader.leader_spec.main_category_ids:
+            leader_main_cats = set(leader.leader_spec.main_category_ids)
+
+        best_cand: DokkanCard | None = None
         best_score = -1000.0
 
         for cand in candidate_pool:
+            cand_main_cats = set()
+            if cand.leader_spec and cand.leader_spec.main_category_ids:
+                cand_main_cats = set(cand.leader_spec.main_category_ids)
+
+            # Must share/cover the leader's primary categories if specified
+            if leader_main_cats and not (leader_main_cats & cand_main_cats):
+                continue
+
             score = 0.0
             covered_count = 0
             for c in cards:
                 is_cov, boost, _ = c.is_covered_by_leader(cand)
+                # Fallback: if category_ids is not populated on card, check if card.categories matches cand's main categories
+                if (
+                    (not is_cov or boost < 170.0)
+                    and not c.category_ids
+                    and cand_main_cats
+                    and any(c_name.lower() in cand.leader_skill.lower() for c_name in c.categories)
+                ):
+                    is_cov = True
+                    boost = max(boost, 170.0)
                 if is_cov and boost >= 170.0:
                     covered_count += 1
                     score += boost * 0.1
+
+            # Must cover at least 5 team members with boost >= 170.0
             if covered_count < 5:
-                score -= 100.0
+                continue
 
             kit, _ = cand.evaluate_kit_power()
             score += kit * 0.2
@@ -306,7 +379,10 @@ class TeamBuilder:
                 best_score = score
                 best_cand = cand
 
-        friend = copy.copy(best_cand)
+        # Fallback: if no identical or fully complementary friend exists in candidate_pool,
+        # fallback to an exact copy of the team leader.
+        friend = copy.copy(leader) if best_cand is None else copy.copy(best_cand)
+
         friend.is_friend_leader = True
         return friend
 
@@ -376,11 +452,13 @@ class TeamBuilder:
 
         leader = cards[0]
         if friend_leader is not None:
-            friend = friend_leader
+            friend = copy.copy(friend_leader)
+            friend.is_friend_leader = True
         elif candidate_pool:
             friend = self.select_best_friend_leader(cards, candidate_pool)
         elif len(cards) >= 7:
-            friend = cards[6]
+            friend = copy.copy(cards[6])
+            friend.is_friend_leader = True
         else:
             friend = copy.copy(leader)
             friend.is_friend_leader = True
@@ -422,12 +500,20 @@ class TeamBuilder:
                 logger.warning(f"AI strategy generation skipped due to error: {e}")
 
         if not tactical_guide:
+            def _name_with_badge(c: DokkanCard) -> str:
+                badge = ""
+                if c is friend or getattr(c, "is_friend_leader", False):
+                    badge = " [Friend Leader]"
+                elif c is leader:
+                    badge = " [Leader]"
+                return f"{c.name}{badge}"
+
             # Algorithmic fallback guide adhering to the clean bulleted structure
             tactical_guide = (
                 f"### 🛡️ Piano Tattico Deterministico - Rotazioni\n"
-                f"- **Rotazione A**: Mantieni **{rot_a.slot1.name}** in Slot 1 come difensore primario. **{rot_a.slot2.name}** in Slot 2 attiva {len(rot_a.shared_links)} link e massimizza i danni.\n"
-                f"- **Rotazione B**: **{rot_b.slot1.name}** in Slot 1 assorbe i colpi diretti. **{rot_b.slot2.name}** in Slot 2 guida la fase offensiva.\n"
-                f"- **Floaters (Slot 3)**: Fai ruotare **{', '.join(f.name for f in floaters)}** in Slot 3 per Ki support, gestione orbi e rotazione difensiva.\n\n"
+                f"- **Rotazione A**: Mantieni **{_name_with_badge(rot_a.slot1)}** in Slot 1 come difensore primario. **{_name_with_badge(rot_a.slot2)}** in Slot 2 attiva {len(rot_a.shared_links)} link e massimizza i danni.\n"
+                f"- **Rotazione B**: **{_name_with_badge(rot_b.slot1)}** in Slot 1 assorbe i colpi diretti. **{_name_with_badge(rot_b.slot2)}** in Slot 2 guida la fase offensiva.\n"
+                f"- **Floaters (Slot 3)**: Fai ruotare **{', '.join(_name_with_badge(f) for f in floaters)}** in Slot 3 per Ki support, gestione orbi e rotazione difensiva.\n\n"
                 f"### 💊 Gestione Oggetti di Supporto\n"
                 f"- **Whis**: Attivalo nei turni ad alto rischio o contro la Super Attack nemica per ridurre il danno del 40% per 2 turni.\n"
                 f"- **Ghost Usher**: Usalo se il floater in Slot 3 subisce troppi attacchi o per saltare un turno critico del boss.\n"
@@ -675,11 +761,13 @@ class TeamBuilder:
         current_team: list[DokkanCard],
         top_candidates: list[CandidateEvaluation],
         failure_report: FailureReport | None = None,
+        mission_batch: Any | None = None,
     ) -> dict[str, Any]:
         """
         Constructs the compact JSON payload sent to Ollama AI Advisor:
         - Target BossStage details and phase gimmicks
         - Optional FailureReport from telemetry
+        - Optional active mission constraints
         - Current 5 team members with roles
         - Top 5 candidates with full passive and Super Attack texts
         """
@@ -691,6 +779,24 @@ class TeamBuilder:
                 "cancels_dodge": p.cancels_dodge,
                 "has_aoe": p.has_aoe,
                 "locks_slots": p.locks_slots,
+                "enemy_count": getattr(p, "enemy_count", 1),
+                "is_multi_enemy": getattr(p, "is_multi_enemy", False),
+                "is_rainbow": getattr(p, "is_rainbow", False),
+                **(
+                    {
+                        "enemies": [
+                            {
+                                "name": b.name,
+                                "element": b.type_name,
+                                "hp": b.hp,
+                                "atk": b.atk,
+                            }
+                            for b in getattr(p, "bosses", [])
+                        ]
+                    }
+                    if getattr(p, "is_multi_enemy", False)
+                    else {}
+                ),
             }
             for p in boss_stage.phases
         ]
@@ -705,6 +811,21 @@ class TeamBuilder:
                 "culprit_card_id": failure_report.culprit_card_id,
                 "classification": failure_report.classification,
                 "reason": failure_report.reason,
+            }
+
+        mission_payload = None
+        if mission_batch is not None:
+            mission_payload = {
+                "summary": getattr(mission_batch, "summary", ""),
+                "required_categories": [
+                    {"count": count, "category": cat}
+                    for count, cat in getattr(mission_batch, "required_categories", [])
+                ],
+                "requires_rainbow": bool(getattr(mission_batch, "requires_rainbow", False)),
+                "requires_all_super": bool(getattr(mission_batch, "requires_all_super", False)),
+                "requires_all_extreme": bool(getattr(mission_batch, "requires_all_extreme", False)),
+                "requires_no_items": bool(getattr(mission_batch, "requires_no_items", False)),
+                "max_turns": getattr(mission_batch, "max_turns", None),
             }
 
         team_payload = [
@@ -747,7 +868,7 @@ class TeamBuilder:
                 }
             )
 
-        return {
+        payload: dict[str, Any] = {
             "boss_stage": {
                 "event_name": boss_stage.event_name,
                 "stage_name": boss_stage.stage_name,
@@ -758,6 +879,10 @@ class TeamBuilder:
             "current_team": team_payload,
             "top_5_candidates": candidates_payload,
         }
+        if mission_payload is not None:
+            payload["mission_batch"] = mission_payload
+
+        return payload
 
     # =========================================================================
     # STEP 1 & 2: BEST TEAM SELECTION & LOCAL OLLAMA AI ADVISOR
@@ -818,16 +943,44 @@ class TeamBuilder:
             current_5 = team_cards[:5]
             leader = team_cards[0]
 
-            # Formulate the 5 candidates: Solver pick for 6th slot as Candidate #1 + runner-ups
+            # Formulate the candidates: Solver pick for 6th slot as Candidate #1 + runner-ups
             cand1_ev = self.evaluate_card_against_boss(
                 team_cards[5], leader, boss_stage=boss_stage, selected_team=current_5
             )
-            eval_candidates = [cand1_ev]
+            raw_eval_candidates = [cand1_ev]
             for ev in shortlist:
-                if len(eval_candidates) >= 5:
+                if len(raw_eval_candidates) >= 5:
                     break
                 if ev.card.id != cand1_ev.card.id:
-                    eval_candidates.append(ev)
+                    raw_eval_candidates.append(ev)
+
+            # Check if Slot 6 is needed to fulfill a mission category requirement
+            eval_candidates = raw_eval_candidates
+            if mission_batch is not None:
+                required_categories = getattr(mission_batch, "required_categories", [])
+                for req_count, cat_name in required_categories:
+                    cat_lower = cat_name.strip().lower()
+                    current_count = sum(
+                        1
+                        for tc in current_5
+                        if any(c_cat.strip().lower() == cat_lower for c_cat in tc.categories)
+                    )
+                    deficit = req_count - current_count
+                    if deficit > 0:
+                        # Category deficit exists and slot 6 must fulfill it
+                        filtered = [
+                            ev
+                            for ev in eval_candidates
+                            if any(
+                                c_cat.strip().lower() == cat_lower for c_cat in ev.card.categories
+                            )
+                        ]
+                        if filtered:
+                            eval_candidates = filtered
+                        logger.info(
+                            f"[TeamBuilder] Mission deficit for '{cat_name}' (needed: {req_count}, current_5: {current_count}). "
+                            f"Filtered candidates to {len(eval_candidates)} matching cards."
+                        )
 
             chosen_card, reason = self.consult_ollama_advisor(
                 top_candidates=eval_candidates,
@@ -835,6 +988,7 @@ class TeamBuilder:
                 boss_stage=boss_stage,
                 ai_client=client,
                 failure_report=failure_report,
+                mission_batch=mission_batch,
             )
             advisor_reason = reason
             team_cards[5] = chosen_card
@@ -883,6 +1037,7 @@ class TeamBuilder:
         boss_stage: BossStage,
         ai_client: DokkanAIClient | None = None,
         failure_report: FailureReport | None = None,
+        mission_batch: Any | None = None,
     ) -> tuple[DokkanCard, str]:
         """
         Consults local Ollama LLM (DeepSeek-R1 / Qwen) to evaluate subtle semantic conditions
@@ -925,18 +1080,55 @@ class TeamBuilder:
             current_team=current_team,
             top_candidates=top_candidates,
             failure_report=failure_report,
+            mission_batch=mission_batch,
         )
 
         team_names = [f"[{c.element_name}] {c.full_name}" for c in current_team]
-        phases_desc = [
-            f"Phase {p.phase_index}: {p.element_name} (Cancels Dodge: {p.cancels_dodge}, AoE: {p.has_aoe}, Locks Slots: {p.locks_slots})"
-            for p in boss_stage.phases
-        ]
+        phases_desc = []
+        for p in boss_stage.phases:
+            desc = f"Phase {p.phase_index}: {p.element_name}"
+            if getattr(p, "is_multi_enemy", False):
+                hp_val = getattr(p, "hp", 0)
+                hp_str = f"{hp_val / 1_000_000:.0f}M" if hp_val >= 1_000_000 else (f"{hp_val:,}" if hp_val else "N/A")
+                actions_val = getattr(p, "actions_per_turn", 0)
+                act_str = f"{actions_val}/turn" if actions_val else "standard"
+                desc += f" - Total HP: {hp_str}, Actions: {act_str}"
+            desc += f" (Cancels Dodge: {p.cancels_dodge}, AoE: {p.has_aoe}, Locks Slots: {p.locks_slots})"
+            phases_desc.append(desc)
+
+        mission_constraint_rules = ""
+        mission_user_section = ""
+        if mission_batch is not None:
+            summary = getattr(mission_batch, "summary", "")
+            req_cats = getattr(mission_batch, "required_categories", [])
+            req_cats_str = ", ".join(f"{cnt}x '{cat}'" for cnt, cat in req_cats) if req_cats else "None"
+            requires_rainbow = getattr(mission_batch, "requires_rainbow", False)
+            requires_all_super = getattr(mission_batch, "requires_all_super", False)
+            requires_all_extreme = getattr(mission_batch, "requires_all_extreme", False)
+
+            mission_constraint_rules = (
+                "CRITICAL MANDATORY REQUIREMENT: Active mission constraints are in effect. "
+                "The chosen card MUST strictly satisfy all required mission criteria "
+                "(e.g., requested categories, rainbow type balance, Super/Extreme class restrictions). "
+                "Do NOT select any card that violates or fails to advance these mission requirements. "
+            )
+            mission_user_section = (
+                "=== ACTIVE MISSION CONSTRAINTS (MANDATORY) ===\n"
+                f"Summary: {summary}\n"
+                f"Required Categories: {req_cats_str}\n"
+                f"Requires Rainbow (All 5 Types): {requires_rainbow}\n"
+                f"Requires All Super: {requires_all_super}\n"
+                f"Requires All Extreme: {requires_all_extreme}\n"
+                "The selected card MUST satisfy these mission constraints!\n\n"
+            )
 
         system_msg = (
             "You are an expert Dokkan Battle Grandmaster AI Advisor. "
             "Your task is to analyze semantic passive conditions that regex rules may miss "
             "(e.g., ally-specific guard conditions, category-restricted critical hits, specific turn restrictions). "
+            + mission_constraint_rules
+            + "When multi-enemy phases are present, strongly prioritize AoE attackers that hit all targets simultaneously "
+            "and units with unconditional Guard that protect against rainbow attacks. "
             "You MUST select exactly ONE card from the provided candidates JSON list that best complements the team "
             "and counters the boss gimmicks. "
             "You MUST return ONLY a valid JSON object with format: "
@@ -960,6 +1152,7 @@ class TeamBuilder:
             + "\n".join(f"- {pd}" for pd in phases_desc)
             + "\n\n"
             + failure_text
+            + mission_user_section
             + "=== CURRENT TEAM ROSTER (5 MEMBERS) ===\n"
             + "\n".join(f"- {tn}" for tn in team_names)
             + "\n\n"
@@ -1401,13 +1594,17 @@ def render_team_summary_table_rich(
     from rich.text import Text
 
     lead = leader or (team_cards[0] if team_cards else None)
-    t = Table(title="🛡️ Dokkan AI Optimal 6-Card Team Formation", border_style="green")
-    t.add_column("Slot", style="bold cyan", justify="center")
-    t.add_column("Type", justify="center")
-    t.add_column("Character")
-    t.add_column("Leader Boost", justify="center")
-    t.add_column("Ruolo", justify="center")
-    t.add_column("Tag Difensivi")
+    t = Table(
+        title="🛡️ Dokkan AI Optimal 6-Card Team Formation",
+        border_style="green",
+        expand=True,
+    )
+    t.add_column("Slot", style="bold cyan", justify="center", width=6, no_wrap=True)
+    t.add_column("Type", justify="center", width=13, no_wrap=True)
+    t.add_column("Character", ratio=5, no_wrap=False)
+    t.add_column("Leader Boost", justify="center", width=13, no_wrap=True)
+    t.add_column("Ruolo", justify="center", width=16, no_wrap=False)
+    t.add_column("Tag Difensivi", ratio=3, no_wrap=False)
 
     if not team_cards:
         return t
@@ -1610,9 +1807,6 @@ def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str
             )
         lines.append("\n**Scheda Dettagliata Battaglie & Fasi Boss**:")
         for p in phases:
-            b = p.bosses[0] if getattr(p, "bosses", None) else None
-            b_name = b.name if b else "Boss"
-            sub = f" ({b.subname})" if b and getattr(b, "subname", None) else ""
             hp_val = getattr(p, "hp", 0)
             atk_val = getattr(p, "atk", 0)
             sa_est_val = getattr(p, "estimated_sa_damage", 0)
@@ -1646,13 +1840,42 @@ def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str
                 )
             )
 
-            lines.append(
-                f"- **Battaglia {getattr(p, 'battle_index', 1)} - Round {getattr(p, 'round_index', 1)} (Fase {getattr(p, 'phase_index', 1)})**: "
-                f"**{b_name}{sub}** [{getattr(p, 'element_name', '')}]\n"
-                f"  - **HP**: {hp_str} | **ATK Base**: {atk_str} (Super Attack stimata: {sa_est}) | **Azioni**: {actions_str}\n"
-                f"  - **Abilità & Gimmick**: {skills_str}\n"
-                f"  - **Stato Stacking**: {stacking_note}"
-            )
+            is_multi = getattr(p, "is_multi_enemy", False)
+            if is_multi:
+                e_cnt = getattr(p, "enemy_count", len(getattr(p, "bosses", [])))
+                header = (
+                    f"- **Battaglia {getattr(p, 'battle_index', 1)} - Round {getattr(p, 'round_index', 1)} (Fase {getattr(p, 'phase_index', 1)})**: "
+                    f"👥 {e_cnt} Nemici [{getattr(p, 'element_name', '')}]"
+                )
+                lines.append(header)
+                lines.append(
+                    f"  - **HP Totali**: {hp_str} | **ATK Base (Fase)**: {atk_str} (Super Attack stimata: {sa_est}) | **Azioni Totali**: {actions_str}"
+                )
+                lines.append(f"  - **Abilità & Gimmick**: {skills_str}")
+                lines.append(f"  - **Stato Stacking**: {stacking_note}")
+                lines.append("  - **Nemici Presenti**:")
+                for b in getattr(p, "bosses", []):
+                    b_sub = f" ({b.subname})" if getattr(b, "subname", None) else ""
+                    b_hp = f"{b.hp / 1_000_000:.0f}M" if b.hp >= 1_000_000 else (f"{b.hp:,}" if b.hp else "N/A")
+                    b_atk = f"{b.atk / 1_000:.0f}k" if b.atk >= 1_000 else (str(b.atk) if b.atk else "N/A")
+                    lines.append(
+                        f"    - **{b.name}{b_sub}** [{b.type_name}]: HP {b_hp}, ATK {b_atk}"
+                    )
+                lines.append(
+                    f"  - 💡 CONSIGLIO TATTICO: La fase contiene {e_cnt} nemici simultanei. "
+                    "Personaggi con Super Attacchi AoE o con Guardia incondizionata eccellono qui per ripulire rapidamente il campo!"
+                )
+            else:
+                b = p.bosses[0] if getattr(p, "bosses", None) else None
+                b_name = b.name if b else "Boss"
+                sub = f" ({b.subname})" if b and getattr(b, "subname", None) else ""
+                lines.append(
+                    f"- **Battaglia {getattr(p, 'battle_index', 1)} - Round {getattr(p, 'round_index', 1)} (Fase {getattr(p, 'phase_index', 1)})**: "
+                    f"**{b_name}{sub}** [{getattr(p, 'element_name', '')}]\n"
+                    f"  - **HP**: {hp_str} | **ATK Base**: {atk_str} (Super Attack stimata: {sa_est}) | **Azioni**: {actions_str}\n"
+                    f"  - **Abilità & Gimmick**: {skills_str}\n"
+                    f"  - **Stato Stacking**: {stacking_note}"
+                )
     else:
         lines.append(
             f"**Event**: {boss_stage.event_name} | **Stage**: {boss_stage.stage_name} (ID: {boss_stage.stage_id})"
@@ -1669,9 +1892,6 @@ def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str
             )
         lines.append("\n**Detailed Battles, Phases, Damage & Boss Gimmicks**:")
         for p in phases:
-            b = p.bosses[0] if getattr(p, "bosses", None) else None
-            b_name = b.name if b else "Boss"
-            sub = f" ({b.subname})" if b and getattr(b, "subname", None) else ""
             hp_val = getattr(p, "hp", 0)
             atk_val = getattr(p, "atk", 0)
             sa_est_val = getattr(p, "estimated_sa_damage", 0)
@@ -1705,13 +1925,42 @@ def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str
                 )
             )
 
-            lines.append(
-                f"- **Battle {getattr(p, 'battle_index', 1)} - Round {getattr(p, 'round_index', 1)} (Phase {getattr(p, 'phase_index', 1)})**: "
-                f"**{b_name}{sub}** [{getattr(p, 'element_name', '')}]\n"
-                f"  - **HP**: {hp_str} | **Normal ATK**: {atk_str} (Estimated Super Attack: {sa_est}) | **Actions**: {actions_str}\n"
-                f"  - **Skills & Gimmicks**: {skills_str}\n"
-                f"  - **Stacking Status**: {stacking_note}"
-            )
+            is_multi = getattr(p, "is_multi_enemy", False)
+            if is_multi:
+                e_cnt = getattr(p, "enemy_count", len(getattr(p, "bosses", [])))
+                header = (
+                    f"- **Battle {getattr(p, 'battle_index', 1)} - Round {getattr(p, 'round_index', 1)} (Phase {getattr(p, 'phase_index', 1)})**: "
+                    f"👥 {e_cnt} Enemies [{getattr(p, 'element_name', '')}]"
+                )
+                lines.append(header)
+                lines.append(
+                    f"  - **Total HP**: {hp_str} | **Phase Base ATK**: {atk_str} (Estimated Super Attack: {sa_est}) | **Total Actions**: {actions_str}"
+                )
+                lines.append(f"  - **Skills & Gimmicks**: {skills_str}")
+                lines.append(f"  - **Stacking Status**: {stacking_note}")
+                lines.append("  - **Enemies Present**:")
+                for b in getattr(p, "bosses", []):
+                    b_sub = f" ({b.subname})" if getattr(b, "subname", None) else ""
+                    b_hp = f"{b.hp / 1_000_000:.0f}M" if b.hp >= 1_000_000 else (f"{b.hp:,}" if b.hp else "N/A")
+                    b_atk = f"{b.atk / 1_000:.0f}k" if b.atk >= 1_000 else (str(b.atk) if b.atk else "N/A")
+                    lines.append(
+                        f"    - **{b.name}{b_sub}** [{b.type_name}]: HP {b_hp}, ATK {b_atk}"
+                    )
+                lines.append(
+                    f"  - 💡 TACTICAL ADVICE: Phase contains {e_cnt} simultaneous enemies. "
+                    "AoE Super Attack units and unconditional Guard units excel here to wipe out targets quickly!"
+                )
+            else:
+                b = p.bosses[0] if getattr(p, "bosses", None) else None
+                b_name = b.name if b else "Boss"
+                sub = f" ({b.subname})" if b and getattr(b, "subname", None) else ""
+                lines.append(
+                    f"- **Battle {getattr(p, 'battle_index', 1)} - Round {getattr(p, 'round_index', 1)} (Phase {getattr(p, 'phase_index', 1)})**: "
+                    f"**{b_name}{sub}** [{getattr(p, 'element_name', '')}]\n"
+                    f"  - **HP**: {hp_str} | **Normal ATK**: {atk_str} (Estimated Super Attack: {sa_est}) | **Actions**: {actions_str}\n"
+                    f"  - **Skills & Gimmicks**: {skills_str}\n"
+                    f"  - **Stacking Status**: {stacking_note}"
+                )
     return "\n".join(lines)
 
 
@@ -1727,17 +1976,15 @@ def render_stage_intel_rich(boss_stage: Any) -> Any:
 
     title = f"🎯 Stage Intelligence: {boss_stage.event_name} - {boss_stage.stage_name} ({total_battles} Battagli{'e' if total_battles > 1 else 'a'})"
     t = Table(show_header=True, header_style="bold magenta", expand=True)
-    t.add_column("Battaglia / Fase", style="bold cyan", width=18)
-    t.add_column("Boss Nemico", style="bold", width=26)
-    t.add_column("HP", justify="right", style="green", width=10)
-    t.add_column("ATK / Super", justify="right", style="yellow", width=18)
-    t.add_column("Azioni", justify="center", width=10)
-    t.add_column("Gimmick & Immunità", style="white")
-    t.add_column("Stacking DEF", justify="center", width=16)
+    t.add_column("Fase", style="bold cyan", width=12, no_wrap=True)
+    t.add_column("Boss Nemico", style="bold", ratio=4, no_wrap=False)
+    t.add_column("HP", justify="right", style="green", width=7, no_wrap=True)
+    t.add_column("ATK / Super", justify="right", style="yellow", width=13, no_wrap=True)
+    t.add_column("Azioni", justify="center", width=7, no_wrap=True)
+    t.add_column("Gimmick & Immunità", style="white", ratio=4, no_wrap=False)
+    t.add_column("Stacking DEF", justify="center", width=12, no_wrap=False)
 
     for p in phases:
-        b = p.bosses[0] if getattr(p, "bosses", None) else None
-        b_name = b.name if b else "Boss"
         phase_label = f"B{getattr(p, 'battle_index', 1)} - R{getattr(p, 'round_index', 1)} (F{getattr(p, 'phase_index', 1)})"
 
         elem_name = getattr(p, "element_name", "")
@@ -1754,7 +2001,33 @@ def render_stage_intel_rich(boss_stage: Any) -> Any:
                 )
             )
         )
-        boss_text = Text(f"[{elem_name}] {b_name}", style=elem_color)
+
+        is_multi = getattr(p, "is_multi_enemy", False)
+        if is_multi:
+            e_cnt = getattr(p, "enemy_count", len(getattr(p, "bosses", [])))
+            boss_text = Text()
+            boss_text.append(f"👥 {e_cnt} Nemici ({elem_name})\n", style="bold cyan")
+            for idx, b in enumerate(getattr(p, "bosses", [])):
+                b_color = (
+                    "green"
+                    if "TEQ" in b.type_name
+                    else (
+                        "blue"
+                        if "AGL" in b.type_name
+                        else (
+                            "red"
+                            if "STR" in b.type_name
+                            else ("yellow" if "PHY" in b.type_name else "magenta")
+                        )
+                    )
+                )
+                boss_text.append(f"• [{b.type_name}] {b.name}", style=b_color)
+                if idx < len(p.bosses) - 1:
+                    boss_text.append("\n")
+        else:
+            b = p.bosses[0] if getattr(p, "bosses", None) else None
+            b_name = b.name if b else "Boss"
+            boss_text = Text(f"[{elem_name}] {b_name}", style=elem_color)
 
         hp_val = getattr(p, "hp", 0)
         atk_val = getattr(p, "atk", 0)

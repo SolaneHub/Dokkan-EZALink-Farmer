@@ -943,3 +943,466 @@ class TestTeamBuilderUserBoxAndTableFormatting:
         # analyze_team_strategy must NOT be called when generate_tactics=False
         mock_client.analyze_team_strategy.assert_not_called()
         assert "Piano Tattico Deterministico" in rec.tactical_analysis
+
+    def test_build_advisor_payload_with_mission_batch(
+        self,
+        sample_leader_200: DokkanCard,
+        candidate_pool_sample: list[DokkanCard],
+        sample_boss_stage: BossStage,
+    ) -> None:
+        tb = TeamBuilder()
+        from dokkan_eza_link_farmer.ai.mission_solver import ChallengeMission, MissionBatch
+
+        batch = MissionBatch(
+            missions=[
+                ChallengeMission(
+                    id=1,
+                    name="Clear with 3 Movie Heroes",
+                    description="Clear stage with 3 or more Movie Heroes",
+                    categories=[(3, "Movie Heroes")],
+                )
+            ],
+            required_categories=[(3, "Movie Heroes")],
+            requires_rainbow=True,
+            requires_all_super=True,
+        )
+
+        candidates = tb.get_top_candidates(
+            candidate_pool=candidate_pool_sample,
+            leader=sample_leader_200,
+            boss_stage=sample_boss_stage,
+            top_k=5,
+        )
+
+        payload = TeamBuilder.build_advisor_payload(
+            boss_stage=sample_boss_stage,
+            current_team=candidate_pool_sample[:5],
+            top_candidates=candidates,
+            mission_batch=batch,
+        )
+
+        assert "mission_batch" in payload
+        mb = payload["mission_batch"]
+        assert mb["requires_rainbow"] is True
+        assert mb["requires_all_super"] is True
+        assert len(mb["required_categories"]) == 1
+        assert mb["required_categories"][0]["category"] == "Movie Heroes"
+        assert mb["required_categories"][0]["count"] == 3
+
+    def test_select_best_team_for_boss_filters_candidates_for_mission_deficit(
+        self,
+        candidate_pool_sample: list[DokkanCard],
+        sample_boss_stage: BossStage,
+    ) -> None:
+        from dokkan_eza_link_farmer.ai.mission_solver import ChallengeMission, MissionBatch
+
+        mock_client = MagicMock(spec=DokkanAIClient)
+        mock_client.is_available.return_value = True
+
+        # Ensure cards in candidate_pool_sample have string categories populated:
+        # 1001, 1002, 1004 have "Realm of Gods"
+        # 1003, 1005 have "Fusion"
+        # 1006, 1007, 1008 do not have "Realm of Gods"
+        pool = []
+        for c in candidate_pool_sample:
+            new_c = DokkanCard(
+                id=c.id,
+                name=c.name,
+                element=c.element,
+                element_name=c.element_name,
+                rarity=c.rarity,
+                category_ids=list(c.category_ids),
+                categories=["Realm of Gods"] if c.id in (1001, 1002, 1004) else ["Pure Saiyans"],
+                leader_skill=c.leader_skill,
+                leader_spec=c.leader_spec,
+                base_form=c.base_form,
+                transformations=c.transformations,
+                links=list(c.links),
+            )
+            pool.append(new_c)
+
+        def fake_chat_completion(messages, **_kwargs):
+            user_msg = next(m["content"] for m in messages if m["role"] == "user")
+            system_msg = next(m["content"] for m in messages if m["role"] == "system")
+            assert "CRITICAL MANDATORY REQUIREMENT" in system_msg
+            assert "ACTIVE MISSION CONSTRAINTS" in user_msg
+
+            # 1004 has Realm of Gods
+            return (
+                json.dumps({"selected_card_id": 1004, "reasoning": "Fits mission Realm of Gods"}),
+                None,
+            )
+
+        mock_client.chat_completion.side_effect = fake_chat_completion
+
+        batch = MissionBatch(
+            missions=[
+                ChallengeMission(
+                    id=1,
+                    name="Clear with Realm of Gods",
+                    description="Clear stage with Realm of Gods",
+                    categories=[(3, "Realm of Gods")],
+                )
+            ],
+            required_categories=[(3, "Realm of Gods")],
+        )
+
+        tb = TeamBuilder(ai_client=mock_client)
+        rec, _ = tb.select_best_team_for_boss(
+            candidate_pool=pool,
+            boss_stage=sample_boss_stage,
+            forced_leader=pool[0],
+            mission_batch=batch,
+            use_ai_advisor=True,
+            generate_tactics=False,
+        )
+
+        # Team must satisfy mission (at least 3 Realm of Gods cards)
+        passed, reasons = batch.matches_team(rec.all_cards)
+        assert passed, f"Team failed mission: {reasons}"
+        assert any(c.id == 1004 for c in rec.all_cards)
+
+
+class TestFriendLeaderAndRotationConsistency:
+    """Tests for friend leader selection hierarchy, fallback and rotation consistency."""
+
+    def test_identical_card_highest_priority(self, sample_leader_200: DokkanCard):
+        tb = TeamBuilder()
+        identical_friend = DokkanCard(
+            id=sample_leader_200.id,
+            name=sample_leader_200.name,
+            leader_skill=sample_leader_200.leader_skill,
+            leader_spec=sample_leader_200.leader_spec,
+            category_ids=list(sample_leader_200.category_ids),
+            categories=list(sample_leader_200.categories),
+        )
+        another_cand = DokkanCard(
+            id=9999,
+            name="Another Compatible Lead",
+            leader_skill=sample_leader_200.leader_skill,
+            leader_spec=sample_leader_200.leader_spec,
+            category_ids=list(sample_leader_200.category_ids),
+            categories=list(sample_leader_200.categories),
+        )
+
+        team = [sample_leader_200] + [
+            DokkanCard(
+                id=2000 + i,
+                name=f"Sub {i}",
+                category_ids=[10, 20],
+                categories=["Realm of Gods"],
+            )
+            for i in range(5)
+        ]
+
+        # Put another_cand first to ensure priority is by id match, not pool position
+        selected = tb.select_best_friend_leader(team, [another_cand, identical_friend])
+        assert selected.id == sample_leader_200.id
+        assert getattr(selected, "is_friend_leader", False) is True
+
+    def test_fallback_to_exact_copy_of_leader_when_pool_incompatible_or_empty(
+        self, sample_leader_200: DokkanCard
+    ):
+        tb = TeamBuilder()
+        incompatible_cand = DokkanCard(
+            id=8888,
+            name="Incompatible Unit",
+            leader_skill="Namekians Ki +3, Stats +170%",
+            leader_spec=LeaderSkillSpec(main_category_ids=[999], base_boost_pct=170),
+            category_ids=[999],
+            categories=["Namekians"],
+        )
+
+        team = [sample_leader_200] + [
+            DokkanCard(
+                id=2000 + i,
+                name=f"Sub {i}",
+                category_ids=[10, 20],
+                categories=["Realm of Gods"],
+            )
+            for i in range(5)
+        ]
+
+        # 1. Incompatible pool -> fallback to copy of leader
+        friend_incompat = tb.select_best_friend_leader(team, [incompatible_cand])
+        assert friend_incompat.id == sample_leader_200.id
+        assert getattr(friend_incompat, "is_friend_leader", False) is True
+
+        # 2. Empty candidate pool -> fallback to copy of leader
+        friend_empty = tb.select_best_friend_leader(team, [])
+        assert friend_empty.id == sample_leader_200.id
+        assert getattr(friend_empty, "is_friend_leader", False) is True
+
+    def test_compatible_candidate_selection_when_covering_five_members(
+        self, sample_leader_200: DokkanCard
+    ):
+        tb = TeamBuilder()
+        compatible_cand = DokkanCard(
+            id=7777,
+            name="Compatible Different Unit",
+            leader_skill="Realm of Gods Ki +3, Stats +170%",
+            leader_spec=LeaderSkillSpec(main_category_ids=[10], base_boost_pct=170),
+            category_ids=[10],
+            categories=["Realm of Gods"],
+        )
+
+        team = [sample_leader_200] + [
+            DokkanCard(
+                id=2000 + i,
+                name=f"Sub {i}",
+                category_ids=[10],
+                categories=["Realm of Gods"],
+            )
+            for i in range(5)
+        ]
+
+        selected = tb.select_best_friend_leader(team, [compatible_cand])
+        assert selected.id == 7777
+        assert getattr(selected, "is_friend_leader", False) is True
+
+    def test_rotation_labeling_and_friend_leader_consistency(
+        self, sample_leader_200: DokkanCard
+    ):
+        tb = TeamBuilder()
+        team = [sample_leader_200] + [
+            DokkanCard(
+                id=3000 + i,
+                name=f"Sub {i}",
+                category_ids=[10, 20, 30],
+                categories=["Realm of Gods", "Future Saga"],
+                links=["Super Saiyan", "Prepared for Battle"],
+                base_form=CardForm(
+                    form_id=3000 + i,
+                    passive_tags=PassiveTags(slot1_viable=True, dr_base_percent=50, has_guard=True),
+                ),
+            )
+            for i in range(5)
+        ]
+
+        # Friend with lower boost (170% without extra 30% Future Saga)
+        friend_lower_boost = DokkanCard(
+            id=4001,
+            name="Friend Lower Boost",
+            leader_skill="Realm of Gods Ki +3, Stats +170%",
+            leader_spec=LeaderSkillSpec(main_category_ids=[10], base_boost_pct=170),
+            category_ids=[10],
+            categories=["Realm of Gods"],
+            links=["Super Saiyan", "Prepared for Battle"],
+        )
+
+        rec = tb.build_team_plan(team, friend_leader=friend_lower_boost, generate_tactics=False)
+        assert getattr(rec.friend_leader, "is_friend_leader", False) is True
+        assert rec.friend_leader.id == 4001
+
+        # Summary text must include [Friend Leader] and [Leader] badges
+        summary = rec.tactical_analysis
+        assert "[Friend Leader]" in summary
+        assert "[Leader]" in summary
+
+        # Check that floaters contain friend or friend is labeled properly
+        floater_ids = [f.id for f in rec.floaters]
+        # Since friend gets only 170% while all subs get 200%, friend should not displace the 200% core starters
+        assert 4001 in floater_ids
+
+    def test_friend_leader_does_not_displace_core_starter_even_with_high_synergy_links(
+        self, sample_leader_200: DokkanCard
+    ):
+        """Friend leader with top-tier link synergy but inferior boost (<200%) should be floated."""
+        tb = TeamBuilder()
+        # Subs have 200% boost and standard links
+        team = [sample_leader_200] + [
+            DokkanCard(
+                id=5000 + i,
+                name=f"Sub {i}",
+                category_ids=[10, 20],  # 200% under sample_leader_200
+                categories=["Realm of Gods", "Future Saga"],
+                links=["Super Saiyan", "Prepared for Battle", "Fierce Battle"],
+                base_form=CardForm(
+                    form_id=5000 + i,
+                    passive_tags=PassiveTags(slot1_viable=True, dr_base_percent=40, has_guard=True),
+                ),
+            )
+            for i in range(5)
+        ]
+
+        # Friend only has 170% boost (lacks Future Saga), but shares ALL 7 links with Sub 0
+        friend_high_links_low_boost = DokkanCard(
+            id=6001,
+            name="Friend High Synergy Low Boost",
+            leader_skill="Realm of Gods Ki +3, Stats +170%",
+            leader_spec=LeaderSkillSpec(main_category_ids=[10], base_boost_pct=170),
+            category_ids=[10],  # only 170%
+            categories=["Realm of Gods"],
+            links=["Super Saiyan", "Prepared for Battle", "Fierce Battle", "Warrior Gods", "Godly Power"],
+            base_form=CardForm(
+                form_id=6001,
+                passive_tags=PassiveTags(slot1_viable=True, dr_base_percent=40, has_guard=True),
+            ),
+        )
+
+        rec = tb.build_team_plan(team, friend_leader=friend_high_links_low_boost, generate_tactics=False)
+        assert getattr(rec.friend_leader, "is_friend_leader", False) is True
+        assert rec.friend_leader.id in [f.id for f in rec.floaters]
+        assert "[Friend Leader]" in rec.tactical_analysis
+
+
+class TestMultiEnemyAdvisorAndBriefing:
+    """Verifies multi-enemy telemetry formatting across Qwen Advisor, Tactical Briefing, and Rich CLI."""
+
+    @pytest.fixture
+    def multi_enemy_boss_stage(self) -> BossStage:
+        from dokkan_eza_link_farmer.ai.models import BossEnemy
+
+        minions = [
+            BossEnemy(card_id=901, name="Cell Jr. (AGL)", element=0, type_name="AGL", hp=31_000_000, atk=400_000, actions_per_turn=1),
+            BossEnemy(card_id=902, name="Cell Jr. (TEQ)", element=1, type_name="TEQ", hp=31_000_000, atk=400_000, actions_per_turn=1),
+            BossEnemy(card_id=903, name="Cell Jr. (INT)", element=2, type_name="INT", hp=31_000_000, atk=400_000, actions_per_turn=1),
+            BossEnemy(card_id=904, name="Cell Jr. (STR)", element=3, type_name="STR", hp=31_000_000, atk=400_000, actions_per_turn=1),
+            BossEnemy(card_id=905, name="Cell Jr. (PHY)", element=4, type_name="PHY", hp=31_000_000, atk=400_000, actions_per_turn=1),
+        ]
+        phase1 = BossPhase(
+            phase_index=1,
+            battle_index=1,
+            round_index=1,
+            bosses=minions,
+            hp=155_000_000,
+            atk=400_000,
+            actions_per_turn=5,
+        )
+        phase2 = BossPhase(
+            phase_index=2,
+            battle_index=1,
+            round_index=2,
+            bosses=[BossEnemy(card_id=999, name="Perfect Cell", element=1, type_name="TEQ", hp=80_000_000, atk=850_000, actions_per_turn=8)],
+            hp=80_000_000,
+            atk=850_000,
+            actions_per_turn=8,
+            cancels_dodge=True,
+        )
+        return BossStage(
+            stage_id=500,
+            event_id=50,
+            event_name="Battlefield Clash",
+            stage_name="Stage 3: Cell Games",
+            difficulty=10,
+            phases=[phase1, phase2],
+        )
+
+    def test_build_advisor_payload_multi_enemy_fields(
+        self,
+        candidate_pool_sample: list[DokkanCard],
+        multi_enemy_boss_stage: BossStage,
+    ) -> None:
+        tb = TeamBuilder()
+        cands = [
+            CandidateEvaluation(
+                card=candidate_pool_sample[1],
+                score=90.0,
+                lead_boost_pct=170.0,
+                base_slot1_viable=True,
+            )
+        ]
+        payload = tb.build_advisor_payload(
+            boss_stage=multi_enemy_boss_stage,
+            current_team=candidate_pool_sample[:5],
+            top_candidates=cands,
+        )
+        phases = payload["boss_stage"]["phases"]
+        assert len(phases) == 2
+
+        # Phase 1: Multi-enemy Rainbow
+        p1 = phases[0]
+        assert p1["enemy_count"] == 5
+        assert p1["is_multi_enemy"] is True
+        assert p1["is_rainbow"] is True
+        assert "enemies" in p1
+        assert len(p1["enemies"]) == 5
+        assert p1["enemies"][0]["name"] == "Cell Jr. (AGL)"
+        assert p1["enemies"][0]["element"] == "AGL"
+        assert p1["enemies"][0]["hp"] == 31_000_000
+        assert p1["enemies"][0]["atk"] == 400_000
+
+        # Phase 2: Single enemy
+        p2 = phases[1]
+        assert p2["enemy_count"] == 1
+        assert p2["is_multi_enemy"] is False
+        assert p2["is_rainbow"] is False
+        assert "enemies" not in p2
+
+    def test_consult_ollama_advisor_multi_enemy_prompt(
+        self,
+        candidate_pool_sample: list[DokkanCard],
+        multi_enemy_boss_stage: BossStage,
+    ) -> None:
+        tb = TeamBuilder()
+        cands = [
+            CandidateEvaluation(
+                card=candidate_pool_sample[1],
+                score=90.0,
+                lead_boost_pct=170.0,
+                base_slot1_viable=True,
+            )
+        ]
+        mock_client = MagicMock(spec=DokkanAIClient)
+        mock_client.is_available.return_value = True
+        mock_client.chat_completion.return_value = (
+            f'{{"selected_card_id": {cands[0].card.id}, "reasoning": "Eccellente AoE"}}',
+            "Thought",
+        )
+
+        chosen, reason = tb.consult_ollama_advisor(
+            top_candidates=cands,
+            current_team=candidate_pool_sample[:5],
+            boss_stage=multi_enemy_boss_stage,
+            ai_client=mock_client,
+        )
+
+        # Inspect messages passed to chat_completion
+        call_args = mock_client.chat_completion.call_args[0][0]
+        system_content = next(m["content"] for m in call_args if m["role"] == "system")
+        user_content = next(m["content"] for m in call_args if m["role"] == "user")
+
+        assert "When multi-enemy phases are present, strongly prioritize AoE attackers" in system_content
+        assert "unconditional Guard that protect against rainbow attacks" in system_content
+        assert "Phase 1: Rainbow (5 Enemies: All 5 Types) - Total HP: 155M, Actions: 5/turn" in user_content
+
+    def test_format_stage_tactical_briefing_multi_enemy(
+        self,
+        multi_enemy_boss_stage: BossStage,
+    ) -> None:
+        from dokkan_eza_link_farmer.ai.team_builder import format_stage_tactical_briefing
+
+        # Italian briefing
+        briefing_it = format_stage_tactical_briefing(multi_enemy_boss_stage, language="it")
+        assert "👥 5 Nemici [Rainbow (5 Enemies: All 5 Types)]" in briefing_it
+        assert "**Cell Jr. (AGL)** [AGL]: HP 31M, ATK 400k" in briefing_it
+        assert "💡 CONSIGLIO TATTICO: La fase contiene 5 nemici simultanei." in briefing_it
+        assert "Personaggi con Super Attacchi AoE o con Guardia incondizionata eccellono qui" in briefing_it
+
+        # English briefing
+        briefing_en = format_stage_tactical_briefing(multi_enemy_boss_stage, language="en")
+        assert "👥 5 Enemies [Rainbow (5 Enemies: All 5 Types)]" in briefing_en
+        assert "**Cell Jr. (AGL)** [AGL]: HP 31M, ATK 400k" in briefing_en
+        assert "💡 TACTICAL ADVICE: Phase contains 5 simultaneous enemies." in briefing_en
+
+    def test_render_stage_intel_rich_multi_enemy(
+        self,
+        multi_enemy_boss_stage: BossStage,
+    ) -> None:
+        from dokkan_eza_link_farmer.ai.team_builder import render_stage_intel_rich
+
+        panel = render_stage_intel_rich(multi_enemy_boss_stage)
+        assert panel is not None
+        # Extract table from panel
+        table = panel.renderable
+        rows = list(table.rows)
+        assert len(rows) == 2
+
+        # Check column 1 (Boss Nemico) for phase 1
+        p1_boss_text = table.columns[1]._cells[0]
+        plain_text = p1_boss_text.plain if hasattr(p1_boss_text, "plain") else str(p1_boss_text)
+        assert "👥 5 Nemici (Rainbow (5 Enemies: All 5 Types))" in plain_text
+        assert "• [AGL] Cell Jr. (AGL)" in plain_text
+        assert "• [STR] Cell Jr. (STR)" in plain_text
+
+
