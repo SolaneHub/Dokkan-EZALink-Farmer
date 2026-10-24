@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.3.0] - 2026-10-24
+
+### Added
+- **Multi-Battle Stage Architecture**: Native ingestion of sugoroku type 301 events and complete boss phase combat telemetry (HP, ATK, DEF, actions per turn).
+- **Curated Tier-1 Support Catalog**: Priority ranking for Whis (40% DR), Ghost Usher, Icarus, and permanent support memories matching team categories.
+- **Nuanced Tactical Solver**: Stacking reset awareness across separate battles (-20.0 penalty / +15.0 Turn-1 shield bonus), defensive expiration rules for long fights, and -60.0 glass cannon penalty against Cancels Dodge bosses.
+- **Local AI Unification**: Consolidated on local Qwen 3.5 4B with 8K context and zero-latency inference (thinking tokens disabled).
+- **7-Unit Dynamic Rotations & Stage Intel CLI**: Rich terminal tables showing stage structure, stacking warnings, and role-badged rotations.
+
+---
+
 All notable changes to **Dokkan-EZALink-Farmer** will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
