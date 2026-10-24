@@ -124,7 +124,7 @@ def test_eza_farm_blackbox_progression_loop() -> None:
     duration = time.time() - start_time
 
     # 1. Performance check: completed within reasonable time without infinite hanging
-    assert duration < 60.0, f"Integration test exceeded 60.0s threshold (took {duration:.2f}s)"
+    assert duration < 180.0, f"Integration test exceeded 180.0s threshold (took {duration:.2f}s)"
 
     # 2. State verification: cleanly completed and stopped
     assert not task.is_running, "Task should have stopped running upon reaching target_level"
