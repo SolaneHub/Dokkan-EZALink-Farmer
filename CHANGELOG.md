@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.6.0] - 2026-10-25
+### Added
+- **Full-Stage Multi-Phase Survivability Heuristics**: Constraint solver now evaluates elemental matchups across all constituent phases and battles, preventing teams that fold in Phase 1 before building defensive stacks.
+- **Chronological Phase-by-Phase AI Tactical Guidance**: Restructured local LLM system prompt into clear battle horizons (Turn 1 Opening Barrage, Mid-Phase Stacking & Transformations, Final Phase Boss Finisher).
+- **Stage-Wide Survival Mandate**: TeamBuilder payload explicitly instructs the tactical advisor to reject glass cannons lacking early survivability.
+- **Cross-Phase Transformation Horizons**: Fine-tuned turn thresholds aligning transforming forms (min_turn <= 3 vs min_turn >= 4) with appropriate battle phases.
+
 ## [v1.5.0] - 2026-10-24
 
 ### Added
