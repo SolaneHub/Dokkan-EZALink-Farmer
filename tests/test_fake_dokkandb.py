@@ -65,3 +65,17 @@ class TestFakeDokkanDBHarness(unittest.TestCase):
         )
         self.assertEqual(resp_img.status_code, 200)
         self.assertGreater(len(resp_img.content), 50)
+
+        resp_cat_lead = fake_dokkandb_requests_get("https://api.dokkandb.com/api/category-leaders?code=1")
+        self.assertEqual(resp_cat_lead.status_code, 200)
+        self.assertGreater(len(resp_cat_lead.json()), 0)
+
+    def test_category_leaders_in_memory(self):
+        leaders = self.fake_client.get_category_leaders(1)
+        self.assertGreater(len(leaders), 0)
+        leader_map = self.fake_client.get_category_leaders_map(1)
+        self.assertIn(1001, leader_map)
+        parsed = leader_map[1001]
+        self.assertEqual(parsed["base_boost_pct"], 170.0)
+        self.assertEqual(parsed["ki"], 3)
+        self.assertTrue(parsed["is_main_leader"])

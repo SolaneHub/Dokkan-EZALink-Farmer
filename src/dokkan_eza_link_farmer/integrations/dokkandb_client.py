@@ -730,7 +730,7 @@ class DokkanDBClient:
                     phase_hp += e_hp
                     phase_atk = max(phase_atk, e_atk)
                     phase_def = max(phase_def, e_def)
-                    phase_actions = max(phase_actions, e_actions)
+                    phase_actions += max(1, e_actions)
 
                     bosses.append(
                         {
@@ -742,7 +742,9 @@ class DokkanDBClient:
                             "hp": e_hp,
                             "atk": e_atk,
                             "defence": e_def,
+                            "def_stat": e_def,
                             "multi_atk_num": e_actions,
+                            "actions_per_turn": max(1, e_actions),
                             "mechanics": [
                                 {
                                     "id": s.get("id"),
@@ -755,6 +757,17 @@ class DokkanDBClient:
                         }
                     )
 
+                if len(bosses) > 1:
+                    is_rainbow_phase = {b["element"] % 10 for b in bosses} >= {0, 1, 2, 3, 4}
+                    if is_rainbow_phase:
+                        phase_element_name = f"Rainbow ({len(bosses)} Enemies: All 5 Types)"
+                    else:
+                        phase_element_name = f"Multi-Type ({len(bosses)} Enemies)"
+                elif bosses:
+                    phase_element_name = bosses[0]["type_name"]
+                else:
+                    phase_element_name = ""
+
                 phase_entry: dict[str, Any] = {
                     "phase_index": total_phase_index,
                     "phase": total_phase_index,
@@ -762,7 +775,7 @@ class DokkanDBClient:
                     "round_index": r_no,
                     "is_new_battle": is_new_battle,
                     "element": bosses[0]["element"] if bosses else 0,
-                    "element_name": bosses[0]["type_name"] if bosses else "",
+                    "element_name": phase_element_name,
                     "hp": phase_hp,
                     "atk": phase_atk,
                     "def_stat": phase_def,
@@ -862,6 +875,131 @@ class DokkanDBClient:
                 with open(cache_file, encoding="utf-8") as f:
                     return json.load(f)
             return []
+
+    def get_category_leaders(
+        self, category_id: int, region: str = "glb", force_refresh: bool = False
+    ) -> list[dict[str, Any]]:
+        """Retrieves leaders for a specific category from DokkanDB."""
+        cache_file = os.path.join(
+            self.cache_dir, f"dokkandb_category_leaders_{category_id}_{region.lower()}.json"
+        )
+        if not force_refresh and os.path.exists(cache_file):
+            try:
+                mtime = os.path.getmtime(cache_file)
+                if (time.time() - mtime) < self.cache_ttl_seconds:
+                    with open(cache_file, encoding="utf-8") as f:
+                        return json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed reading DokkanDB category leaders cache: {e}")
+
+        url = self._get_api_url(f"category-leaders?code={category_id}", region=region)
+        try:
+            resp = requests.get(url, headers=self.DEFAULT_HEADERS, timeout=12)
+            resp.raise_for_status()
+            data = resp.json()
+            self._ensure_dirs()
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return data
+        except Exception as e:
+            logger.error(f"Error fetching category leaders from DokkanDB ({url}): {e}")
+            if os.path.exists(cache_file):
+                with open(cache_file, encoding="utf-8") as f:
+                    return json.load(f)
+            return []
+
+    def parse_category_leader(self, item: dict[str, Any], category_id: int) -> dict[str, Any]:
+        """Parses leader skill efficacy and stat boosts for a specific category from a category leader item."""
+        card_id = int(item.get("id", 0))
+        name = str(item.get("name", ""))
+
+        base_boost = 0.0
+        extra_boost = 0.0
+        hp_stat = 0.0
+        ki = 0
+        is_main = False
+        is_extra = False
+
+        leader_skills = item.get("leader_skills", []) or []
+        for ls in leader_skills:
+            if not isinstance(ls, dict):
+                continue
+            sub_targets = ls.get("sub_target_types", []) or []
+            cat_match = any(
+                isinstance(st, dict) and int(st.get("target_value", -1)) == int(category_id)
+                for st in sub_targets
+            )
+            if not cat_match:
+                continue
+
+            eff_type = ls.get("efficacy_type")
+            eff_vals_raw = ls.get("efficacy_values")
+            parsed: list[Any] = []
+            if isinstance(eff_vals_raw, str):
+                try:
+                    parsed = json.loads(eff_vals_raw)
+                    if isinstance(parsed, str):
+                        parsed = json.loads(parsed)
+                except Exception:
+                    parsed = []
+            elif isinstance(eff_vals_raw, list):
+                parsed = eff_vals_raw
+
+            if not isinstance(parsed, list) or not parsed:
+                continue
+
+            try:
+                if eff_type == 82:
+                    if len(parsed) >= 2:
+                        flag = int(parsed[0])
+                        val = float(parsed[1])
+                        if flag == 31:
+                            base_boost = max(base_boost, val)
+                            hp_stat = max(hp_stat, val)
+                            is_main = True
+                        elif flag == 64:
+                            extra_boost = max(extra_boost, val)
+                            is_extra = True
+                elif eff_type == 104:
+                    if len(parsed) >= 2:
+                        hp_val = float(parsed[0])
+                        atk_def_val = float(parsed[1])
+                        base_boost = max(base_boost, atk_def_val)
+                        hp_stat = max(hp_stat, hp_val)
+                        is_main = True
+                elif eff_type in (5, 83):
+                    if eff_type == 5 and len(parsed) >= 1:
+                        ki = max(ki, int(parsed[0]))
+                    elif eff_type == 83 and len(parsed) >= 2:
+                        ki = max(ki, int(parsed[1]))
+            except (ValueError, TypeError):
+                continue
+
+        return {
+            "card_id": card_id,
+            "name": name,
+            "base_boost_pct": float(base_boost),
+            "extra_boost_pct": float(extra_boost),
+            "total_boost_pct": float(base_boost + extra_boost),
+            "hp_stat_pct": float(hp_stat),
+            "ki": int(ki),
+            "is_main_leader": bool(is_main),
+            "is_extra_leader": bool(is_extra),
+        }
+
+    def get_category_leaders_map(
+        self, category_id: int, region: str = "glb"
+    ) -> dict[int, dict[str, Any]]:
+        """Retrieves leaders for a category as a card_id-indexed dictionary with parsed leader stats."""
+        raw_leaders = self.get_category_leaders(category_id, region=region)
+        result: dict[int, dict[str, Any]] = {}
+        for item in raw_leaders:
+            if isinstance(item, dict) and "id" in item:
+                parsed = self.parse_category_leader(item, category_id)
+                cid = parsed["card_id"]
+                if cid > 0:
+                    result[cid] = parsed
+        return result
 
     def get_leader_200_catalog(
         self, region: str = "glb", force_refresh: bool = False

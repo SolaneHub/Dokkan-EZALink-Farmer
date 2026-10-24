@@ -380,6 +380,34 @@ class FakeDokkanDBClient(DokkanDBClient):
         self.calls_log.append("get_categories")
         return copy.deepcopy(self.categories)
 
+    def get_category_leaders(
+        self, category_id: int, region: str = "glb", force_refresh: bool = False
+    ) -> list[dict[str, Any]]:
+        _ = (region, force_refresh)
+        self.calls_log.append(f"get_category_leaders_{category_id}")
+        leaders: list[dict[str, Any]] = []
+        for c in self.catalog:
+            if category_id in c.get("category_ids", []):
+                leaders.append(
+                    {
+                        "id": c.get("id"),
+                        "name": c.get("name"),
+                        "leader_skills": [
+                            {
+                                "efficacy_type": 5,
+                                "efficacy_values": "[3,0,0]",
+                                "sub_target_types": [{"target_value": category_id}],
+                            },
+                            {
+                                "efficacy_type": 82,
+                                "efficacy_values": "[31,170,0]",
+                                "sub_target_types": [{"target_value": category_id}],
+                            },
+                        ],
+                    }
+                )
+        return leaders
+
     def get_links(self, region: str = "glb", force_refresh: bool = False) -> list[dict[str, Any]]:
         _ = (region, force_refresh)
         self.calls_log.append("get_links")
@@ -545,8 +573,17 @@ def fake_dokkandb_requests_get(url: str, *_args: Any, **_kwargs: Any) -> FakeHTT
         else:
             return FakeHTTPResponse([])
 
+    # 1.5. Category leaders
+    if "category-leaders" in clean_url:
+        cat_id = 0
+        match = re.search(r"code=(\d+)", clean_url)
+        if match:
+            cat_id = int(match.group(1))
+        client = FakeDokkanDBClient()
+        return FakeHTTPResponse(client.get_category_leaders(cat_id))
+
     # 2. Individual card deep details
-    if "code=" in clean_url or "/card" in clean_url:
+    if "/card" in clean_url or ("code=" in clean_url and "category-leaders" not in clean_url):
         card_id = 0
         match = re.search(r"code=(\d+)", clean_url)
         if match:
