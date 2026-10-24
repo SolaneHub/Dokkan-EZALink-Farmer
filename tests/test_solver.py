@@ -17,9 +17,13 @@ Covers:
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
+from dokkan_eza_link_farmer.ai.mission_solver import MissionBatch
 from dokkan_eza_link_farmer.ai.models import (
+    BossEnemy,
     BossPhase,
     BossStage,
     CardForm,
@@ -37,6 +41,7 @@ from dokkan_eza_link_farmer.ai.solver import (
     get_base_form_name,
 )
 from dokkan_eza_link_farmer.ai.team_builder import format_team_summary_table
+from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 
 
 class TestTypeMatrix:
@@ -751,6 +756,88 @@ class TestBossGimmickOverrides:
         assert any("Cancels Dodge" in p for p in penalties)
         assert any("Guard Expiration" in p for p in penalties)
 
+    def test_multi_enemy_and_rainbow_phase_gimmicks(
+        self, solver: DokkanConstraintSolver
+    ) -> None:
+        # Create a stage having a 5-enemy rainbow phase lacking ATK debuff immunity
+        rainbow_enemies = [
+            BossEnemy(card_id=901, name="Ginyu (AGL)", element=20, type_name="Extreme AGL"),
+            BossEnemy(card_id=902, name="Guldo (TEQ)", element=21, type_name="Extreme TEQ"),
+            BossEnemy(card_id=903, name="Jeice (INT)", element=22, type_name="Extreme INT"),
+            BossEnemy(card_id=904, name="Burter (STR)", element=23, type_name="Extreme STR"),
+            BossEnemy(card_id=905, name="Recoome (PHY)", element=24, type_name="Extreme PHY"),
+        ]
+        multi_rainbow_stage = BossStage(
+            stage_id=999,
+            event_id=99,
+            stage_name="Ginyu Force SBR",
+            event_name="Super Battle Road",
+            phases=[
+                BossPhase(
+                    phase_index=1,
+                    element=20,
+                    bosses=rainbow_enemies,
+                    nullifies_atk_down=False,
+                )
+            ],
+        )
+
+        assert multi_rainbow_stage.phases[0].enemy_count == 5
+        assert multi_rainbow_stage.phases[0].is_multi_enemy is True
+        assert multi_rainbow_stage.phases[0].is_rainbow is True
+
+        # 1. AoE Specialist with Unconditional Guard
+        aoe_guard_card = DokkanCard(
+            id=8001,
+            name="AoE Tank",
+            element=1,
+            super_attack="Causes colossal damage to all enemies",
+            passive_skill="Guards all attacks",
+        )
+        assert aoe_guard_card.has_aoe is True
+        assert aoe_guard_card.is_guard_unconditional is True
+
+        delta_aoe, counters_aoe, _ = solver.evaluate_boss_gimmicks(aoe_guard_card, multi_rainbow_stage)
+        # AoE (+25.0) + Omni-Guard (+15.0) = +40.0
+        assert delta_aoe == pytest.approx(40.0)
+        assert any("AoE Specialist" in c for c in counters_aoe)
+        assert any("Omni-Guard/High-DR" in c for c in counters_aoe)
+
+        # 2. Debuff Specialist with High DR (>= 50%)
+        debuff_dr_card = DokkanCard(
+            id=8002,
+            name="Debuffer Tank",
+            element=0,
+            super_attack="Greatly lowers ATK and causes supreme damage",
+            passive_skill="Reduces damage received by 60%",
+        )
+        assert debuff_dr_card.lowers_enemy_atk is True
+        assert debuff_dr_card.damage_reduction_percent == 60
+
+        delta_debuff, counters_debuff, _ = solver.evaluate_boss_gimmicks(debuff_dr_card, multi_rainbow_stage)
+        # Debuff (+15.0) + High DR (+15.0) = +30.0
+        assert delta_debuff == pytest.approx(30.0)
+        assert any("Debuff Specialist" in c for c in counters_debuff)
+        assert any("Omni-Guard/High-DR" in c for c in counters_debuff)
+
+        # 3. Fragile Single-Target Unit (lacks Guard, DR < 50%, no AoE, no debuff)
+        fragile_card = DokkanCard(
+            id=8003,
+            name="Fragile Glass Cannon",
+            element=2,
+            super_attack="Causes immense damage to enemy",
+            passive_skill="ATK +150% and DEF +50%",
+        )
+        assert fragile_card.has_aoe is False
+        assert fragile_card.lowers_enemy_atk is False
+        assert fragile_card.is_guard_unconditional is False
+        assert fragile_card.damage_reduction_percent < 50
+
+        delta_fragile, _, penalties_fragile = solver.evaluate_boss_gimmicks(fragile_card, multi_rainbow_stage)
+        # Penalty for Rainbow Phase Vulnerability (-15.0)
+        assert delta_fragile == pytest.approx(-15.0)
+        assert any("Rainbow Phase Vulnerability" in p for p in penalties_fragile)
+
 
 class TestSameNameBaseFormPenalty:
     """Validates the mathematical same-name penalty for base form (form_index: 0)."""
@@ -1192,3 +1279,469 @@ class TestFullSolverIntegration:
             base_slot1_viable=False,
         )
         assert eval3.reasoning == "Pure Saiyans, Hybrid Saiyans, Goku's Family"
+
+    def test_tiered_leader_search_hierarchy(self) -> None:
+        solver = DokkanConstraintSolver()
+        # Lead Tier 1 (220%): Realm of Gods (id=10) + RoG extra (+50%)
+        lead_t1 = DokkanCard(
+            id=8001,
+            name="Tier 1 Lead (220%)",
+            category_ids=[10],
+            categories=["Realm of Gods"],
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[10],
+                extra_category_ids=[10],
+                base_boost_pct=170,
+                extra_boost_pct=50,
+            ),
+        )
+        # Lead Tier 2 (200%): Pure Saiyans (id=17) + PS extra (+30%)
+        lead_t2 = DokkanCard(
+            id=8002,
+            name="Tier 2 Lead (200%)",
+            category_ids=[17],
+            categories=["Pure Saiyans"],
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[17],
+                extra_category_ids=[17],
+                base_boost_pct=170,
+                extra_boost_pct=30,
+            ),
+        )
+        # 5 subs compatible with both Realm of Gods (10) and Pure Saiyans (17)
+        subs = [
+            DokkanCard(
+                id=8100 + i,
+                name=f"Dual Sub {i}",
+                category_ids=[10, 17],
+                categories=["Realm of Gods", "Pure Saiyans"],
+            )
+            for i in range(1, 6)
+        ]
+        # Even if Lead T2 has favorable kit or type advantage, T1 MUST be chosen
+        boss = BossStage(
+            stage_id=1,
+            event_id=1,
+            stage_name="Stage",
+            event_name="Event",
+            phases=[BossPhase(phase_index=1, element=3)],  # STR
+        )
+        lead_t2.element = 0  # AGL (type advantage vs STR)
+        lead_t1.element = 1  # TEQ (neutral/disadvantage)
+
+        res = solver.solve([lead_t1, lead_t2] + subs, boss_stage=boss)
+        assert res.leader.id == 8001
+
+    def test_tiered_leader_search_fallback_when_tier_has_insufficient_subs(self) -> None:
+        solver = DokkanConstraintSolver()
+        # Lead Tier 1 (220%) has only 2 compatible subs
+        lead_t1 = DokkanCard(
+            id=8003,
+            name="Tier 1 Lead (220%)",
+            category_ids=[99],
+            categories=["Universe 6"],
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[99],
+                base_boost_pct=170,
+                extra_boost_pct=50,
+            ),
+        )
+        # Lead Tier 2 (200%) has 5 compatible subs
+        lead_t2 = DokkanCard(
+            id=8004,
+            name="Tier 2 Lead (200%)",
+            category_ids=[17],
+            categories=["Pure Saiyans"],
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[17],
+                base_boost_pct=170,
+                extra_boost_pct=30,
+            ),
+        )
+        subs_t1 = [
+            DokkanCard(id=8201, name="U6 Sub 1", category_ids=[99], categories=["Universe 6"]),
+            DokkanCard(id=8202, name="U6 Sub 2", category_ids=[99], categories=["Universe 6"]),
+        ]
+        subs_t2 = [
+            DokkanCard(id=8300 + i, name=f"PS Sub {i}", category_ids=[17], categories=["Pure Saiyans"])
+            for i in range(1, 6)
+        ]
+        res = solver.solve([lead_t1, lead_t2] + subs_t1 + subs_t2)
+        assert res.leader.id == 8004
+
+    def test_tiered_leader_mission_category_priority_within_tier(self) -> None:
+        from dokkan_eza_link_farmer.ai.mission_solver import MissionBatch
+
+        solver = DokkanConstraintSolver()
+        # Both leaders in Tier 2 (200%)
+        # Lead 1: Pure Saiyans (17)
+        lead_ps = DokkanCard(
+            id=8005,
+            name="PS 200 Lead",
+            category_ids=[17],
+            categories=["Pure Saiyans"],
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[17],
+                base_boost_pct=170,
+                extra_boost_pct=30,
+            ),
+        )
+        # Lead 2: Hybrid Saiyans (18)
+        lead_hs = DokkanCard(
+            id=8006,
+            name="HS 200 Lead",
+            category_ids=[18],
+            categories=["Hybrid Saiyans"],
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[18],
+                base_boost_pct=170,
+                extra_boost_pct=30,
+            ),
+        )
+        subs = [
+            DokkanCard(
+                id=8400 + i,
+                name=f"Dual Sub {i}",
+                category_ids=[17, 18],
+                categories=["Pure Saiyans", "Hybrid Saiyans"],
+            )
+            for i in range(1, 6)
+        ]
+        # Mission requires Hybrid Saiyans
+        mission_batch = MissionBatch(
+            missions=[],
+            required_categories=[(3, "Hybrid Saiyans")],
+        )
+        res = solver.solve([lead_ps, lead_hs] + subs, mission_batch=mission_batch)
+        assert res.leader.id == 8006
+
+    def test_tiered_leader_mission_main_vs_extra_vs_personal_fallback(self) -> None:
+        from dokkan_eza_link_farmer.ai.mission_solver import MissionBatch
+
+        solver = DokkanConstraintSolver()
+        # Lead 1: Covers "Realm of Gods" (ID 22) in main_category_ids
+        lead_main = DokkanCard(
+            id=9001,
+            name="Main Lead RoG",
+            category_ids=[22],
+            categories=["Realm of Gods"],
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[22],
+                base_boost_pct=170,
+                extra_boost_pct=30,
+            ),
+        )
+        # Lead 2: Covers "Realm of Gods" (ID 22) only in extra_category_ids
+        lead_extra = DokkanCard(
+            id=9002,
+            name="Extra Lead RoG",
+            category_ids=[17, 22],
+            categories=["Pure Saiyans", "Realm of Gods"],
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[17],
+                extra_category_ids=[22],
+                base_boost_pct=170,
+                extra_boost_pct=30,
+            ),
+        )
+        # Lead 3: Has "Realm of Gods" only in personal categories (c.categories), leader skill is Pure Saiyans only
+        lead_personal = DokkanCard(
+            id=9003,
+            name="Personal Lead RoG",
+            category_ids=[17, 22],
+            categories=["Pure Saiyans", "Realm of Gods"],
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[17],
+                base_boost_pct=170,
+                extra_boost_pct=30,
+            ),
+        )
+        subs = [
+            DokkanCard(
+                id=9100 + i,
+                name=f"Sub {i}",
+                category_ids=[17, 22],
+                categories=["Pure Saiyans", "Realm of Gods"],
+            )
+            for i in range(1, 6)
+        ]
+        # 1. When main vs extra are present, main takes precedence
+        mb = MissionBatch(missions=[], required_categories=[(3, "Realm of Gods")])
+        res1 = solver.solve([lead_main, lead_extra, lead_personal] + subs, mission_batch=mb)
+        assert res1.leader.id == 9001
+
+        # 2. When only extra and personal are present, extra takes precedence over personal
+        res2 = solver.solve([lead_extra, lead_personal] + subs, mission_batch=mb)
+        assert res2.leader.id == 9002
+
+        # 3. Fallback: when NO leader in tier has the category in leader skill, fallback on personal category
+        # Mission requires niche category "Golden Warriors" which none of the leader specs cover
+        for c in [lead_personal] + subs:
+            c.categories.append("Golden Warriors")
+        mb_niche = MissionBatch(missions=[], required_categories=[(3, "Golden Warriors")])
+        res3 = solver.solve([lead_personal, lead_extra] + subs, mission_batch=mb_niche)
+        # lead_personal has Golden Warriors in personal categories, while lead_extra does not
+        assert res3.leader.id == 9003
+
+    def test_card_1030431_no_arbitrary_priority_over_other_categories(self) -> None:
+        solver = DokkanConstraintSolver()
+        # Card 1030431 in Tier 2 (200%) vs Rival in Tier 2 (200%) with higher kit/type advantage
+        card_1030431 = DokkanCard(
+            id=1030431,
+            name="Super Saiyan Goku + Super Saiyan Vegeta (Angel)",
+            category_ids=[17],
+            categories=["Pure Saiyans"],
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[17],
+                base_boost_pct=170,
+                extra_boost_pct=30,
+            ),
+        )
+        rival_lead = DokkanCard(
+            id=99999,
+            name="Rival Leader",
+            category_ids=[17],
+            categories=["Pure Saiyans"],
+            leader_spec=LeaderSkillSpec(
+                main_category_ids=[17],
+                base_boost_pct=170,
+                extra_boost_pct=30,
+            ),
+        )
+        subs = [
+            DokkanCard(id=8500 + i, name=f"Sub {i}", category_ids=[17], categories=["Pure Saiyans"])
+            for i in range(1, 6)
+        ]
+        boss = BossStage(
+            stage_id=1,
+            event_id=1,
+            stage_name="Stage",
+            event_name="Event",
+            phases=[BossPhase(phase_index=1, element=3)],  # STR
+        )
+        card_1030431.element = 1  # TEQ (disadvantage)
+        rival_lead.element = 0    # AGL (advantage)
+
+        res = solver.solve([card_1030431, rival_lead] + subs, boss_stage=boss)
+        # Rival lead has type advantage (+10.0 score) and 1030431 no longer gets +25.0 free bonus
+        assert res.leader.id == 99999
+
+    def test_parse_category_leader_payloads(self) -> None:
+        client = DokkanDBClient()
+
+        # 1. Efficacy 82 with 220% boost and extra 30% boost, ki 5
+        item_220 = {
+            "id": 1034201,
+            "name": "Super Saiyan 3 Goku",
+            "leader_skills": [
+                {
+                    "efficacy_type": 5,
+                    "efficacy_values": "[3,0,0]",
+                    "sub_target_types": [{"target_value": 9}],
+                },
+                {
+                    "efficacy_type": 82,
+                    "efficacy_values": '"[31,220,0]"',
+                    "sub_target_types": [{"target_value": 9}],
+                },
+                {
+                    "efficacy_type": 82,
+                    "efficacy_values": "[64,30,0]",
+                    "sub_target_types": [{"target_value": 9}],
+                },
+            ],
+        }
+        parsed_220 = client.parse_category_leader(item_220, category_id=9)
+        assert parsed_220["card_id"] == 1034201
+        assert parsed_220["base_boost_pct"] == 220.0
+        assert parsed_220["extra_boost_pct"] == 30.0
+        assert parsed_220["total_boost_pct"] == 250.0
+        assert parsed_220["hp_stat_pct"] == 220.0
+        assert parsed_220["ki"] == 3
+        assert parsed_220["is_main_leader"] is True
+        assert parsed_220["is_extra_leader"] is True
+
+        # 2. Efficacy 104 with [200, 170, 170] and ki 83
+        item_104 = {
+            "id": 1034151,
+            "name": "Buu (Kid)",
+            "leader_skills": [
+                {
+                    "efficacy_type": 83,
+                    "efficacy_values": "[31,4,0]",
+                    "sub_target_types": [{"target_value": 9}],
+                },
+                {
+                    "efficacy_type": 104,
+                    "efficacy_values": "[200,170,170]",
+                    "sub_target_types": [{"target_value": 9}],
+                },
+            ],
+        }
+        parsed_104 = client.parse_category_leader(item_104, category_id=9)
+        assert parsed_104["card_id"] == 1034151
+        assert parsed_104["base_boost_pct"] == 170.0
+        assert parsed_104["hp_stat_pct"] == 200.0
+        assert parsed_104["ki"] == 4
+        assert parsed_104["is_main_leader"] is True
+        assert parsed_104["is_extra_leader"] is False
+
+    def test_solver_integration_dokkandb_category_leaders(self) -> None:
+        from tests.harness.fake_dokkandb import FakeDokkanDBClient
+
+        fake_dokkan = FakeDokkanDBClient()
+        fake_dokkan.categories.append({"id": 9, "name": "Majin Buu Saga"})
+        fake_dokkan.get_category_leaders = lambda _cat_id, **_kwargs: [  # type: ignore
+            {
+                "id": 1034201,
+                "name": "Super Saiyan 3 Goku",
+                "leader_skills": [
+                    {
+                        "efficacy_type": 5,
+                        "efficacy_values": "[3,0,0]",
+                        "sub_target_types": [{"target_value": 9}],
+                    },
+                    {
+                        "efficacy_type": 82,
+                        "efficacy_values": "[31,220,0]",
+                        "sub_target_types": [{"target_value": 9}],
+                    },
+                ],
+            },
+            {
+                "id": 1020000,
+                "name": "Old 170 Leader",
+                "leader_skills": [
+                    {
+                        "efficacy_type": 5,
+                        "efficacy_values": "[3,0,0]",
+                        "sub_target_types": [{"target_value": 9}],
+                    },
+                    {
+                        "efficacy_type": 82,
+                        "efficacy_values": "[31,170,0]",
+                        "sub_target_types": [{"target_value": 9}],
+                    },
+                ],
+            },
+        ]
+
+        solver = DokkanConstraintSolver(dokkandb=fake_dokkan)
+
+        lead_220 = DokkanCard(
+            id=1034201,
+            name="Super Saiyan 3 Goku",
+            category_ids=[9],
+            categories=["Majin Buu Saga"],
+            leader_spec=LeaderSkillSpec(main_category_ids=[9], base_boost_pct=170),  # Will be enriched to 220%
+        )
+        lead_170 = DokkanCard(
+            id=1020000,
+            name="Old 170 Leader",
+            category_ids=[9],
+            categories=["Majin Buu Saga"],
+            leader_spec=LeaderSkillSpec(main_category_ids=[9], base_boost_pct=170),
+        )
+        subs = [
+            DokkanCard(id=5500 + i, name=f"Sub {i}", category_ids=[9], categories=["Majin Buu Saga"])
+            for i in range(1, 6)
+        ]
+
+        mb = MissionBatch(missions=[], required_categories=[(6, "Majin Buu Saga")])
+        res = solver.solve([lead_170, lead_220] + subs, mission_batch=mb)
+
+        # SS3 Goku ID 1034201 should be enriched to 220%, chosen as Tier 1 leader over 170% leader
+        assert res.leader.id == 1034201
+        assert res.leader.leader_spec is not None and res.leader.leader_spec.base_boost_pct == 220.0
+
+
+    def test_solver_multi_category_official_leader_isolation(self) -> None:
+        from tests.harness.fake_dokkandb import FakeDokkanDBClient
+
+        fake_dokkan = FakeDokkanDBClient()
+        fake_dokkan.categories.append({"id": 8, "name": "Cat A"})
+        fake_dokkan.categories.append({"id": 19, "name": "Cat B"})
+
+        def fake_get_category_leaders(cat_id: int, **_kwargs: Any) -> list[dict[str, Any]]:
+            if cat_id == 8:
+                return [
+                    {
+                        "id": 1,
+                        "name": "Card 1 Leader A",
+                        "leader_skills": [
+                            {
+                                "efficacy_type": 5,
+                                "efficacy_values": "[3,0,0]",
+                                "sub_target_types": [{"target_value": 8}],
+                            },
+                            {
+                                "efficacy_type": 82,
+                                "efficacy_values": "[31,170,0]",
+                                "sub_target_types": [{"target_value": 8}],
+                            },
+                        ],
+                    }
+                ]
+            if cat_id == 19:
+                return [
+                    {
+                        "id": 2,
+                        "name": "Card 2 Leader B",
+                        "leader_skills": [
+                            {
+                                "efficacy_type": 5,
+                                "efficacy_values": "[3,0,0]",
+                                "sub_target_types": [{"target_value": 19}],
+                            },
+                            {
+                                "efficacy_type": 82,
+                                "efficacy_values": "[31,170,0]",
+                                "sub_target_types": [{"target_value": 19}],
+                            },
+                        ],
+                    }
+                ]
+            return []
+
+        fake_dokkan.get_category_leaders = fake_get_category_leaders  # type: ignore
+
+        solver = DokkanConstraintSolver(dokkandb=fake_dokkan)
+
+        card1 = DokkanCard(
+            id=1,
+            name="Card 1 Leader A",
+            category_ids=[8, 19],
+            categories=["Cat A", "Cat B"],
+        )
+        card2 = DokkanCard(
+            id=2,
+            name="Card 2 Leader B",
+            category_ids=[8, 19],
+            categories=["Cat A", "Cat B"],
+        )
+        subs = [
+            DokkanCard(
+                id=100 + i,
+                name=f"Sub {i}",
+                category_ids=[8, 19],
+                categories=["Cat A", "Cat B"],
+            )
+            for i in range(1, 6)
+        ]
+
+        mb = MissionBatch(
+            missions=[],
+            required_categories=[(3, "Cat A"), (3, "Cat B")],
+        )
+
+        _res = solver.solve([card1, card2] + subs, mission_batch=mb)
+
+        assert card1.leader_spec is not None
+        assert card1.leader_spec.main_category_ids == [8]
+        assert 19 not in card1.leader_spec.main_category_ids
+
+        assert card2.leader_spec is not None
+        assert card2.leader_spec.main_category_ids == [19]
+        assert 8 not in card2.leader_spec.main_category_ids
+
+

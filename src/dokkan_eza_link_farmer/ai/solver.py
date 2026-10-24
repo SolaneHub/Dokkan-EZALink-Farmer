@@ -16,7 +16,9 @@ Provides pure deterministic mathematical constraint solving:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -26,6 +28,7 @@ from dokkan_eza_link_farmer.ai.models import (
     BossStage,
     DokkanCard,
 )
+from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +58,74 @@ ELEMENT_DISADVANTAGE: dict[int, int] = {
 SAME_NAME_BASE_PENALTY: float = 25.0
 MIN_SLOT1_REQUIRED: int = 2
 MIN_LEADER_BOOST_PCT: float = 170.0
+
+
+_GLOBAL_CATEGORIES_CACHE: dict[int, str] | None = None
+
+
+def _get_global_category_map() -> dict[int, str]:
+    global _GLOBAL_CATEGORIES_CACHE
+    if _GLOBAL_CATEGORIES_CACHE is not None:
+        return _GLOBAL_CATEGORIES_CACHE
+
+    cat_map: dict[int, str] = {}
+    cache_dir = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache")
+    possible_cache_files = [
+        os.path.join(cache_dir, "dokkandb_categories_glb.json"),
+        os.path.join(cache_dir, "dokkandb_categories.json"),
+    ]
+    for cache_file in possible_cache_files:
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict) and "id" in item and "name" in item:
+                                cat_map[int(item["id"])] = str(item["name"])
+                if cat_map:
+                    break
+            except Exception as e:
+                logger.debug(f"Could not load global categories cache in solver from {cache_file}: {e}")
+
+    _GLOBAL_CATEGORIES_CACHE = cat_map
+    return cat_map
+
+
+def _resolve_category_name(cid: int, card: DokkanCard, leader: DokkanCard) -> str:
+    """Helper to map a category ID to human-readable name using card, leader, or global catalog metadata."""
+    c_map = dict(zip(card.category_ids, card.categories, strict=False))
+    lead_map = dict(zip(leader.category_ids, leader.categories, strict=False))
+    global_map = _get_global_category_map()
+    return c_map.get(cid) or lead_map.get(cid) or global_map.get(cid) or str(cid)
+
+
+def _get_category_id_by_name(cat_name: str, dokkandb: DokkanDBClient | None = None) -> int | None:
+    """Resolves a category name to its integer ID using the global category map or dokkandb categories."""
+    target_lower = cat_name.strip().lower()
+    global_map = _get_global_category_map()
+    for cid, name in global_map.items():
+        if name.strip().lower() == target_lower:
+            return cid
+
+    if dokkandb is not None:
+        try:
+            cats = dokkandb.get_categories()
+            if isinstance(cats, list):
+                for item in cats:
+                    if (
+                        isinstance(item, dict)
+                        and "id" in item
+                        and "name" in item
+                        and str(item["name"]).strip().lower() == target_lower
+                    ):
+                        cid = int(item["id"])
+                        global_map[cid] = str(item["name"])
+                        return cid
+        except Exception as e:
+            logger.debug(f"Failed resolving category id via dokkandb.get_categories: {e}")
+
+    return None
 
 
 def get_base_form_name(card: DokkanCard) -> str:
@@ -105,6 +176,9 @@ class DokkanConstraintSolver:
     Deterministic mathematical engine enforcing leader skill coverage, team uniqueness,
     base slot 1 viability, late-game scaling, cyclic type wheel, and boss gimmick overrides.
     """
+
+    def __init__(self, dokkandb: DokkanDBClient | None = None) -> None:
+        self.dokkandb = dokkandb or DokkanDBClient()
 
     @staticmethod
     def check_type_matchup(attacker_element: int, defender_element: int) -> int:
@@ -309,8 +383,11 @@ class DokkanConstraintSolver:
         is_multi_battle = getattr(boss_stage, "is_multi_battle", False)
         total_battles = getattr(boss_stage, "total_battles", 1)
 
-        # 1. Type Matchup against Final Phase Element
-        matchup = self.check_type_matchup(card.element, final_phase.element)
+        # 1. Type Matchup against Final Phase Element (skipped if final phase is rainbow with all 5 types)
+        if getattr(final_phase, "is_rainbow", False):
+            matchup = 0
+        else:
+            matchup = self.check_type_matchup(card.element, final_phase.element)
         if matchup > 0:
             delta += 5.0
             counters.append(
@@ -498,6 +575,56 @@ class DokkanConstraintSolver:
                     penalties.append(
                         "Slot Lock Vulnerability: squishy unit lacks defensive kit if locked into Slot 1"
                     )
+
+        # 7. Multi-Enemy and Rainbow Phase Gimmicks
+        has_multi_enemy = any(getattr(p, "is_multi_enemy", False) for p in boss_stage.phases)
+        if has_multi_enemy and card.has_aoe:
+            delta += 25.0
+            counters.append(
+                "AoE Specialist: Attacks all enemies simultaneously, highly effective in multi-target stage phases (+25.0)"
+            )
+
+        has_debuffable_multi_phase = any(
+            getattr(p, "is_multi_enemy", False) and not getattr(p, "nullifies_atk_down", False)
+            for p in boss_stage.phases
+        )
+        if has_debuffable_multi_phase and card.lowers_enemy_atk:
+            delta += 15.0
+            counters.append(
+                "Debuff Specialist: Lowers enemy ATK in multi-enemy phase lacking ATK debuff immunity (+15.0)"
+            )
+
+        rainbow_phases = [p for p in boss_stage.phases if getattr(p, "is_rainbow", False)]
+        if rainbow_phases:
+            # Check unconditional guard or permanent guard, or DR >= 50%
+            is_omni_guard = (
+                card.is_guard_unconditional
+                or card.is_guard_permanent
+                or (
+                    card.base_form is not None
+                    and card.base_form.passive_tags is not None
+                    and (
+                        card.base_form.passive_tags.is_guard_unconditional
+                        or card.base_form.passive_tags.is_guard_permanent
+                    )
+                )
+            )
+            has_high_dr = card.damage_reduction_percent >= 50 or (
+                card.base_form is not None
+                and card.base_form.passive_tags is not None
+                and card.base_form.passive_tags.dr_base_percent >= 50
+            )
+
+            if is_omni_guard or has_high_dr:
+                delta += 15.0
+                counters.append(
+                    "Omni-Guard/High-DR: Neutralizes all 5 enemy typings in multi-target Rainbow phase (+15.0)"
+                )
+            else:
+                delta -= 15.0
+                penalties.append(
+                    "Rainbow Phase Vulnerability: lacks unconditional Guard or high DR (>= 50%) against diverse enemy typings (-15.0)"
+                )
 
         return delta, counters, penalties
 
@@ -745,15 +872,108 @@ class DokkanConstraintSolver:
                     f"Need at least 6 distinct cards in candidate pool to satisfy mission criteria, found {len(unique_pool)}"
                 )
 
+        # Query and enrich cards using DokkanDB official category leaders endpoint
+        category_leaders_by_cat: dict[int, dict[int, dict[str, Any]]] = {}
+        if mission_batch is not None:
+            for _req_cnt, req_cat in getattr(mission_batch, "required_categories", []):
+                cat_id = _get_category_id_by_name(req_cat, dokkandb=self.dokkandb)
+                if cat_id is not None:
+                    try:
+                        category_leaders_by_cat[cat_id] = self.dokkandb.get_category_leaders_map(cat_id)
+                    except Exception as e:
+                        logger.debug(f"Could not load category leaders for category {cat_id} ({req_cat}): {e}")
+
+        if category_leaders_by_cat:
+            from dokkan_eza_link_farmer.ai.models import LeaderSkillSpec
+
+            for c in unique_pool:
+                for cid, leaders_map in category_leaders_by_cat.items():
+                    if c.id in leaders_map:
+                        official_info = leaders_map[c.id]
+                        if c.leader_spec is None:
+                            c.leader_spec = LeaderSkillSpec(
+                                base_boost_pct=official_info["base_boost_pct"],
+                                extra_boost_pct=official_info["extra_boost_pct"],
+                                hp_stat_pct=official_info.get("hp_stat_pct", official_info["base_boost_pct"]),
+                                atk_stat_pct=official_info["base_boost_pct"],
+                                def_stat_pct=official_info["base_boost_pct"],
+                            )
+                        else:
+                            c.leader_spec.base_boost_pct = max(
+                                c.leader_spec.base_boost_pct, official_info["base_boost_pct"]
+                            )
+                            c.leader_spec.extra_boost_pct = max(
+                                c.leader_spec.extra_boost_pct, official_info["extra_boost_pct"]
+                            )
+                            if official_info.get("hp_stat_pct", 0) > 0:
+                                c.leader_spec.hp_stat_pct = max(
+                                    c.leader_spec.hp_stat_pct, official_info["hp_stat_pct"]
+                                )
+
+                        if (
+                            official_info.get("is_main_leader")
+                            and cid not in c.leader_spec.main_category_ids
+                        ):
+                            c.leader_spec.main_category_ids.append(cid)
+                        if (
+                            official_info.get("is_extra_leader")
+                            and cid not in c.leader_spec.extra_category_ids
+                        ):
+                            c.leader_spec.extra_category_ids.append(cid)
+
         # 1. Determine Leader
         leader = forced_leader
         if leader is None:
-            scored_leaders: list[tuple[DokkanCard, float]] = []
+            # Tiered search criteria:
+            # Tier 1: Boost >= 220%
+            # Tier 2: Boost >= 200%
+            # Tier 3: Boost >= 170%
+            # Tier 4: Boost >= 150%
+            tier_thresholds = [220.0, 200.0, 170.0, 150.0]
+
+            def analyze_leader_mission_coverage(
+                c: DokkanCard, m_batch: Any
+            ) -> tuple[bool, bool, bool]:
+                if not m_batch:
+                    return False, False, False
+                main_match = False
+                extra_match = False
+                personal_match = False
+                req_categories = getattr(m_batch, "required_categories", [])
+                for _req_cnt, req_cat in req_categories:
+                    r_lower = req_cat.strip().lower()
+                    if any(c_cat.strip().lower() == r_lower for c_cat in c.categories):
+                        personal_match = True
+                    cid = _get_category_id_by_name(req_cat, dokkandb=self.dokkandb)
+                    if (
+                        cid is not None
+                        and cid in category_leaders_by_cat
+                        and c.id in category_leaders_by_cat[cid]
+                    ):
+                        off = category_leaders_by_cat[cid][c.id]
+                        if off.get("is_main_leader"):
+                            main_match = True
+                        if off.get("is_extra_leader"):
+                            extra_match = True
+                    if c.leader_spec:
+                        for l_cid in c.leader_spec.main_category_ids:
+                            if _resolve_category_name(l_cid, c, c).strip().lower() == r_lower:
+                                main_match = True
+                        for l_cid in c.leader_spec.extra_category_ids:
+                            if _resolve_category_name(l_cid, c, c).strip().lower() == r_lower:
+                                extra_match = True
+                return main_match, extra_match, personal_match
+
+            chosen_leader: DokkanCard | None = None
+            chosen_score: float = 0.0
+
+            # Gather all candidate leaders having valid spec and category
+            leader_candidates: list[tuple[DokkanCard, float, list[DokkanCard]]] = []
             for c in unique_pool:
                 if (
                     not c.leader_spec
                     or not c.leader_spec.main_category_ids
-                    or c.leader_spec.base_boost_pct < MIN_LEADER_BOOST_PCT
+                    or c.leader_spec.base_boost_pct < 150.0
                     or not c.category_ids
                     or not bool(set(c.category_ids) & set(c.leader_spec.main_category_ids))
                 ):
@@ -767,54 +987,109 @@ class DokkanConstraintSolver:
                     and bool(set(o.category_ids) & main_cats)
                     and o.is_covered_by_leader(c)[1] >= MIN_LEADER_BOOST_PCT
                 ]
+                # Verifica che nel box esistano almeno 5 sub-unità uniche compatibili con copertura >= MIN_LEADER_BOOST_PCT
                 if len(eligible) < 5:
                     continue
 
-                boosted_200 = [o for o in eligible if o.is_covered_by_leader(c)[1] >= 200.0]
-                count_200 = len(boosted_200)
                 max_boost = float(c.leader_spec.base_boost_pct + c.leader_spec.extra_boost_pct)
+                leader_candidates.append((c, max_boost, eligible))
 
-                kit_power, _ = c.evaluate_kit_power()
-                s1_bonus = 15.0 if self.is_slot1_viable(c) else 0.0
+            for tier_min in tier_thresholds:
+                # Find candidates whose max_boost falls into this tier and hasn't been picked by a higher tier
+                # Notice: Tier 1: >= 220; Tier 2: 200 <= boost < 220; Tier 3: 170 <= boost < 200; Tier 4: 150 <= boost < 170
+                if tier_min == 220.0:
+                    tier_cands = [item for item in leader_candidates if item[1] >= 220.0]
+                elif tier_min == 200.0:
+                    tier_cands = [item for item in leader_candidates if 200.0 <= item[1] < 220.0]
+                elif tier_min == 170.0:
+                    tier_cands = [item for item in leader_candidates if 170.0 <= item[1] < 200.0]
+                else:
+                    tier_cands = [item for item in leader_candidates if 150.0 <= item[1] < 170.0]
 
-                type_bonus = 0.0
-                if boss_stage and boss_stage.phases:
-                    final_elem = boss_stage.phases[-1].element
-                    type_bonus = self.check_type_matchup(c.element, final_elem) * 15.0
+                if not tier_cands:
+                    continue
 
-                # Strongly prioritize leaders that maximize 200%/220% members (has_main and has_extra)
-                # and explicitly favor premier leaders like [1030431] (SSJ Goku + SSJ Vegeta (Angel))
-                boost_200_bonus = (30.0 if count_200 >= 5 else 0.0) + min(count_200, 300) * 0.1
-                priority_bonus = 25.0 if c.id == 1030431 else 0.0
-
-                # Mission synergy bonus for leaders matching required categories
-                mission_leader_bonus = 0.0
-                if mission_batch is not None:
-                    for _req_cnt, req_cat in getattr(mission_batch, "required_categories", []):
-                        r_lower = req_cat.strip().lower()
-                        if any(c_cat.strip().lower() == r_lower for c_cat in c.categories):
-                            mission_leader_bonus += 35.0
-
-                l_score = (
-                    max_boost * 0.2
-                    + kit_power * 0.08
-                    + s1_bonus
-                    + type_bonus
-                    + boost_200_bonus
-                    + priority_bonus
-                    + mission_leader_bonus
-                    + min(len(eligible), 20) * 0.5
+                has_mission_reqs = bool(
+                    mission_batch is not None and getattr(mission_batch, "required_categories", None)
                 )
-                scored_leaders.append((c, l_score))
 
-            if not scored_leaders:
+                # Analyze tier-wide leader skill coverage for mission categories
+                tier_cov_analysis: dict[int, tuple[bool, bool, bool]] = {}
+                tier_has_lead_spec_match = False
+                if has_mission_reqs:
+                    for c, _, _ in tier_cands:
+                        analysis = analyze_leader_mission_coverage(c, mission_batch)
+                        tier_cov_analysis[c.id] = analysis
+                        if analysis[0] or analysis[1]:
+                            tier_has_lead_spec_match = True
+
+                scored_tier_leaders: list[tuple[DokkanCard, float, int]] = []
+                for c, max_boost, eligible in tier_cands:
+                    boosted_200 = [o for o in eligible if o.is_covered_by_leader(c)[1] >= 200.0]
+                    count_200 = len(boosted_200)
+
+                    kit_power, _ = c.evaluate_kit_power()
+                    s1_bonus = 15.0 if self.is_slot1_viable(c) else 0.0
+
+                    type_bonus = 0.0
+                    if boss_stage and boss_stage.phases:
+                        final_elem = boss_stage.phases[-1].element
+                        # Elemental type_bonus capped so it cannot override tier differences
+                        type_bonus = self.check_type_matchup(c.element, final_elem) * 10.0
+
+                    boost_200_bonus = (30.0 if count_200 >= 5 else 0.0) + min(count_200, 300) * 0.1
+                    priority_bonus = 0.0
+
+                    # Mission synergy bonus & priority determination
+                    mission_leader_bonus = 0.0
+                    coverage_priority = 0
+
+                    if has_mission_reqs:
+                        main_m, extra_m, personal_m = tier_cov_analysis.get(c.id, (False, False, False))
+                        if tier_has_lead_spec_match:
+                            if main_m:
+                                coverage_priority = 2
+                                mission_leader_bonus = 60.0
+                            elif extra_m:
+                                coverage_priority = 1
+                                mission_leader_bonus = 30.0
+                        else:
+                            # Fallback on personal card categories when no card in tier has category in leader skill
+                            if personal_m:
+                                coverage_priority = 1
+                                mission_leader_bonus = 30.0
+
+                    l_score = (
+                        max_boost * 0.2
+                        + kit_power * 0.08
+                        + s1_bonus
+                        + type_bonus
+                        + boost_200_bonus
+                        + priority_bonus
+                        + mission_leader_bonus
+                        + min(len(eligible), 20) * 0.5
+                    )
+                    scored_tier_leaders.append((c, l_score, coverage_priority))
+
+                # Within the tier, if mission_batch is active with required categories,
+                # absolute precedence is given to leaders covering the mission category
+                if has_mission_reqs:
+                    # Sort primarily by coverage_priority (2 > 1 > 0), then by l_score descending
+                    scored_tier_leaders.sort(key=lambda item: (item[2], item[1]), reverse=True)
+                else:
+                    scored_tier_leaders.sort(key=lambda item: item[1], reverse=True)
+
+                chosen_leader = scored_tier_leaders[0][0]
+                chosen_score = scored_tier_leaders[0][1]
+                break
+
+            if chosen_leader is None:
                 raise ValueError(
                     f"No valid leader found meeting >= {MIN_LEADER_BOOST_PCT}% coverage requirement with >= 5 eligible sub-units."
                 )
 
-            scored_leaders.sort(key=lambda item: item[1], reverse=True)
-            leader = scored_leaders[0][0]
-            logs.append(f"Selected Leader: {leader.full_name} (Score: {scored_leaders[0][1]:.1f})")
+            leader = chosen_leader
+            logs.append(f"Selected Leader: {leader.full_name} (Score: {chosen_score:.1f})")
         else:
             if leader.leader_spec is None and leader.leader_skill:
                 from dokkan_eza_link_farmer.ai.syncer import parse_leader_spec
