@@ -54,3 +54,8 @@ cache/
 
 # API Dumps & Temporary Query Fixtures
 api-dokkandb-*.json
+
+# Diagnostics & Local Inspection Crops
+debug_crops/
+reports/
+
