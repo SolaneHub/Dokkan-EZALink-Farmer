@@ -174,6 +174,7 @@ class SATags:
     stacks_atk: bool = False
     raise_def_turns: int = 0
     raise_atk_turns: int = 0
+    is_aoe: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -181,6 +182,7 @@ class SATags:
             "stacks_atk": self.stacks_atk,
             "raise_def_turns": self.raise_def_turns,
             "raise_atk_turns": self.raise_atk_turns,
+            "is_aoe": self.is_aoe,
         }
 
     @classmethod
@@ -192,6 +194,7 @@ class SATags:
             stacks_atk=bool(data.get("stacks_atk", False)),
             raise_def_turns=int(data.get("raise_def_turns", 0)),
             raise_atk_turns=int(data.get("raise_atk_turns", 0)),
+            is_aoe=bool(data.get("is_aoe", False)),
         )
 
 
@@ -906,6 +909,22 @@ class DokkanCard:
 
         return DokkanConstraintSolver.is_slot1_viable(self)
 
+    @property
+    def has_aoe(self) -> bool:
+        """Checks if the card performs AoE attacks that hit all enemies simultaneously."""
+        if self.base_form and self.base_form.sa_tags and self.base_form.sa_tags.is_aoe:
+            return True
+        text = f"{self.super_attack} {self.passive_skill}".lower()
+        aoe_pattern = r"(?:causes\s+(?:mass|destructive|colossal|mega-colossal|extreme|supreme)\s+damage\s+to\s+all\s+enemies|attacks\s+all\s+enemies|damage\s+to\s+all\s+enemies)"
+        return bool(re.search(aoe_pattern, text))
+
+    @property
+    def lowers_enemy_atk(self) -> bool:
+        """Checks if the card lowers or debuffs enemy ATK via Super Attack or passive skill."""
+        text = f"{self.super_attack} {self.passive_skill}".lower()
+        debuff_pattern = r"(?:greatly\s+lowers?\s+atk|massively\s+lowers?\s+atk|lowers?\s+atk|reduces?\s+enemy(?:'s)?\s+atk)"
+        return bool(re.search(debuff_pattern, text))
+
     def get_tactical_form_timeline(self) -> list[dict[str, str]]:
         """Returns structured timeline for Standby, Exchange, Switch, and Transformations."""
         events: list[dict[str, str]] = []
@@ -1490,6 +1509,10 @@ class BossEnemy:
     element: int = 0
     type_name: str = ""
     mechanics: list[BossMechanic] = field(default_factory=list)
+    hp: int = 0
+    atk: int = 0
+    def_stat: int = 0
+    actions_per_turn: int = 0
 
 
 @dataclass
@@ -1517,6 +1540,32 @@ class BossPhase:
     estimated_sa_damage: int = 0
     special_skills: list[str] = field(default_factory=list)
 
+    @property
+    def enemy_count(self) -> int:
+        return len(self.bosses) if self.bosses else 1
+
+    @property
+    def is_multi_enemy(self) -> bool:
+        return self.enemy_count > 1
+
+    @property
+    def enemy_elements(self) -> list[int]:
+        return [b.element for b in self.bosses]
+
+    @property
+    def is_rainbow(self) -> bool:
+        # Base types in Dokkan are 0 (AGL), 1 (TEQ), 2 (INT), 3 (STR), 4 (PHY)
+        return {b.element % 10 for b in self.bosses} >= {0, 1, 2, 3, 4}
+
+    @property
+    def all_type_names(self) -> list[str]:
+        names: list[str] = []
+        for b in self.bosses:
+            t = b.type_name
+            if t and t not in names:
+                names.append(t)
+        return names
+
     def __post_init__(self) -> None:
         if self.phase_index == 1 and self.phase != 1:
             self.phase_index = self.phase
@@ -1525,6 +1574,13 @@ class BossPhase:
 
         if self.atk > 0 and not self.estimated_sa_damage:
             self.estimated_sa_damage = int(self.atk * 2.5)
+
+        # If primary boss is provided, infer element and mechanics
+        if self.bosses and not self.element:
+            primary = self.bosses[0]
+            self.element = primary.element
+            if not self.element_name:
+                self.element_name = primary.type_name
 
         # Infer element_name if not provided
         if not self.element_name and self.element:
@@ -1537,13 +1593,20 @@ class BossPhase:
             else:
                 self.element_name = base_type
 
-        # If primary boss is provided, infer element and mechanics
-        if self.bosses:
-            if not self.element:
-                primary = self.bosses[0]
-                self.element = primary.element
-                self.element_name = primary.type_name
+        # Multi-enemy and rainbow naming enrichment
+        if self.is_multi_enemy:
+            if self.is_rainbow:
+                if not self.element_name or "Rainbow" not in self.element_name or ("(" not in self.element_name and "All 5 Types" not in self.element_name):
+                    self.element_name = f"Rainbow ({self.enemy_count} Enemies: All 5 Types)"
+            else:
+                if not self.element_name or ("Multi-Type" not in self.element_name and "Enemies" not in self.element_name):
+                    self.element_name = f"Multi-Type ({len(self.bosses)} Enemies)"
 
+        # Infer actions_per_turn from bosses if phase actions_per_turn == 0
+        if self.actions_per_turn == 0 and any(b.actions_per_turn > 0 for b in self.bosses):
+            self.actions_per_turn = sum(b.actions_per_turn for b in self.bosses)
+
+        if self.bosses:
             skill_tags: list[str] = list(self.special_skills)
             for b in self.bosses:
                 for m in b.mechanics:
@@ -1669,6 +1732,10 @@ class BossPhase:
                     "subname": b.subname,
                     "element": b.element,
                     "type_name": b.type_name,
+                    "hp": b.hp,
+                    "atk": b.atk,
+                    "def_stat": b.def_stat,
+                    "actions_per_turn": b.actions_per_turn,
                     "mechanics": [
                         {"id": m.id, "name": m.name, "description": m.description}
                         for m in b.mechanics
@@ -1698,6 +1765,10 @@ class BossPhase:
                     element=b.get("element", 0),
                     type_name=b.get("type_name", ""),
                     mechanics=mechs,
+                    hp=int(b.get("hp", 0)),
+                    atk=int(b.get("atk", 0)),
+                    def_stat=int(b.get("def_stat") if b.get("def_stat") is not None else b.get("defence", 0)),
+                    actions_per_turn=int(b.get("actions_per_turn") if b.get("actions_per_turn") is not None else b.get("multi_atk_num", 0)),
                 )
             )
         idx = int(data.get("phase_index") or data.get("phase") or 1)

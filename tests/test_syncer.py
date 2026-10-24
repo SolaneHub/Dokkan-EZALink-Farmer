@@ -438,3 +438,64 @@ class TestDokkanSyncer:
         assert phase.nullifies_stun_seal is True
         assert phase.element == 23
         assert phase.element_name == "Extreme STR"
+
+    def test_multi_enemy_and_rainbow_boss_phase_properties(self):
+        """Verifies multi-enemy, rainbow detection, and action summation."""
+        # 1. Multi-enemy non-rainbow (2 enemies: AGL, STR)
+        e1 = BossEnemy(card_id=101, name="Enemy 1", element=10, type_name="Super AGL", hp=1000, atk=200, def_stat=50, actions_per_turn=4)
+        e2 = BossEnemy(card_id=102, name="Enemy 2", element=13, type_name="Super STR", hp=1500, atk=250, def_stat=60, actions_per_turn=3)
+
+        phase_multi = BossPhase(bosses=[e1, e2])
+        assert phase_multi.enemy_count == 2
+        assert phase_multi.is_multi_enemy is True
+        assert phase_multi.is_rainbow is False
+        assert phase_multi.enemy_elements == [10, 13]
+        assert phase_multi.all_type_names == ["Super AGL", "Super STR"]
+        assert phase_multi.element_name == "Multi-Type (2 Enemies)"
+        assert phase_multi.actions_per_turn == 7
+
+        # 2. Multi-enemy Rainbow (5 types: AGL, TEQ, INT, STR, PHY)
+        rainbow_bosses = [
+            BossEnemy(card_id=200 + i, name=f"Enemy {i}", element=10 + i, type_name=f"Super Type {i}", actions_per_turn=2)
+            for i in range(5)
+        ]
+        phase_rainbow = BossPhase(bosses=rainbow_bosses)
+        assert phase_rainbow.enemy_count == 5
+        assert phase_rainbow.is_multi_enemy is True
+        assert phase_rainbow.is_rainbow is True
+        assert phase_rainbow.element_name == "Rainbow (5 Enemies: All 5 Types)"
+        assert phase_rainbow.actions_per_turn == 10
+
+        # Serialization round-trip
+        data = phase_rainbow.to_dict()
+        assert data["actions_per_turn"] == 10
+        assert len(data["bosses"]) == 5
+        assert data["bosses"][0]["actions_per_turn"] == 2
+        restored = BossPhase.from_dict(data)
+        assert restored.is_rainbow is True
+        assert restored.actions_per_turn == 10
+        assert restored.bosses[0].actions_per_turn == 2
+
+        # 3. BossPhase initialized with generic element_name gets enriched
+        phase_generic = BossPhase(bosses=[e1, e2], element_name="Super AGL")
+        assert phase_generic.element_name == "Multi-Type (2 Enemies)"
+
+        phase_rainbow_generic = BossPhase(bosses=rainbow_bosses, element_name="Super AGL")
+        assert phase_rainbow_generic.element_name == "Rainbow (5 Enemies: All 5 Types)"
+
+        # 4. BossPhase with mechanics and non-zero action summation
+        e_mech = BossEnemy(
+            card_id=999,
+            name="Mech Boss",
+            element=12,
+            type_name="Super INT",
+            actions_per_turn=5,
+            mechanics=[
+                BossMechanic(id=1, name="Cancels Dodge", description="Enemy attack cannot be evaded")
+            ],
+        )
+        phase_with_mech = BossPhase(bosses=[e_mech])
+        assert phase_with_mech.cancels_dodge is True
+        assert phase_with_mech.actions_per_turn == 5
+
+
