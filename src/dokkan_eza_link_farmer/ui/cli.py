@@ -703,11 +703,12 @@ class TerminalCLI:
                     t_boss = Table(
                         title=f"{t('cli.challenge.stage_boss_info_title')} - {target_stage_name} (Stage {target_stage_num})",
                         border_style="magenta",
+                        expand=True,
                     )
-                    t_boss.add_column("Phase", style="bold cyan", justify="center")
-                    t_boss.add_column("Boss Enemy", style="bold")
-                    t_boss.add_column("Typing", style="bold yellow")
-                    t_boss.add_column("Key Mechanics & Immunities", style="dim")
+                    t_boss.add_column("Phase", style="bold cyan", justify="center", width=12, no_wrap=True)
+                    t_boss.add_column("Boss Enemy", style="bold", ratio=3, no_wrap=False)
+                    t_boss.add_column("Typing", style="bold yellow", width=15, no_wrap=True)
+                    t_boss.add_column("Key Mechanics & Immunities", style="dim", ratio=4, no_wrap=False)
 
                     for ph in boss_info["phases"]:
                         ph_num = ph.get("phase", 1)
@@ -752,10 +753,11 @@ class TerminalCLI:
             t_batches = Table(
                 title=f"🎯 Mission Batches for {ev_name} (Stage {target_stage_num})",
                 border_style="green",
+                expand=True,
             )
-            t_batches.add_column("Batch #", style="bold cyan")
-            t_batches.add_column("Combined Requirements", style="bold")
-            t_batches.add_column("Missions Cleared in Batch", style="dim")
+            t_batches.add_column("Batch #", style="bold cyan", width=14, no_wrap=True)
+            t_batches.add_column("Combined Requirements", style="bold", ratio=4, no_wrap=False)
+            t_batches.add_column("Missions Cleared in Batch", style="dim", ratio=3, no_wrap=False)
 
             for idx, b in enumerate(batches, 1):
                 m_names = ", ".join(f"#{m.id}" for m in b.missions) or "Standard Clear"
@@ -1376,10 +1378,11 @@ class TerminalCLI:
         # 0.1. Mission Completion Banner if targeted
         if getattr(rec, "mission_summary", None):
             self.console.print(
-                Panel.fit(
+                Panel(
                     f"[bold green]🎯 Solved for Stage Missions:[/bold green] [bold yellow]{rec.mission_summary}[/bold yellow]\n"
                     f"[bold cyan]All 6 team members strictly comply with mission requirements![/bold cyan]",
                     border_style="green",
+                    expand=True,
                 )
             )
 
@@ -1398,10 +1401,11 @@ class TerminalCLI:
 
             base = card.rich_formatted_name()
             loc_label = "Floater" if is_floater else "Rotazione"
-            if card.id == friend.id or card is friend or getattr(card, "is_friend_leader", False):
+            # 1. Distinguish between Friend Leader and Player Leader even if card.id == friend.id
+            if getattr(card, "is_friend_leader", False) or card is friend:
                 badge = Text(f" [Friend • {loc_label}]", style="bold cyan")
                 return Text.assemble(base, badge)
-            elif card.id == leader.id or card is leader:
+            elif card is leader or card.id == leader.id:
                 badge = Text(f" [Leader • {loc_label}]", style="bold green")
                 return Text.assemble(base, badge)
             return base
@@ -1439,12 +1443,13 @@ class TerminalCLI:
             title_style="bold yellow",
             border_style="bright_blue",
             header_style="bold cyan",
+            expand=True,
         )
-        t_team.add_column("Rotazione", style="bold cyan", justify="center", no_wrap=True)
-        t_team.add_column("Posizione", justify="center", no_wrap=True)
-        t_team.add_column("Personaggio", min_width=26, no_wrap=True)
-        t_team.add_column("Ruolo Tattico & Kit", style="green")
-        t_team.add_column("Sinergia Link & Note", style="dim")
+        t_team.add_column("Rotazione", style="bold cyan", justify="center", width=14, no_wrap=True)
+        t_team.add_column("Posizione", justify="center", width=16, no_wrap=True)
+        t_team.add_column("Personaggio", ratio=5, no_wrap=False)
+        t_team.add_column("Ruolo Tattico & Kit", style="green", ratio=3, no_wrap=False)
+        t_team.add_column("Sinergia Link & Note", style="dim", ratio=3, no_wrap=False)
 
         # Rotazione A
         t_team.add_row(
@@ -1510,11 +1515,12 @@ class TerminalCLI:
                 title="💊 Oggetti di Supporto Consigliati",
                 title_style="bold green",
                 border_style="green",
+                expand=True,
             )
-            t_items.add_column("Priorità", justify="center", style="bold yellow")
-            t_items.add_column("Oggetto", style="bold white")
-            t_items.add_column("Effetto Tattico", style="cyan")
-            t_items.add_column("Utilizzo Consigliato", style="dim")
+            t_items.add_column("Priorità", justify="center", style="bold yellow", width=10, no_wrap=True)
+            t_items.add_column("Oggetto", style="bold white", width=18, no_wrap=False)
+            t_items.add_column("Effetto Tattico", style="cyan", ratio=4, no_wrap=False)
+            t_items.add_column("Utilizzo Consigliato", style="dim", ratio=4, no_wrap=False)
             for it in items:
                 t_items.add_row(
                     f"#{it.get('rank', 1)}",
@@ -1530,11 +1536,12 @@ class TerminalCLI:
                 title="🎞️ Support Memory Consigliata",
                 title_style="bold magenta",
                 border_style="magenta",
+                expand=True,
             )
-            t_mem.add_column("Nome Memory", style="bold white")
-            t_mem.add_column("Durata", justify="center", style="bold cyan")
-            t_mem.add_column("Effetto Tattico", style="yellow")
-            t_mem.add_column("Condizione / Categoria", style="dim")
+            t_mem.add_column("Nome Memory", style="bold white", width=22, no_wrap=False)
+            t_mem.add_column("Durata", justify="center", style="bold cyan", width=12, no_wrap=True)
+            t_mem.add_column("Effetto Tattico", style="yellow", ratio=4, no_wrap=False)
+            t_mem.add_column("Condizione / Categoria", style="dim", ratio=4, no_wrap=False)
             t_mem.add_row(
                 str(mem.get("name", "")),
                 str(mem.get("duration", "")),
@@ -1546,12 +1553,14 @@ class TerminalCLI:
         # 3. Top-5 Substitutes Shortlist with Dokkan Colors
         if shortlist:
             t_short = Table(
-                title="🔄 Top-5 Recommended Substitutes (Shortlist)", border_style="cyan"
+                title="🔄 Top-5 Recommended Substitutes (Shortlist)",
+                border_style="cyan",
+                expand=True,
             )
-            t_short.add_column("Rank", style="bold cyan", justify="center")
-            t_short.add_column("Candidate Character")
-            t_short.add_column("Score", justify="right", style="yellow")
-            t_short.add_column("Key Strengths", style="dim")
+            t_short.add_column("Rank", style="bold cyan", justify="center", width=8, no_wrap=True)
+            t_short.add_column("Candidate Character", ratio=5, no_wrap=False)
+            t_short.add_column("Score", justify="right", style="yellow", width=10, no_wrap=True)
+            t_short.add_column("Key Strengths", style="dim", ratio=5, no_wrap=False)
             for idx, cand in enumerate(shortlist[:5], 1):
                 reason_str = getattr(cand, "reasoning", "")
                 if not reason_str and getattr(cand, "counter_points", None):
@@ -1572,16 +1581,21 @@ class TerminalCLI:
                     f"[italic dim cyan]{rec.ai_reasoning}[/italic dim cyan]",
                     title=f"🧠 {t('cli.ai.reasoning_title')}",
                     border_style="magenta",
+                    expand=True,
                 )
             )
 
-        self.console.print(
-            Panel(
-                rec.tactical_analysis,
-                title=f"⚔️ {t('cli.ai.tactical_title')}",
-                border_style="yellow",
+        if rec.tactical_analysis:
+            from rich.markdown import Markdown
+
+            self.console.print(
+                Panel(
+                    Markdown(rec.tactical_analysis),
+                    title=f"⚔️ {t('cli.ai.tactical_title')}",
+                    border_style="yellow",
+                    expand=True,
+                )
             )
-        )
 
     def handle_ai_interactive(self, args: list):
         """Interactive AI Team Builder & Tactical Advisor (Qwen / DeepSeek-R1)."""
@@ -1723,11 +1737,12 @@ class TerminalCLI:
         table = Table(
             title=f"Top Linking Partners for {target_card.full_name}",
             border_style="green",
+            expand=True,
         )
-        table.add_column("Rank", style="bold cyan")
-        table.add_column("Partner Card")
-        table.add_column("Synergy", justify="right", style="yellow")
-        table.add_column("Shared Links", style="dim")
+        table.add_column("Rank", style="bold cyan", width=8, no_wrap=True)
+        table.add_column("Partner Card", ratio=4, no_wrap=False)
+        table.add_column("Synergy", justify="right", style="yellow", width=10, no_wrap=True)
+        table.add_column("Shared Links", style="dim", ratio=4, no_wrap=False)
 
         for idx, (p_card, score, shared) in enumerate(partners, 1):
             table.add_row(

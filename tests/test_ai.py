@@ -1066,3 +1066,70 @@ class TestDokkanAI:
         ):
             cli.handle_ai_interactive(["run"])
             mock_run.assert_called_once_with(boss_stage)
+
+    def test_render_team_presentation_rotations_table_and_markdown_panel(self):
+        """Verifies CLI rendering of rotations table with proper badge labeling and markdown tactical panel."""
+        import copy
+
+        from rich.markdown import Markdown
+        from rich.panel import Panel
+        from rich.table import Table
+
+        from dokkan_eza_link_farmer.ai.models import DokkanCard, RotationPair, TeamRecommendation
+        from dokkan_eza_link_farmer.ui.cli import TerminalCLI
+
+        engine = MagicMock()
+        cli = TerminalCLI(engine)
+
+        lead = DokkanCard(id=1029191, name="Goku & Vegeta", subname="Strongest", element=44)
+        friend = copy.copy(lead)
+        friend.is_friend_leader = True
+
+        sub1 = DokkanCard(id=101, name="Beerus & Whis", element=23)
+        sub2 = DokkanCard(id=102, name="Beerus", element=11)
+        sub3 = DokkanCard(id=103, name="SSG Goku", element=11)
+        sub4 = DokkanCard(id=104, name="SSGSS Goku", element=11)
+        sub5 = DokkanCard(id=105, name="Goku Black & Zamasu", element=23)
+
+        rec = TeamRecommendation(
+            leader=lead,
+            friend_leader=friend,
+            all_cards=[lead, sub1, sub2, sub3, sub4, sub5],
+            rotation_a=RotationPair(slot1=sub1, slot2=sub2, shared_links=["Godly Power"], shared_ki_links=[], synergy_score=8.0),
+            rotation_b=RotationPair(slot1=sub3, slot2=sub4, shared_links=["Warrior Gods"], shared_ki_links=[], synergy_score=7.5),
+            floaters=[lead, sub5, friend],
+            tactical_analysis="### 🛡️ Rotazioni\n- **Rotazione A**: Mantieni Beerus & Whis in Slot 1.",
+        )
+
+        printed_objects = []
+        with patch.object(cli.console, "print", side_effect=printed_objects.append):
+            cli._render_team_presentation(rec)
+
+        # 1. Find the rotations table
+        rot_tables = [obj for obj in printed_objects if isinstance(obj, Table) and "Rotazione" in [c.header for c in obj.columns]]
+        assert len(rot_tables) == 1
+        table = rot_tables[0]
+        assert table.expand is True
+
+        # Check column properties
+        col_names = [c.header for c in table.columns]
+        assert "Rotazione" in col_names
+        assert "Posizione" in col_names
+        assert "Personaggio" in col_names
+
+        p_col = next(c for c in table.columns if c.header == "Personaggio")
+        assert p_col.no_wrap is False
+
+        # 2. Verify distinction between Leader and Friend in floaters
+        floater_cells = [str(cell) for cell in table.columns[2]._cells]
+        lead_floater = next((c for c in floater_cells if "Leader • Floater" in c), None)
+        friend_floater = next((c for c in floater_cells if "Friend • Floater" in c), None)
+        assert lead_floater is not None
+        assert friend_floater is not None
+
+        # 3. Verify tactical panel wraps content in Markdown
+        panels = [obj for obj in printed_objects if isinstance(obj, Panel)]
+        tactical_panel = next((p for p in panels if "⚔️" in str(p.title)), None)
+        assert tactical_panel is not None
+        assert isinstance(tactical_panel.renderable, Markdown)
+
