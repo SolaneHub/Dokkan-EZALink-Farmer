@@ -1298,11 +1298,15 @@ class TerminalCLI:
             gimmicks.append("Locks Slots")
         gimmicks_str = f" [{', '.join(gimmicks)}]" if gimmicks else ""
 
+        total_battles = getattr(stage, "total_battles", 1)
+        battles_str = f"{total_battles} battagli{'e' if total_battles > 1 else 'a'}"
+        stack_warn = "\n[bold red]⚠️ Stacking ATK/DEF: Si azzera a inizio di ciascuna nuova battaglia separata![/bold red]" if getattr(stage, "is_multi_battle", False) else ""
+
         self.console.print(
             Panel.fit(
                 f"[bold cyan]🎯 AI Team Synthesis for: {stage.event_name}[/bold cyan]\n"
                 f"[bold yellow]Stage:[/bold yellow] {stage.stage_name} (ID: {stage.stage_id})\n"
-                f"[bold yellow]Phases:[/bold yellow] {len(stage.phases)} battles ({phases_str}){gimmicks_str}\n"
+                f"[bold yellow]Struttura:[/bold yellow] {battles_str} ({len(stage.phases)} Fasi: {phases_str}){gimmicks_str}{stack_warn}\n"
                 f"[dim]Consulting Constraint Solver & AI Tactical Advisor against lethal boss gimmicks...[/dim]",
                 border_style="cyan",
             )
@@ -1354,9 +1358,17 @@ class TerminalCLI:
         """Displays rich team representation with Dokkan typing colors for all cards."""
         from rich.table import Table
 
-        from dokkan_eza_link_farmer.ai.team_builder import render_team_summary_table_rich
+        from dokkan_eza_link_farmer.ai.team_builder import (
+            render_stage_intel_rich,
+            render_team_summary_table_rich,
+        )
 
-        # 0. Mission Completion Banner if targeted
+        # 0. Complete Stage Intelligence (Battles, HP, ATK, Actions, Immunities, Stacking Status)
+        stage_obj = getattr(rec, "boss_stage", None)
+        if stage_obj and getattr(stage_obj, "phases", None):
+            self.console.print(render_stage_intel_rich(stage_obj))
+
+        # 0.1. Mission Completion Banner if targeted
         if getattr(rec, "mission_summary", None):
             self.console.print(
                 Panel.fit(
@@ -1367,44 +1379,158 @@ class TerminalCLI:
             )
 
         # 1. 6-Card Team Summary Table with Dokkan Colors
-        self.console.print(render_team_summary_table_rich(rec.all_cards, rec.leader))
+        self.console.print(
+            render_team_summary_table_rich(
+                rec.all_cards, rec.leader, boss_stage=getattr(rec, "boss_stage", None)
+            )
+        )
 
-        # 2. Rotations Breakdown Table with Dokkan Colors
+        # 2. Rotations Breakdown Table with Dokkan Colors (7 combat units: Rot A, Rot B, Floaters)
+        def _get_card_badge(card: DokkanCard, leader: DokkanCard, friend: DokkanCard, is_floater: bool = False) -> Any:
+            from rich.text import Text
+
+            base = card.rich_formatted_name()
+            loc_label = "Floater" if is_floater else "Rotazione"
+            if card.id == friend.id or card is friend or getattr(card, "is_friend_leader", False):
+                badge = Text(f" [Friend • {loc_label}]", style="bold cyan")
+                return Text.assemble(base, badge)
+            elif card.id == leader.id or card is leader:
+                badge = Text(f" [Leader • {loc_label}]", style="bold green")
+                return Text.assemble(base, badge)
+            return base
+
+        def _get_card_tactical_role(card: DokkanCard, is_slot1: bool = False) -> str:
+            tags = []
+            if card.has_guard:
+                tags.append("🛡️ Guardia")
+            dr = getattr(card, "damage_reduction_percent", 0)
+            if dr > 0:
+                tags.append(f"DR {dr}%")
+            elif getattr(card, "has_damage_reduction", False):
+                tags.append("DR")
+            if getattr(card, "has_target_taunt", False):
+                tags.append("🎯 Taunt")
+            if getattr(card, "has_stacking_def", False):
+                tags.append("📈 Stack DEF")
+            if getattr(card, "has_dodge", False):
+                tags.append("💨 Schivata")
+            if getattr(card, "has_active_skill", False):
+                tags.append("💥 Active")
+            if getattr(card, "has_standby", False):
+                tags.append("⏳ Standby")
+            if getattr(card, "has_support", False):
+                tags.append("✨ Supporto")
+            if getattr(card, "has_orb_changing", False):
+                tags.append("🔮 Orbi")
+
+            if not tags:
+                return "🛡️ Difesa solida" if is_slot1 else "💥 Attaccante"
+            return " | ".join(tags[:3])
+
         t_team = Table(
-            title=title or "🔄 AI Recommended Tactical Rotations",
-            border_style="green",
+            title=title or f"🔄 {t('cli.ai.rotations_title')}",
+            title_style="bold yellow",
+            border_style="bright_blue",
+            header_style="bold cyan",
         )
-        t_team.add_column("Role", style="bold cyan")
-        t_team.add_column("Character")
-        t_team.add_column("Notes", style="dim")
+        t_team.add_column("Rotazione", style="bold cyan", justify="center", no_wrap=True)
+        t_team.add_column("Posizione", justify="center", no_wrap=True)
+        t_team.add_column("Personaggio", min_width=26, no_wrap=True)
+        t_team.add_column("Ruolo Tattico & Kit", style="green")
+        t_team.add_column("Sinergia Link & Note", style="dim")
 
+        # Rotazione A
         t_team.add_row(
-            "Leader", rec.leader.rich_formatted_name(), rec.leader.leader_skill[:60] + "..."
+            "Rotazione A",
+            "[bold red]Slot 1 (Tank)[/bold red]",
+            _get_card_badge(rec.rotation_a.slot1, rec.leader, rec.friend_leader, is_floater=False),
+            _get_card_tactical_role(rec.rotation_a.slot1, is_slot1=True),
+            f"🔗 {', '.join(rec.rotation_a.shared_links[:4])}" if rec.rotation_a.shared_links else "Difensore principale",
         )
         t_team.add_row(
-            "Rotation A (Slot 1)",
-            rec.rotation_a.slot1.rich_formatted_name(),
-            f"Tank | Shared: {', '.join(rec.rotation_a.shared_links[:4])}",
+            "",
+            "[bold yellow]Slot 2 (DPS)[/bold yellow]",
+            _get_card_badge(rec.rotation_a.slot2, rec.leader, rec.friend_leader, is_floater=False),
+            _get_card_tactical_role(rec.rotation_a.slot2, is_slot1=False),
+            f"⭐ Sinergia: {rec.rotation_a.synergy_score:.1f} ({len(rec.rotation_a.shared_links)} link)",
+        )
+
+        t_team.add_section()
+
+        # Rotazione B
+        t_team.add_row(
+            "Rotazione B",
+            "[bold red]Slot 1 (Tank)[/bold red]",
+            _get_card_badge(rec.rotation_b.slot1, rec.leader, rec.friend_leader, is_floater=False),
+            _get_card_tactical_role(rec.rotation_b.slot1, is_slot1=True),
+            f"🔗 {', '.join(rec.rotation_b.shared_links[:4])}" if rec.rotation_b.shared_links else "Difensore principale",
         )
         t_team.add_row(
-            "Rotation A (Slot 2)",
-            rec.rotation_a.slot2.rich_formatted_name(),
-            f"Damage | Synergy: {rec.rotation_a.synergy_score:.1f}",
+            "",
+            "[bold yellow]Slot 2 (DPS)[/bold yellow]",
+            _get_card_badge(rec.rotation_b.slot2, rec.leader, rec.friend_leader, is_floater=False),
+            _get_card_tactical_role(rec.rotation_b.slot2, is_slot1=False),
+            f"⭐ Sinergia: {rec.rotation_b.synergy_score:.1f} ({len(rec.rotation_b.shared_links)} link)",
         )
-        t_team.add_row(
-            "Rotation B (Slot 1)",
-            rec.rotation_b.slot1.rich_formatted_name(),
-            f"Tank | Shared: {', '.join(rec.rotation_b.shared_links[:4])}",
-        )
-        t_team.add_row(
-            "Rotation B (Slot 2)",
-            rec.rotation_b.slot2.rich_formatted_name(),
-            f"Damage | Synergy: {rec.rotation_b.synergy_score:.1f}",
-        )
+
+        t_team.add_section()
+
+        # Floaters (Slot 3)
         for idx, fl in enumerate(rec.floaters, 1):
-            t_team.add_row(f"Floater #{idx} (Slot 3)", fl.rich_formatted_name(), "Support / Flex")
+            t_team.add_row(
+                "Floaters" if idx == 1 else "",
+                f"[dim]Slot 3 (#{idx})[/dim]",
+                _get_card_badge(fl, rec.leader, rec.friend_leader, is_floater=True),
+                _get_card_tactical_role(fl, is_slot1=False),
+                "Ruota ogni 3 turni (Support / Flex)",
+            )
 
         self.console.print(t_team)
+
+        # Support Items & Support Memory Tables
+        from dokkan_eza_link_farmer.ai.support_catalog import (
+            get_recommended_support_items,
+            get_recommended_support_memory,
+        )
+
+        items = get_recommended_support_items(max_items=4)
+        if items:
+            t_items = Table(
+                title="💊 Oggetti di Supporto Consigliati",
+                title_style="bold green",
+                border_style="green",
+            )
+            t_items.add_column("Priorità", justify="center", style="bold yellow")
+            t_items.add_column("Oggetto", style="bold white")
+            t_items.add_column("Effetto Tattico", style="cyan")
+            t_items.add_column("Utilizzo Consigliato", style="dim")
+            for it in items:
+                t_items.add_row(
+                    f"#{it.get('rank', 1)}",
+                    str(it.get("name", "")),
+                    str(it.get("effect", "")),
+                    str(it.get("usage", "")),
+                )
+            self.console.print(t_items)
+
+        mem = get_recommended_support_memory(rec.all_cards)
+        if mem:
+            t_mem = Table(
+                title="🎞️ Support Memory Consigliata",
+                title_style="bold magenta",
+                border_style="magenta",
+            )
+            t_mem.add_column("Nome Memory", style="bold white")
+            t_mem.add_column("Durata", justify="center", style="bold cyan")
+            t_mem.add_column("Effetto Tattico", style="yellow")
+            t_mem.add_column("Condizione / Categoria", style="dim")
+            t_mem.add_row(
+                str(mem.get("name", "")),
+                str(mem.get("duration", "")),
+                str(mem.get("effect", "")),
+                str(mem.get("condition", "")),
+            )
+            self.console.print(t_mem)
 
         # 3. Top-5 Substitutes Shortlist with Dokkan Colors
         if shortlist:
@@ -1692,36 +1818,13 @@ class TerminalCLI:
         )
 
     def _ai_configure_model(self):
-        """Allows switching strictly between the 3 universal models: deepseek-r1:7b, qwen2.5:7b, qwen2.5:3b."""
-        import questionary
-
+        """Configures the single universal model qwen3.5:4b."""
         from dokkan_eza_link_farmer.ai.client import DokkanAIClient
         from dokkan_eza_link_farmer.ai.models import AIConfig, SupportedAIModel
         from dokkan_eza_link_farmer.ai.team_builder import TeamBuilder
 
-        choice = questionary.select(
-            t("cli.ai.switch_family_prompt"),
-            choices=[
-                questionary.Choice(
-                    title="1. deepseek-r1:7b  (DeepSeek-R1 CoT Reasoning - Consigliato PC & Mac)",
-                    value=SupportedAIModel.DEEPSEEK_R1_7B.value,
-                ),
-                questionary.Choice(
-                    title="2. qwen2.5:7b      (Qwen 2.5 Diretto, veloce e strutturato - PC & Mac)",
-                    value=SupportedAIModel.QWEN_2_5_7B.value,
-                ),
-                questionary.Choice(
-                    title="3. qwen2.5:3b      (Qwen 2.5 Ultraleggero per MacBook Air & Batteria)",
-                    value=SupportedAIModel.QWEN_2_5_3B.value,
-                ),
-            ],
-        ).ask()
-
-        if not choice:
-            return
-
-        model_name = SupportedAIModel.normalize(choice)
-        family = "deepseek_r1" if model_name == SupportedAIModel.DEEPSEEK_R1_7B.value else "qwen"
+        model_name = SupportedAIModel.QWEN_3_5_4B.value
+        family = "qwen"
 
         if "ai" not in self.engine.config:
             self.engine.config["ai"] = {}
@@ -1737,7 +1840,7 @@ class TerminalCLI:
             dokkandb=self.engine.dokkandb, ai_client=self.engine.ai_client
         )
 
-        self.console.print(f"[bold green]{t('cli.ai.config_saved')}[/bold green]")
+        self.console.print(f"[bold green]✓ Modello AI impostato su {model_name} (Ottimizzato 100% GPU / zero-latency)[/bold green]")
         self._ai_show_status()
 
     def run(self):
