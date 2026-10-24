@@ -39,6 +39,22 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MEMORY_CACHE_PATH = os.path.expanduser("~/.dokkan-farmer/cache/ai_memory.json")
 
+# Global flag to control extended memory telemetry tracking.
+# In standard farming runs (EZA 999, Link Leveling), extended frame recording in CombatTelemetryTracker is frozen.
+_DEBUG_TELEMETRY: bool = False
+
+
+def is_debug_telemetry_enabled() -> bool:
+    """Returns True if extended telemetry observation is enabled."""
+    return _DEBUG_TELEMETRY or (os.environ.get("DEBUG_TELEMETRY", "").lower() in ("1", "true", "yes"))
+
+
+def set_debug_telemetry(enabled: bool) -> None:
+    """Explicitly enables or disables extended telemetry observation."""
+    global _DEBUG_TELEMETRY
+    _DEBUG_TELEMETRY = enabled
+
+
 
 @dataclass
 class TurnSnapshot:
@@ -895,12 +911,16 @@ class CombatTelemetryTracker:
         ring_buffer: CombatRingBuffer | None = None,
         episodic_memory: EpisodicMemory | None = None,
         capacity: int = 4,
+        debug_telemetry: bool | None = None,
     ) -> None:
-        self.ring_buffer = ring_buffer or CombatRingBuffer(capacity=capacity)
+        self.ring_buffer = ring_buffer if ring_buffer is not None else CombatRingBuffer(capacity=capacity)
         self.episodic_memory = episodic_memory or EpisodicMemory()
         self.current_turn: int = 1
         self.current_phase_index: int = 1
         self.last_snapshot: TurnSnapshot | None = None
+        self._debug_telemetry = (
+            debug_telemetry if debug_telemetry is not None else is_debug_telemetry_enabled()
+        )
 
     def start_turn(
         self,
@@ -951,7 +971,9 @@ class CombatTelemetryTracker:
             is_lethal=is_lethal,
             action_type=action_type,
         )
-        self.record_frame(frame)
+        # In standard mode, skip adding non-lethal observation frames if debug telemetry is disabled
+        if self._debug_telemetry or is_debug_telemetry_enabled() or is_lethal:
+            self.record_frame(frame)
         return frame
 
     def handle_defeat(
@@ -1031,4 +1053,6 @@ __all__ = [
     "TurnSnapshot",
     "attribute_culprit",
     "create_failure_report",
+    "is_debug_telemetry_enabled",
+    "set_debug_telemetry",
 ]

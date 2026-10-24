@@ -168,6 +168,15 @@ class BotEngine:
             self.emit_log(t("tasks.task_already_running"))
             return False
 
+        from dokkan_eza_link_farmer.ai.telemetry import (
+            is_debug_telemetry_enabled,
+            set_debug_telemetry,
+        )
+
+        # In standard farming runs, freeze high-memory extended telemetry unless explicitly enabled
+        if not is_debug_telemetry_enabled():
+            set_debug_telemetry(False)
+
         self.current_task = EZAFarmTask(
             self.adb,
             self.vision,
@@ -194,6 +203,15 @@ class BotEngine:
         if self.is_task_running():
             self.emit_log(t("tasks.task_already_running"))
             return False
+
+        from dokkan_eza_link_farmer.ai.telemetry import (
+            is_debug_telemetry_enabled,
+            set_debug_telemetry,
+        )
+
+        # In standard farming runs, freeze high-memory extended telemetry unless explicitly enabled
+        if not is_debug_telemetry_enabled():
+            set_debug_telemetry(False)
 
         self.current_task = LinkLevelFarmTask(
             self.adb,
@@ -223,6 +241,15 @@ class BotEngine:
         if self.is_task_running():
             self.emit_log(t("tasks.task_already_running"))
             return False
+
+        from dokkan_eza_link_farmer.ai.telemetry import (
+            is_debug_telemetry_enabled,
+            set_debug_telemetry,
+        )
+
+        # In standard farming runs, freeze high-memory extended telemetry unless explicitly enabled
+        if not is_debug_telemetry_enabled():
+            set_debug_telemetry(False)
 
         self.current_task = StageFarmTask(
             self.adb,

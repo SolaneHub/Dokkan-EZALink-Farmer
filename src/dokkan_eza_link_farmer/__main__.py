@@ -18,7 +18,6 @@ from dokkan_eza_link_farmer.core.bot_engine import BotEngine
 from dokkan_eza_link_farmer.core.i18n import set_language
 from dokkan_eza_link_farmer.core.system_tools import SingleInstanceMutex
 from dokkan_eza_link_farmer.core.updater import check_for_updates
-from dokkan_eza_link_farmer.integrations.discord_bot import run_discord_bot
 from dokkan_eza_link_farmer.ui.cli import TerminalCLI
 
 
@@ -36,6 +35,12 @@ def main() -> None:
         help="Set interface language ('en' for English, 'it' for Italian)",
     )
     parser.add_argument("--discord", action="store_true", help="Launch Discord Bot interface")
+    parser.add_argument(
+        "--debug-telemetry",
+        action="store_true",
+        default=False,
+        help="Enable extended memory telemetry tracking (disabled by default in farming)",
+    )
     parser.add_argument(
         "--scrcpy", action="store_true", help="Launch scrcpy zero-latency screen mirroring"
     )
@@ -199,6 +204,11 @@ def main() -> None:
             print(f" - {d['serial']} ({d['status']}) [{d['model']}]")
         return
 
+    if getattr(args, "debug_telemetry", False):
+        from dokkan_eza_link_farmer.ai.telemetry import set_debug_telemetry
+
+        set_debug_telemetry(True)
+
     # Acquire single-instance mutex for active game automation / interface runs
     mutex = SingleInstanceMutex()
     if not mutex.acquire():
@@ -212,6 +222,8 @@ def main() -> None:
                 engine.connect()
             except Exception as e:
                 print(f"[Warning] Device connection: {e}")
+            from dokkan_eza_link_farmer.integrations.discord_bot import run_discord_bot
+
             run_discord_bot(engine)
             return
 

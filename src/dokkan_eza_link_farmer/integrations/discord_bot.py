@@ -44,32 +44,38 @@ class DiscordBotClient(commands.Bot):
         return user_id in allowed
 
     def _on_bot_log(self, msg: str):
-        if self._main_channel and self._loop:
-            # Relay notification if message indicates a significant state change
-            keywords = [
-                "complet",
-                "Stamina",
-                "Game Over",
-                "Error",
-                "Errore",
-                "Start",
-                "Inizio",
-                "trovat",
-                "found",
-                "victory",
-            ]
-            if any(k.lower() in msg.lower() for k in keywords):
-                asyncio.run_coroutine_threadsafe(
-                    self._main_channel.send(f"🤖 **[Dokkan-EZALink]** {msg}"), self._loop
-                )
+        try:
+            if self._main_channel and self._loop and self._loop.is_running():
+                # Relay notification if message indicates a significant state change
+                keywords = [
+                    "complet",
+                    "Stamina",
+                    "Game Over",
+                    "Error",
+                    "Errore",
+                    "Start",
+                    "Inizio",
+                    "trovat",
+                    "found",
+                    "victory",
+                ]
+                if any(k.lower() in msg.lower() for k in keywords):
+                    asyncio.run_coroutine_threadsafe(
+                        self._main_channel.send(f"🤖 **[Dokkan-EZALink]** {msg}"), self._loop
+                    )
+        except Exception:
+            pass
 
     def _on_bot_run(self, curr: int, tot: Any):
-        if self._main_channel and self._loop:
-            tot_str = str(tot) if tot and tot > 0 else "∞"
-            asyncio.run_coroutine_threadsafe(
-                self._main_channel.send(f"📊 **Progress:** `{curr}/{tot_str}` runs completed."),
-                self._loop,
-            )
+        try:
+            if self._main_channel and self._loop and self._loop.is_running():
+                tot_str = str(tot) if tot and tot > 0 else "∞"
+                asyncio.run_coroutine_threadsafe(
+                    self._main_channel.send(f"📊 **Progress:** `{curr}/{tot_str}` runs completed."),
+                    self._loop,
+                )
+        except Exception:
+            pass
 
     async def on_ready(self):
         if self.user:
