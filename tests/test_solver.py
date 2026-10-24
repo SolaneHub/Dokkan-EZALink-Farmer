@@ -680,7 +680,7 @@ class TestBossGimmickOverrides:
         stacker_card = DokkanCard(
             id=7001,
             name="Fragile Slow Stacker",
-            element=1,  # TEQ
+            element=2,  # INT (neutral to AGL)
             super_attack="Raises DEF and causes supreme damage",
             passive_skill="ATK & DEF +100%",
         )
@@ -841,6 +841,60 @@ class TestBossGimmickOverrides:
         # Penalty for Rainbow Phase Vulnerability (-15.0)
         assert delta_fragile == pytest.approx(-15.0)
         assert any("Rainbow Phase Vulnerability" in p for p in penalties_fragile)
+
+    def test_multi_phase_all_battles_and_enemies_matchup(
+        self, solver: DokkanConstraintSolver
+    ) -> None:
+        # 3-phase stage: Phase 1 STR, Phase 2 INT, Phase 3 TEQ
+        stage = BossStage(
+            stage_id=20001,
+            event_id=200,
+            stage_name="Multi-Phase Gauntlet",
+            event_name="Challenge",
+            phases=[
+                BossPhase(phase_index=1, element=3, element_name="STR"),
+                BossPhase(phase_index=2, element=2, element_name="INT"),
+                BossPhase(phase_index=3, element=1, element_name="TEQ"),
+            ],
+        )
+
+        # PHY unit without guard or high DR:
+        # Phase 1 is STR -> Neutral
+        # Phase 2 is INT -> Neutral
+        # Phase 3 is TEQ -> Neutral
+        # Wait: against STR, PHY is neutral? Let's check: AGL(0) beats STR(3), STR(3) beats PHY(4), PHY(4) beats INT(2), INT(2) beats TEQ(1), TEQ(1) beats AGL(0).
+        # In Dokkan cyclic:
+        # PHY (element 4):
+        # vs STR (element 3): Disadvantage! (STR beats PHY)
+        # vs INT (element 2): Advantage! (PHY beats INT)
+        # vs TEQ (element 1): Neutral!
+        phy_fragile = DokkanCard(
+            id=9101,
+            name="PHY Glass Cannon",
+            element=4,  # PHY
+            passive_skill="ATK +200%",
+        )
+        delta_f, counters_f, pen_f = solver.evaluate_boss_gimmicks(phy_fragile, stage)
+        # Phase 1 STR is disadvantage without guard -> penalty -15.0
+        # Phase 2 INT is advantage -> bonus +3.0
+        # Net delta_f = -15.0 + 3.0 = -12.0
+        assert any("Type Disadvantage in Phase 1" in p for p in pen_f)
+        assert any("Type Advantage in Phase 2" in c for c in counters_f)
+        assert delta_f == pytest.approx(-12.0)
+
+        # PHY unit with unconditional guard:
+        phy_guarded = DokkanCard(
+            id=9102,
+            name="PHY Omnitank",
+            element=4,  # PHY
+            passive_skill="Guards all attacks; ATK & DEF +150%",
+        )
+        delta_g, counters_g, pen_g = solver.evaluate_boss_gimmicks(phy_guarded, stage)
+        # Disadvantage in Phase 1 mitigated by Guard/DR, no penalty
+        assert not any("Type Disadvantage in Phase 1" in p for p in pen_g)
+        assert any("Type Disadvantage in Phase 1 mitigated by Guard/DR" in c for c in counters_g)
+        assert any("Type Advantage in Phase 2" in c for c in counters_g)
+        assert delta_g == pytest.approx(3.0)
 
 
 class TestSameNameBaseFormPenalty:

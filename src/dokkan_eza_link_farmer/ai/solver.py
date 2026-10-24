@@ -24,7 +24,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from dokkan_eza_link_farmer.ai.models import (
-    BossPhase,
     BossStage,
     DokkanCard,
 )
@@ -377,7 +376,6 @@ class DokkanConstraintSolver:
         if not boss_stage or not boss_stage.phases:
             return delta, counters, penalties
 
-        final_phase: BossPhase = boss_stage.phases[-1]
         num_phases = len(boss_stage.phases)
         cancels_dodge_any = any(p.cancels_dodge for p in boss_stage.phases)
         has_aoe_any = any(p.has_aoe for p in boss_stage.phases)
@@ -385,55 +383,105 @@ class DokkanConstraintSolver:
         is_multi_battle = getattr(boss_stage, "is_multi_battle", False)
         total_battles = getattr(boss_stage, "total_battles", 1)
 
-        # 1. Type Matchup against Final Phase Element (skipped if final phase is rainbow with all 5 types)
-        if getattr(final_phase, "is_rainbow", False):
-            matchup = 0
-        else:
-            matchup = self.check_type_matchup(card.element, final_phase.element)
-        if matchup > 0:
-            delta += 5.0
-            counters.append(
-                f"Type Advantage against Boss Final Phase ({final_phase.element_name}) (+5.0)"
-            )
-        elif matchup < 0:
-            # Check if type disadvantage is mitigated by Guard or DR >= 60%
-            is_long_event = num_phases >= 3 or is_multi_battle
-            dr_pct = (
-                card.permanent_damage_reduction_percent
-                if is_long_event
-                else card.damage_reduction_percent
-            )
-            if (
-                card.base_form
-                and card.base_form.passive_tags
-                and (not is_long_event or card.base_form.passive_tags.is_dr_permanent)
-                and card.base_form.passive_tags.dr_base_percent > dr_pct
-            ):
-                dr_pct = card.base_form.passive_tags.dr_base_percent
+        # 1. Type Matchup against All Phases and Battles
+        is_long_event = num_phases >= 3 or is_multi_battle
+        card_dr = (
+            card.permanent_damage_reduction_percent
+            if is_long_event
+            else card.damage_reduction_percent
+        )
+        if (
+            card.base_form
+            and card.base_form.passive_tags
+            and (not is_long_event or card.base_form.passive_tags.is_dr_permanent)
+            and card.base_form.passive_tags.dr_base_percent > card_dr
+        ):
+            card_dr = card.base_form.passive_tags.dr_base_percent
 
-            has_guard = (
-                (card.is_guard_permanent and card.is_guard_unconditional)
-                if is_long_event
-                else (
-                    card.has_guard
-                    or (
-                        card.base_form is not None
-                        and card.base_form.passive_tags is not None
-                        and card.base_form.passive_tags.has_guard
-                    )
+        card_has_guard = (
+            (card.is_guard_permanent and card.is_guard_unconditional)
+            if is_long_event
+            else (
+                card.has_guard
+                or (
+                    card.base_form is not None
+                    and card.base_form.passive_tags is not None
+                    and card.base_form.passive_tags.has_guard
                 )
             )
+        )
 
-            if has_guard or dr_pct >= 60:
-                delta -= 5.0
-                counters.append(
-                    f"Type Disadvantage against Final Phase mitigated by Guard/DR ({dr_pct}%)"
-                )
+        for p_idx, p in enumerate(boss_stage.phases):
+            is_final_phase = p_idx == num_phases - 1
+            if getattr(p, "is_rainbow", False):
+                continue
+
+            phase_num = getattr(p, "phase_index", p_idx + 1)
+            is_multi = getattr(p, "is_multi_enemy", False) and bool(getattr(p, "bosses", None))
+            enemies: list[tuple[str, int, str]] = []
+            if is_multi:
+                for b in p.bosses:
+                    enemy_elem = getattr(b, "element", 0)
+                    enemy_name = getattr(b, "name", "Enemy")
+                    enemy_type = getattr(b, "type_name", "") or str(enemy_elem)
+                    enemies.append((enemy_name, enemy_elem, enemy_type))
             else:
-                delta -= 25.0
-                penalties.append(
-                    f"Severe Type Disadvantage against Boss Final Phase ({final_phase.element_name})"
-                )
+                p_elem = getattr(p, "element", 0)
+                p_name = getattr(p, "element_name", "") or str(p_elem)
+                enemies.append((p_name, p_elem, p_name))
+
+            dr_threshold = 50 if is_multi else 60
+            is_mitigated = card_has_guard or (card_dr >= dr_threshold)
+
+            phase_disadv_applied = False
+            phase_adv_applied = False
+            for enemy_name, enemy_elem, enemy_type in enemies:
+                matchup = self.check_type_matchup(card.element, enemy_elem)
+                if matchup < 0:
+                    if is_mitigated:
+                        if is_final_phase:
+                            if not phase_disadv_applied:
+                                delta -= 5.0
+                                counters.append(
+                                    f"Type Disadvantage against Final Phase mitigated by Guard/DR ({card_dr}%)"
+                                    if card_dr >= dr_threshold and not card_has_guard
+                                    else "Type Disadvantage against Final Phase mitigated by Guard/DR"
+                                )
+                                phase_disadv_applied = True
+                        else:
+                            if not phase_disadv_applied:
+                                counters.append(
+                                    f"Type Disadvantage in Phase {phase_num} mitigated by Guard/DR"
+                                )
+                                phase_disadv_applied = True
+                    else:
+                        if is_final_phase:
+                            if not phase_disadv_applied:
+                                delta -= 25.0
+                                penalties.append(
+                                    f"Severe Type Disadvantage against Boss Final Phase ({p.element_name})"
+                                )
+                                phase_disadv_applied = True
+                        else:
+                            if not phase_disadv_applied:
+                                delta -= 15.0
+                                penalties.append(
+                                    f"Type Disadvantage in Phase {phase_num} (vs {enemy_name} [{enemy_type}]) without Guard/DR"
+                                )
+                                phase_disadv_applied = True
+                elif matchup > 0 and not phase_adv_applied:
+                    if is_final_phase:
+                        delta += 5.0
+                        counters.append(
+                            f"Type Advantage against Boss Final Phase ({p.element_name}) (+5.0)"
+                        )
+                        phase_adv_applied = True
+                    else:
+                        delta += 3.0
+                        counters.append(
+                            f"Type Advantage in Phase {phase_num} ({p.element_name or enemy_type}) (+3.0)"
+                        )
+                        phase_adv_applied = True
 
         # 2. Cancels Dodge Gimmick
         if cancels_dodge_any:
@@ -736,8 +784,14 @@ class DokkanConstraintSolver:
                         t_score += 8.0
 
                     if boss_stage and boss_stage.phases:
-                        final_elem = boss_stage.phases[-1].element
-                        if self.check_type_matchup(form.element, final_elem) > 0:
+                        num_p = len(boss_stage.phases)
+                        # For min_turn >= 4: check intermediate and final phases (from phase 2 onwards, or all if 1-2 phases)
+                        target_phases = boss_stage.phases[1:] if num_p >= 3 else boss_stage.phases
+                        if any(
+                            self.check_type_matchup(form.element, getattr(p, "element", 0)) > 0
+                            for p in target_phases
+                            if not getattr(p, "is_rainbow", False)
+                        ):
                             t_score += 12.0
 
                     score += t_score * 0.5
@@ -750,6 +804,21 @@ class DokkanConstraintSolver:
                         t_score += 6.0
                     if form.passive_tags.dr_base_percent >= 40:
                         t_score += 6.0
+
+                    if boss_stage and boss_stage.phases:
+                        # For min_turn <= 3: check early phases
+                        target_phases = (
+                            boss_stage.phases[:2]
+                            if len(boss_stage.phases) >= 2
+                            else boss_stage.phases
+                        )
+                        if any(
+                            self.check_type_matchup(form.element, getattr(p, "element", 0)) > 0
+                            for p in target_phases
+                            if not getattr(p, "is_rainbow", False)
+                        ):
+                            t_score += 8.0
+
                     score += t_score * 0.3
 
         # 7. Same-Name Base Form Penalty (form_index: 0)
@@ -1042,9 +1111,33 @@ class DokkanConstraintSolver:
 
                     type_bonus = 0.0
                     if boss_stage and boss_stage.phases:
-                        final_elem = boss_stage.phases[-1].element
-                        # Elemental type_bonus capped so it cannot override tier differences
-                        type_bonus = self.check_type_matchup(c.element, final_elem) * 10.0
+                        num_p = len(boss_stage.phases)
+                        weighted_sum = 0.0
+                        total_weight = 0.0
+                        for p_idx, p in enumerate(boss_stage.phases):
+                            if getattr(p, "is_rainbow", False):
+                                continue
+                            weight = 2.0 if (p_idx == num_p - 1 and num_p > 1) else 1.0
+                            is_multi = getattr(p, "is_multi_enemy", False) and bool(
+                                getattr(p, "bosses", None)
+                            )
+                            if is_multi:
+                                p_matchups = [
+                                    self.check_type_matchup(c.element, getattr(b, "element", 0))
+                                    for b in p.bosses
+                                ]
+                                p_matchup = sum(p_matchups) / len(p_matchups) if p_matchups else 0.0
+                            else:
+                                p_matchup = float(
+                                    self.check_type_matchup(c.element, getattr(p, "element", 0))
+                                )
+                            weighted_sum += p_matchup * weight
+                            total_weight += weight
+
+                        if total_weight > 0:
+                            avg_matchup = weighted_sum / total_weight
+                            # Elemental type_bonus capped between -10.0 and +10.0 so it cannot override tier differences
+                            type_bonus = max(-10.0, min(10.0, avg_matchup * 10.0))
 
                     boost_200_bonus = (30.0 if count_200 >= 5 else 0.0) + min(count_200, 300) * 0.1
                     priority_bonus = 0.0
