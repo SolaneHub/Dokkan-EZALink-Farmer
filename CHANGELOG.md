@@ -1,5 +1,17 @@
 # Changelog
 
+## [v1.5.0] - 2026-10-24
+
+### Added
+- **Multi-Enemy & Rainbow Boss Phase Architecture**: Native recognition of multi-target battles, rainbow phases (all 5 typings), and cumulative actions-per-turn calculation.
+- **Tactical AoE & Debuff Heuristics**: Constraint solver weighting prioritizing AoE units (+25.0) and ATK debuffers (+15.0) in stages lacking status immunities.
+- **Official DokkanDB Category Leader Integration**: Live parsing of category leader boost percentages (up to 220%) to enrich candidate viability.
+- **Complementary Friend Leader & Rotation Consistency**: Intelligent friend selection algorithm guaranteeing core 200% titular units remain in primary rotations.
+- **Rich Terminal Stage Briefing**: Auto-expanding tables for multi-enemy stage mechanics and distinct Friend Leader badge labeling.
+
+### Changed
+- **Boss Phase Typing Semantics**: Replaced placeholder typing with descriptive labels ('Rainbow (5 Enemies: All 5 Types)' or 'Multi-Type (N Enemies)').
+
 ## [v1.4.0] - 2026-10-24
 
 ### Added
