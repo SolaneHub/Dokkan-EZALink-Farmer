@@ -57,6 +57,9 @@ jobs:
           uv run pyright
 
       - name: Pre-Release Full Test Suite Matrix
+        env:
+          OMP_NUM_THREADS: "1"
+          OPENBLAS_NUM_THREADS: "1"
         run: uv run python scripts/test_runner.py full
 
       - name: Build Standalone Distribution

@@ -52,6 +52,21 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BOX_SCAN_LOG_PATH = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "box_scan.log")
 _normalize_title = normalize_title
+_SHARED_OCR: Any = None
+
+
+def get_shared_ocr() -> Any:
+    """Returns a shared, cached RapidOCR engine instance to prevent thread pool leaks."""
+    global _SHARED_OCR
+    if _SHARED_OCR is None:
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+
+            _SHARED_OCR = RapidOCR()
+            logger.info("RapidOCR engine initialized successfully.")
+        except Exception as e:
+            logger.error("Failed to initialize RapidOCR engine: %s", e)
+    return _SHARED_OCR
 
 
 class BoxScannerTask(BaseTask):
@@ -104,14 +119,7 @@ class BoxScannerTask(BaseTask):
         self._session_seen_ids: set[int] = set()
         self._recently_scanned_positions: dict[int, tuple[float, float]] = {}
 
-        self._ocr = None
-        try:
-            from rapidocr_onnxruntime import RapidOCR
-
-            self._ocr = RapidOCR()
-            logger.info("RapidOCR engine initialized successfully.")
-        except Exception as e:
-            logger.error(f"Failed to initialize RapidOCR engine: {e}")
+        self._ocr = get_shared_ocr()
 
         self._catalog: list[dict[str, Any]] = []
         self._subname_index: dict[str, Any] = {}
