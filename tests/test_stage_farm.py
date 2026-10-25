@@ -228,19 +228,22 @@ class TestStageFarm(unittest.TestCase):
     def test_translations_exist(self):
         from dokkan_eza_link_farmer.core.i18n import set_language
 
-        for lang in ("en", "it"):
-            set_language(lang)
-            self.assertNotEqual(t("cli.help.desc_stage"), "cli.help.desc_stage")
-            self.assertNotEqual(
-                t("tasks.stage_farm.stamina_depleted"), "tasks.stage_farm.stamina_depleted"
-            )
-            self.assertNotEqual(
-                t("tasks.stage_farm.started", runs="∞", boost="AUTO", diff="AUTO"),
-                "tasks.stage_farm.started",
-            )
-            self.assertNotEqual(
-                t("cli.stage.summary", runs="∞", boost="ON", diff="SUPER"), "cli.stage.summary"
-            )
+        try:
+            for lang in ("en", "it"):
+                set_language(lang)
+                self.assertNotEqual(t("cli.help.desc_stage"), "cli.help.desc_stage")
+                self.assertNotEqual(
+                    t("tasks.stage_farm.stamina_depleted"), "tasks.stage_farm.stamina_depleted"
+                )
+                self.assertNotEqual(
+                    t("tasks.stage_farm.started", runs="∞", boost="AUTO", diff="AUTO"),
+                    "tasks.stage_farm.started",
+                )
+                self.assertNotEqual(
+                    t("cli.stage.summary", runs="∞", boost="ON", diff="SUPER"), "cli.stage.summary"
+                )
+        finally:
+            set_language("en")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from dokkan_eza_link_farmer.automation.tasks.link_level_farm import LinkLevelFarmTask
 from dokkan_eza_link_farmer.automation.vision import Vision
 from tests.harness.fake_adb import FakeADBClient
@@ -23,6 +25,8 @@ from tests.harness.fake_vision_frames import (
     create_synthetic_team_confirm_frame,
     create_synthetic_team_edit_frame,
 )
+
+pytestmark = pytest.mark.slow
 
 
 def test_link_level_farm_blackbox_two_runs_with_deck_rebuild() -> None:

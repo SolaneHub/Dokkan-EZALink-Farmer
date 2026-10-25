@@ -28,6 +28,7 @@ SLOW_MODULE_NAMES = {
     "test_link_leveling",
     "test_stage_farm",
     "test_box_scanner",
+    "test_box_scanner_integration",
     "test_team_formation",
     "test_endgame_runner",
 }

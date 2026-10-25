@@ -3,6 +3,7 @@ import sys
 import unittest
 
 import numpy as np
+import pytest
 
 # Add project root to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -12,6 +13,8 @@ from dokkan_eza_link_farmer.automation.tasks.link_level_farm import LinkLevelFar
 from dokkan_eza_link_farmer.automation.vision import Vision
 from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
 from tests.harness.fake_dokkandb import FakeDokkanDBClient
+
+pytestmark = pytest.mark.slow
 
 
 class TestLinkLeveling(unittest.TestCase):

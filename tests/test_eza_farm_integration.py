@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from dokkan_eza_link_farmer.automation.tasks.eza_farm import EZAFarmTask
 from dokkan_eza_link_farmer.automation.vision import Vision
 from tests.harness.fake_adb import FakeADBClient
@@ -20,6 +22,8 @@ from tests.harness.fake_vision_frames import (
     create_synthetic_results_frame,
     create_synthetic_team_confirm_frame,
 )
+
+pytestmark = pytest.mark.slow
 
 
 def test_eza_farm_blackbox_progression_loop() -> None:
