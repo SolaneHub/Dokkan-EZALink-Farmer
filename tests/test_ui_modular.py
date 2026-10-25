@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import io
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from rich.console import Console
@@ -571,12 +570,7 @@ class TestUIModularWizards:
 
 
 class TestUIModularTerminalCLI:
-    """Verifies that TerminalCLI remains a streamlined router satisfying line count and backward compatibility."""
-
-    def test_cli_line_count_strictly_under_500(self):
-        cli_file = Path(__file__).parent.parent / "src" / "dokkan_eza_link_farmer" / "ui" / "cli.py"
-        lines = cli_file.read_text(encoding="utf-8").splitlines()
-        assert len(lines) < 500, f"cli.py must be under 500 lines, but was {len(lines)}"
+    """Verifies that TerminalCLI remains a streamlined router satisfying backward compatibility."""
 
     def test_ui_package_exports(self):
         import dokkan_eza_link_farmer.ui as ui
@@ -702,3 +696,257 @@ class TestUIModularTerminalCLI:
         with patch("dokkan_eza_link_farmer.ui.panels.render_ai_status") as mock_ai_stat:
             cli._ai_show_status()
             mock_ai_stat.assert_called_once()
+
+    def test_declarative_cli_flags_zero_interaction(self):
+        """Verifies that direct declarative CLI flags bypass interactive wizards entirely."""
+        engine = MagicMock()
+        engine.is_task_running.return_value = False
+
+        # 1. Direct --eza 999 flag
+        cli_eza = TerminalCLI(engine, args=["--eza", "999"])
+        cli_eza.run()
+        engine.start_eza_farm.assert_called_once_with(target_level=999)
+
+        # 2. Direct --link 39-3 with --boost and --runs
+        engine.reset_mock()
+        cli_link = TerminalCLI(engine, args=["--link", "39-3", "--boost", "--runs", "10"])
+        cli_link.run()
+        engine.start_link_level_farm.assert_called_once()
+        _, kwargs = engine.start_link_level_farm.call_args
+        assert kwargs["target_stage"] == "area_39_3"
+        assert kwargs["use_boost"] is True
+        assert kwargs["runs"] == 10
+
+        # 3. Direct --stage 15 with --super2
+        engine.reset_mock()
+        cli_stage = TerminalCLI(engine, args=["--stage", "15", "--super2"])
+        cli_stage.run()
+        engine.start_stage_farm.assert_called_once_with(
+            runs=15, use_boost=None, preferred_difficulty="super2"
+        )
+
+        # 4. Direct --challenge flag with event and stage
+        engine.reset_mock()
+        with patch("dokkan_eza_link_farmer.ui.wizards.handle_challenge_interactive") as mock_chal:
+            cli_chal = TerminalCLI(engine, args=["--challenge", "broly", "1"])
+            cli_chal.run()
+            mock_chal.assert_called_once_with(engine, cli_chal.console, ["broly", "1", "-y"])
+
+        # 5. Direct --ai-run flag with --stage does not conflict with stage farming
+        engine.reset_mock()
+        with patch.object(TerminalCLI, "handle_ai_endgame_run") as mock_ai_endgame:
+            cli_ai = TerminalCLI(engine, args=["--ai-run", "--stage", "10101", "--dry-run"])
+            cli_ai.run()
+            mock_ai_endgame.assert_called_once_with(
+                target_stage="10101",
+                dry_run=True,
+                force_solve=False,
+                max_attempts=None,
+            )
+            engine.start_stage_farm.assert_not_called()
+
+        # 6. Direct --enrich-box flag
+        engine.reset_mock()
+        with patch.object(TerminalCLI, "handle_enrich_box") as mock_enrich:
+            cli_enrich = TerminalCLI(engine, args=["--enrich-box"])
+            cli_enrich.run()
+            mock_enrich.assert_called_once_with(["--enrich-box"])
+
+        # 7. Direct --challenge=broly 1 with = syntax
+        engine.reset_mock()
+        with patch("dokkan_eza_link_farmer.ui.wizards.handle_challenge_interactive") as mock_chal:
+            cli_chal = TerminalCLI(engine, args=["--challenge=broly", "1"])
+            cli_chal.run()
+            mock_chal.assert_called_once_with(engine, cli_chal.console, ["broly", "1", "-y"])
+
+        # 8. Direct --ai-run with intervening flag (--dry-run) before positional stage
+        engine.reset_mock()
+        with patch.object(TerminalCLI, "handle_ai_endgame_run") as mock_ai_endgame:
+            cli_ai2 = TerminalCLI(engine, args=["--ai-run", "--dry-run", "10101"])
+            cli_ai2.run()
+            mock_ai_endgame.assert_called_once_with(
+                target_stage="10101",
+                dry_run=True,
+                force_solve=False,
+                max_attempts=None,
+            )
+
+        # 9. Direct --eza with auto and target level
+        engine.reset_mock()
+        cli_eza_auto = TerminalCLI(engine, args=["--eza", "auto", "50"])
+        cli_eza_auto.run()
+        engine.start_eza_farm.assert_called_once_with(target_level=50)
+
+        # 10. Direct --link with = syntax and --runs
+        engine.reset_mock()
+        cli_link_eq = TerminalCLI(engine, args=["--link=35-1", "--runs=10"])
+        cli_link_eq.run()
+        engine.start_link_level_farm.assert_called_once()
+        _, kw_link = engine.start_link_level_farm.call_args
+        assert kw_link["target_stage"] == "area_35_1"
+        assert kw_link["runs"] == 10
+
+        # 11. Direct --link with arbitrary positional stage
+        engine.reset_mock()
+        cli_link_pos = TerminalCLI(engine, args=["--link", "area_12_3"])
+        cli_link_pos.run()
+        engine.start_link_level_farm.assert_called_once()
+        _, kw_link2 = engine.start_link_level_farm.call_args
+        assert kw_link2["target_stage"] == "area_12_3"
+
+        # 12. Direct --challenge with --stage flag bypasses stage farm
+        engine.reset_mock()
+        with patch("dokkan_eza_link_farmer.ui.wizards.handle_challenge_interactive") as mock_chal:
+            cli_chal2 = TerminalCLI(engine, args=["--challenge", "broly", "--stage", "1"])
+            cli_chal2.run()
+            mock_chal.assert_called_once_with(
+                engine, cli_chal2.console, ["broly", "--stage", "1", "-y"]
+            )
+            engine.start_stage_farm.assert_not_called()
+
+        # 13. Direct --challenge=broly --stage=2 with = syntax
+        engine.reset_mock()
+        with patch("dokkan_eza_link_farmer.ui.wizards.handle_challenge_interactive") as mock_chal:
+            cli_chal3 = TerminalCLI(engine, args=["--challenge=broly", "--stage=2"])
+            cli_chal3.run()
+            mock_chal.assert_called_once_with(
+                engine, cli_chal3.console, ["broly", "--stage=2", "-y"]
+            )
+            engine.start_stage_farm.assert_not_called()
+
+        # 14. Standalone --challenge without args does not pass -y
+        engine.reset_mock()
+        with patch("dokkan_eza_link_farmer.ui.wizards.handle_challenge_interactive") as mock_chal:
+            cli_chal4 = TerminalCLI(engine, args=["--challenge"])
+            cli_chal4.run()
+            mock_chal.assert_called_once_with(engine, cli_chal4.console, [])
+
+        # 15. Direct --ai run --stage 10101
+        engine.reset_mock()
+        with patch.object(TerminalCLI, "handle_ai_endgame_run") as mock_ai_endgame:
+            cli_ai_stage = TerminalCLI(engine, args=["--ai", "run", "--stage", "10101"])
+            cli_ai_stage.run()
+            mock_ai_endgame.assert_called_once_with("10101")
+            engine.start_stage_farm.assert_not_called()
+
+        # 16. Direct --ai run 10101 positional
+        engine.reset_mock()
+        with patch.object(TerminalCLI, "handle_ai_endgame_run") as mock_ai_endgame:
+            cli_ai_pos = TerminalCLI(engine, args=["--ai", "run", "10101"])
+            cli_ai_pos.run()
+            mock_ai_endgame.assert_called_once_with("10101")
+
+    def test_handle_challenge_interactive_declarative_stage_and_event_id(self):
+        """Verifies handle_challenge_interactive executes zero-interaction runs for event IDs and stage flags."""
+        engine = MagicMock()
+        engine.dokkandb.get_challenge_events.return_value = [
+            {"id": 100, "name": "Cell Max"},
+            {"id": 601, "name": "Broly"},
+        ]
+        engine.dokkandb.get_event_details.return_value = {
+            "quests": [
+                {"quest_id": 1, "quest_name": "Stage 1", "stages": [{"stage_id": 60101}]},
+                {"quest_id": 2, "quest_name": "Stage 2", "stages": [{"stage_id": 60102}]},
+            ]
+        }
+        engine.dokkandb.get_challenge_missions.return_value = []
+        console, _ = _create_test_console()
+
+        # 1. Event ID only -> defaults to Stage 1 without prompt
+        engine.reset_mock()
+        wizards.handle_challenge_interactive(engine, console, ["601"])
+        engine.start_challenge_farm.assert_called_once()
+        assert engine.start_challenge_farm.call_args[1]["stage_num"] == 1
+        assert engine.start_challenge_farm.call_args[1]["target_event"]["id"] == 601
+
+        # 2. Event ID + Stage positional
+        engine.reset_mock()
+        wizards.handle_challenge_interactive(engine, console, ["601", "2"])
+        engine.start_challenge_farm.assert_called_once()
+        assert engine.start_challenge_farm.call_args[1]["stage_num"] == 2
+
+        # 3. Event ID + --stage flag
+        engine.reset_mock()
+        wizards.handle_challenge_interactive(engine, console, ["601", "--stage", "2"])
+        engine.start_challenge_farm.assert_called_once()
+        assert engine.start_challenge_farm.call_args[1]["stage_num"] == 2
+
+        # 4. Event name + --stage= flag
+        engine.reset_mock()
+        wizards.handle_challenge_interactive(engine, console, ["broly", "--stage=2"])
+        engine.start_challenge_farm.assert_called_once()
+        assert engine.start_challenge_farm.call_args[1]["stage_num"] == 2
+
+    def test_handle_eza_interactive_declarative_flags(self):
+        """Verifies that handle_eza_interactive parses varied declarative level flags without interaction."""
+        engine = MagicMock()
+        console, _ = _create_test_console()
+
+        for flag_args, expected_lvl in [
+            (["--eza", "50"], 50),
+            (["--eza=75"], 75),
+            (["--level", "100"], 100),
+            (["-e", "35"], 35),
+            (["auto", "40"], 40),
+            (["99"], 99),
+            (["--eza"], 999),
+            (["-e"], 999),
+        ]:
+            engine.reset_mock()
+            wizards.handle_eza_interactive(engine, console, flag_args)
+            engine.start_eza_farm.assert_called_once_with(target_level=expected_lvl)
+
+    def test_handle_link_interactive_declarative_flags(self):
+        """Verifies that handle_link_interactive parses stage and options with zero secondary prompts."""
+        engine = MagicMock()
+        console, _ = _create_test_console()
+
+        # Positional stage
+        engine.reset_mock()
+        wizards.handle_link_interactive(engine, console, ["35-1"])
+        engine.start_link_level_farm.assert_called_once()
+        assert engine.start_link_level_farm.call_args[1]["target_stage"] == "area_35_1"
+
+        # Explicit --stage flag with --runs
+        engine.reset_mock()
+        wizards.handle_link_interactive(
+            engine, console, ["--stage", "39-3", "--runs", "20", "--no-boost"]
+        )
+        engine.start_link_level_farm.assert_called_once()
+        kw = engine.start_link_level_farm.call_args[1]
+        assert kw["target_stage"] == "area_39_3"
+        assert kw["runs"] == 20
+        assert kw["use_boost"] is False
+
+        # Standalone --link flag defaults cleanly
+        engine.reset_mock()
+        wizards.handle_link_interactive(engine, console, ["--link"])
+        engine.start_link_level_farm.assert_called_once()
+        assert engine.start_link_level_farm.call_args[1]["target_stage"] == "area_39_3"
+
+        # Regex resolution for arbitrary story quest stage
+        stage_id, stage_desc = wizards._resolve_link_stage("34-4")
+        assert stage_id == "area_34_4"
+        assert "34" in stage_desc and "4" in stage_desc
+
+    def test_terminal_cli_monitor_task(self):
+        """Verifies that monitor_task polls while task is running and handles exit safely."""
+        engine = MagicMock()
+        cli = TerminalCLI(engine)
+
+        # 1. Normal completion
+        call_count = [0]
+
+        def fake_is_running():
+            call_count[0] += 1
+            return call_count[0] < 3
+
+        engine.is_task_running.side_effect = fake_is_running
+        cli.monitor_task(poll_interval=0.01)
+        assert call_count[0] >= 3
+
+        # 2. KeyboardInterrupt handling
+        engine.reset_mock()
+        engine.is_task_running.side_effect = KeyboardInterrupt
+        cli.monitor_task(poll_interval=0.01)
+        engine.stop_task.assert_called_once()

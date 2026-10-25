@@ -66,11 +66,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--link",
-        type=int,
+        type=str,
         nargs="?",
-        const=-1,
+        const="",
         default=None,
-        help="Directly start Link Level farming (optional: N runs, default: until stamina depleted)",
+        help="Directly start Link Level farming (optional: stage or runs, default: until stamina depleted)",
     )
     parser.add_argument(
         "--stage",
@@ -241,17 +241,28 @@ def main() -> None:
         # Direct task execution flags (EZA or Link Level)
         if args.eza is not None:
             engine.connect()
-            engine.start_eza_farm(target_level=args.eza)
             cli = TerminalCLI(engine)
-            cli.run()
+            cli.handle_eza_interactive([str(args.eza)])
+            if engine.is_task_running():
+                cli.monitor_task()
             return
 
         if args.link is not None:
             engine.connect()
-            runs = args.link if args.link > 0 else None
-            engine.start_link_level_farm(runs=runs, use_boost=args.boost)
             cli = TerminalCLI(engine)
-            cli.run()
+            link_args: list[str] = []
+            link_val = str(args.link).strip()
+            if link_val and link_val != "-1":
+                link_args.append(link_val)
+            if args.stage:
+                link_args.extend(["--stage", str(args.stage).strip()])
+            if args.boost is True:
+                link_args.append("--boost")
+            elif args.boost is False:
+                link_args.append("--no-boost")
+            cli.handle_link_interactive(link_args if link_args else ["39-3"])
+            if engine.is_task_running():
+                cli.monitor_task()
             return
 
         cmd = (args.subcommand or "").lower()
@@ -302,24 +313,28 @@ def main() -> None:
             )
             return
 
-        if args.stage is not None and cmd not in ("ai-run", "ai_run", "endgame", "ai-endgame"):
-            engine.connect()
-            runs = int(args.stage) if str(args.stage).isdigit() and int(args.stage) > 0 else None
-            engine.start_stage_farm(runs=runs, use_boost=args.boost)
-            cli = TerminalCLI(engine)
-            cli.run()
-            return
-
         if cmd in ("challenge", "redzone", "smb") or args.challenge is not None:
             try:
                 engine.connect()
             except Exception as e:
                 print(f"[Warning] Device connection: {e}")
             cli = TerminalCLI(engine)
-            sub_args = args.subcommand_args or ([args.challenge] if args.challenge else [])
+            sub_args = (
+                list(args.subcommand_args)
+                if args.subcommand_args
+                else ([args.challenge] if args.challenge else [])
+            )
+            if (
+                args.stage
+                and "--stage" not in sub_args
+                and not any(a.startswith("--stage=") for a in sub_args)
+            ):
+                sub_args.extend(["--stage", str(args.stage).strip()])
+            if sub_args and "-y" not in sub_args and "--yes" not in sub_args:
+                sub_args.append("-y")
             cli.handle_challenge_interactive(sub_args)
             if engine.is_task_running():
-                cli.run()
+                cli.monitor_task()
             return
 
         if cmd in ("scan-box", "box-scan", "scan") or args.scan_box:
@@ -328,15 +343,49 @@ def main() -> None:
             except Exception as e:
                 print(f"[Warning] Device connection: {e}")
             cli = TerminalCLI(engine)
-            cli.handle_box_scan_interactive(args.subcommand_args, log_file=args.log_file)
+            scan_args = list(args.subcommand_args) if args.subcommand_args else ["--scan-box"]
+            cli.handle_box_scan_interactive(scan_args, log_file=args.log_file)
             if engine.is_task_running():
-                cli.run()
+                cli.monitor_task()
             return
 
         if cmd in ("ai", "team") or args.ai is not None:
             cli = TerminalCLI(engine)
-            sub_args = args.subcommand_args or ([args.ai] if args.ai else [])
+            sub_args = (
+                list(args.subcommand_args)
+                if args.subcommand_args
+                else ([args.ai] if args.ai else [])
+            )
+            if (
+                args.stage
+                and "--stage" not in sub_args
+                and not any(a.startswith("--stage=") for a in sub_args)
+            ):
+                sub_args.extend(["--stage", str(args.stage).strip()])
             cli.handle_ai_interactive(sub_args)
+            return
+
+        if args.stage is not None and cmd not in (
+            "ai-run",
+            "ai_run",
+            "endgame",
+            "ai-endgame",
+            "challenge",
+            "redzone",
+            "smb",
+            "ai",
+            "team",
+        ):
+            engine.connect()
+            cli = TerminalCLI(engine)
+            stage_args = [str(args.stage).strip()]
+            if args.boost is True:
+                stage_args.append("--boost")
+            elif args.boost is False:
+                stage_args.append("--no-boost")
+            cli.handle_stage_farm_interactive(stage_args)
+            if engine.is_task_running():
+                cli.monitor_task()
             return
 
         if cmd == "eza":
@@ -347,7 +396,7 @@ def main() -> None:
             cli = TerminalCLI(engine)
             cli.handle_eza_interactive(args.subcommand_args)
             if engine.is_task_running():
-                cli.run()
+                cli.monitor_task()
             return
 
         if cmd == "link":
@@ -358,7 +407,7 @@ def main() -> None:
             cli = TerminalCLI(engine)
             cli.handle_link_interactive(args.subcommand_args)
             if engine.is_task_running():
-                cli.run()
+                cli.monitor_task()
             return
 
         if cmd in ("stage", "farm", "repeat", "clear", "farm-stage"):
@@ -374,7 +423,7 @@ def main() -> None:
                 sub_args.append("--boost" if args.boost else "--no-boost")
             cli.handle_stage_farm_interactive(sub_args)
             if engine.is_task_running():
-                cli.run()
+                cli.monitor_task()
             return
 
         # Default: Interactive Terminal CLI
