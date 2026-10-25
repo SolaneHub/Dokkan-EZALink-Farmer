@@ -47,6 +47,11 @@ class VirtualClock:
             self._current_time += dur
             self._sleep_history.append(dur)
 
+    async def async_sleep(self, delay: float = 0.0, result: Any = None) -> Any:
+        """Advances virtual time instantly by `delay` without awaiting real-time delay."""
+        self.sleep(delay)
+        return result
+
     def advance(self, seconds: float) -> float:
         """Manually advances simulated time by `seconds` and returns the new time."""
         dur = max(0.0, float(seconds))
@@ -61,15 +66,16 @@ class VirtualClock:
             return sum(self._sleep_history)
 
     def start(self) -> VirtualClock:
-        """Applies monkeypatches to `time.time`, `time.monotonic`, and `time.sleep`."""
+        """Applies monkeypatches to `time.time`, `time.monotonic`, `time.sleep`, and `asyncio.sleep`."""
         if self._patches:
             return self
 
         p_time = patch("time.time", side_effect=self.time)
         p_monotonic = patch("time.monotonic", side_effect=self.monotonic)
         p_sleep = patch("time.sleep", side_effect=self.sleep)
+        p_asyncio_sleep = patch("asyncio.sleep", side_effect=self.async_sleep)
 
-        self._patches = [p_time, p_monotonic, p_sleep]
+        self._patches = [p_time, p_monotonic, p_sleep, p_asyncio_sleep]
         for p in self._patches:
             p.start()
         return self

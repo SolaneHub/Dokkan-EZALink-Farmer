@@ -28,14 +28,17 @@ def run_tests(mode: str, extra_args: list[str] | None = None) -> int:
 
     extra = extra_args or []
     if mode == "fast":
-        args = ["-m", "fast", "-q", *extra]
-        print("[TEST-RUNNER] Running Fast Feedback Test Suite (target < 3s)...")
-    else:
-        args = [*extra]
+        args = ["-m", "not slow", "-q", *extra]
+        print("[TEST-RUNNER] Running Fast Feedback Test Suite (target < 10s)...")
+    elif mode == "slow":
+        args = ["-m", "slow", "-v", *extra]
+        print("[TEST-RUNNER] Running Slow Pre-Release Test Suite...")
+    else:  # full
+        args = ["-v", *extra]
         print("[TEST-RUNNER] Running Full Test Matrix (pre-release)...")
 
     # Determine command to run pytest:
-    # In uv / venv environments, use sys.executable -m pytest if available, else uv run pytest
+    # In uv / venv environments, use uv run pytest if available, else sys.executable -m pytest
     env = os.environ.copy()
     if shutil.which("uv"):
         cmd = ["uv", "run", "pytest", *args]
@@ -57,7 +60,7 @@ def run_tests(mode: str, extra_args: list[str] | None = None) -> int:
         exit_code = 0
 
     print(f"\n[TEST-RUNNER] Completed in {elapsed:.2f}s (Exit code: {exit_code})")
-    if mode == "fast" and elapsed > 4.0:
+    if mode == "fast" and elapsed > 10.0:
         print("[TEST-RUNNER] Warning: Fast feedback suite exceeded threshold.")
 
     return exit_code
@@ -69,10 +72,10 @@ def main() -> None:
     )
     parser.add_argument(
         "mode",
-        choices=["fast", "full"],
+        choices=["fast", "slow", "full"],
         nargs="?",
         default="fast",
-        help="Test granularity: 'fast' for rapid dev feedback (<3s) or 'full' for complete test matrix.",
+        help="Test granularity: 'fast' for rapid dev feedback (<10s), 'slow' for slow pre-release matrix, or 'full' for complete test matrix.",
     )
     args, unknown = parser.parse_known_args()
     code = run_tests(args.mode, extra_args=unknown)

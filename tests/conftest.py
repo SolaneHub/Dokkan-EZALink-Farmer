@@ -27,6 +27,7 @@ SLOW_MODULE_NAMES = {
     "test_link_level_integration",
     "test_link_leveling",
     "test_stage_farm",
+    "test_stage_farm_integration",
     "test_box_scanner",
     "test_box_scanner_integration",
     "test_team_formation",
@@ -35,58 +36,74 @@ SLOW_MODULE_NAMES = {
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Classifies tests dynamically as fast or slow based on module file name if not already marked."""
+    """Classifies tests dynamically: any test in tests/e2e/ or slow modules/marks belongs to 'slow'."""
     _ = config
     slow_mark = pytest.mark.slow
-    fast_mark = pytest.mark.fast
 
     for item in items:
-        # If test already has fast or slow mark, do not overwrite
+        # Check if already marked as slow
         item_marks = {m.name for m in item.iter_markers()}
-        if "slow" in item_marks or "fast" in item_marks:
+        if "slow" in item_marks:
             continue
 
         file_path = getattr(item, "path", None)
+        fspath_str = ""
         if file_path is not None:
             stem = file_path.stem
+            fspath_str = str(file_path).replace("\\", "/")
         elif hasattr(item, "fspath") and item.fspath:
-            stem = Path(str(item.fspath)).stem
+            p = Path(str(item.fspath))
+            stem = p.stem
+            fspath_str = str(p).replace("\\", "/")
         else:
             stem = ""
 
-        if stem in SLOW_MODULE_NAMES:
+        # Any test in tests/e2e/ or in designated slow modules belongs to slow
+        if (
+            "/tests/e2e/" in fspath_str
+            or fspath_str.endswith("/tests/e2e")
+            or stem in SLOW_MODULE_NAMES
+        ):
             item.add_marker(slow_mark)
-        else:
-            item.add_marker(fast_mark)
 
 
-@pytest.fixture
-def fake_dokkandb() -> FakeDokkanDBClient:
-    """Provides a fresh in-memory FakeDokkanDBClient instance."""
+@pytest.fixture(scope="session")
+def session_fake_dokkandb() -> FakeDokkanDBClient:
+    """Provides a session-scoped in-memory FakeDokkanDBClient instance for the static catalog."""
     return FakeDokkanDBClient()
 
 
+@pytest.fixture
+def fake_dokkandb(session_fake_dokkandb: FakeDokkanDBClient) -> FakeDokkanDBClient:
+    """Provides an in-memory FakeDokkanDBClient instance backed by the session static catalog."""
+    return session_fake_dokkandb
+
+
 @pytest.fixture(autouse=True)
-def auto_virtual_clock_for_automation(
+def auto_virtual_clock_suite(
     request: pytest.FixtureRequest,
 ) -> Generator[VirtualClock | None, None, None]:
-    """Automatically applies VirtualClock to automation test suites to eliminate real-time sleep delays."""
-    test_module = getattr(request.node, "module", None)
-    module_name = getattr(test_module, "__name__", "")
-    if "test_stage_farm" in module_name or "stage_farm" in str(getattr(request.node, "fspath", "")):
-        clock = VirtualClock()
-        with clock:
-            yield clock
-    else:
+    """Automatically applies VirtualClock across the entire suite unless marked with 'real_time'."""
+    if request.node.get_closest_marker("real_time"):
         yield None
+        return
 
-
-@pytest.fixture
-def virtual_clock() -> Generator[VirtualClock, None, None]:
-    """Provides a running VirtualClock fixture for time simulation."""
     clock = VirtualClock()
     with clock:
         yield clock
+
+
+@pytest.fixture
+def virtual_clock(
+    auto_virtual_clock_suite: VirtualClock | None,
+) -> Generator[VirtualClock, None, None]:
+    """Provides the active VirtualClock fixture for time simulation."""
+    if auto_virtual_clock_suite is not None:
+        yield auto_virtual_clock_suite
+    else:
+        clock = VirtualClock()
+        with clock:
+            yield clock
 
 
 @pytest.fixture
