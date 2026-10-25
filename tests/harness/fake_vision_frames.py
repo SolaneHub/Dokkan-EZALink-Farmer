@@ -266,14 +266,19 @@ def create_synthetic_results_frame(
     width: int = 1080,
     height: int = 2400,
     has_attempt_again: bool = True,
+    has_close_button: bool = False,
     vision: Any = None,
 ) -> np.ndarray:
     """Creates a synthetic victory / stage clear results screen.
 
-    Pastes Attempt Again button (left) and OK button (right), or centered OK button.
+    Pastes Attempt Again button (left) and OK button (right), centered OK button, or Close button.
     """
     frame = np.zeros((height, width, 3), dtype=np.uint8)
-    if has_attempt_again:
+    if has_close_button:
+        close_x = int(width * 0.50)
+        close_y = int(height * 0.85)
+        paste_template_on_canvas(frame, "button_close", close_x, close_y, vision=vision)
+    elif has_attempt_again:
         again_x = int(width * 0.28)
         again_y = int(height * 0.85)
         paste_template_on_canvas(frame, "button_attempt_again", again_x, again_y, vision=vision)

@@ -66,6 +66,21 @@ def fake_dokkandb() -> FakeDokkanDBClient:
     return FakeDokkanDBClient()
 
 
+@pytest.fixture(autouse=True)
+def auto_virtual_clock_for_automation(
+    request: pytest.FixtureRequest,
+) -> Generator[VirtualClock | None, None, None]:
+    """Automatically applies VirtualClock to automation test suites to eliminate real-time sleep delays."""
+    test_module = getattr(request.node, "module", None)
+    module_name = getattr(test_module, "__name__", "")
+    if "test_stage_farm" in module_name or "stage_farm" in str(getattr(request.node, "fspath", "")):
+        clock = VirtualClock()
+        with clock:
+            yield clock
+    else:
+        yield None
+
+
 @pytest.fixture
 def virtual_clock() -> Generator[VirtualClock, None, None]:
     """Provides a running VirtualClock fixture for time simulation."""
