@@ -23,22 +23,24 @@ from tests.harness.fake_clock import VirtualClock
 from tests.harness.fake_dokkandb import FakeDokkanDBClient, fake_dokkandb_requests_get
 
 SLOW_MODULE_NAMES = {
-    "test_eza_farm_integration",
-    "test_link_level_integration",
-    "test_link_leveling",
-    "test_stage_farm",
-    "test_stage_farm_integration",
-    "test_box_scanner",
-    "test_box_scanner_integration",
-    "test_team_formation",
+    "test_e2e_farming_slow",
+    "test_e2e_scanner_slow",
     "test_endgame_runner",
 }
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Classifies tests dynamically: any test in tests/e2e/ or slow modules/marks belongs to 'slow'."""
-    _ = config
+    """Classifies tests dynamically: any test in tests/e2e/ or slow modules/marks belongs to 'slow'.
+
+    If the user explicitly specifies tests/e2e as an argument and did not specify an explicit custom -m,
+    we clear the default 'not slow' markexpr so the slow suite can be run directly with `pytest tests/e2e`.
+    """
     slow_mark = pytest.mark.slow
+    markexpr = getattr(config.option, "markexpr", "")
+
+    # When tests/e2e is explicitly requested and default addopts ('not slow') is active, allow tests/e2e to run
+    if any("tests/e2e" in str(arg).replace("\\", "/") for arg in config.args) and markexpr == "not slow":
+        config.option.markexpr = ""
 
     for item in items:
         # Check if already marked as slow
