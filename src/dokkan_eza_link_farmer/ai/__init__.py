@@ -10,29 +10,36 @@ from dokkan_eza_link_farmer.ai.boss_catalog import (
     list_boss_stages,
     load_boss_catalog,
 )
+from dokkan_eza_link_farmer.ai.boss_models import (
+    TYPE_NAMES,
+    BossEnemy,
+    BossMechanic,
+    BossPhase,
+    BossStage,
+    ChallengeStageInfo,
+    infer_boss_categories_from_name,
+)
+from dokkan_eza_link_farmer.ai.card_models import (
+    CardForm,
+    DokkanCard,
+    LeaderSkillSpec,
+    PassiveTags,
+    SATags,
+    TeamRecommendation,
+    parse_dodge_percentage_from_text,
+)
 from dokkan_eza_link_farmer.ai.client import DokkanAIClient
+from dokkan_eza_link_farmer.ai.llm_advisor import (
+    AIConfig,
+    AIModelFamily,
+    FailureReport,
+    SupportedAIModel,
+)
 from dokkan_eza_link_farmer.ai.mission_solver import (
     ChallengeMission,
     MissionBatch,
     MissionBundler,
     MissionParser,
-)
-from dokkan_eza_link_farmer.ai.models import (
-    AIConfig,
-    AIModelFamily,
-    BossEnemy,
-    BossMechanic,
-    BossPhase,
-    BossStage,
-    CardForm,
-    DokkanCard,
-    FailureReport,
-    LeaderSkillSpec,
-    PassiveTags,
-    RotationPair,
-    SATags,
-    SupportedAIModel,
-    TeamRecommendation,
 )
 from dokkan_eza_link_farmer.ai.solver import (
     CandidateEvaluation,
@@ -45,6 +52,7 @@ from dokkan_eza_link_farmer.ai.syncer import (
     parse_passive_tags,
     parse_sa_tags,
 )
+from dokkan_eza_link_farmer.ai.synergy import RotationPair
 from dokkan_eza_link_farmer.ai.team_builder import TeamBuilder
 from dokkan_eza_link_farmer.automation.tasks.box_scanner import (
     DEFAULT_BOX_SCAN_LOG_PATH,
@@ -139,6 +147,7 @@ __all__ = [
     "CandidateEvaluation",
     "CardForm",
     "ChallengeMission",
+    "ChallengeStageInfo",
     "CombatFrame",
     "CombatRingBuffer",
     "CombatTelemetryTracker",
@@ -167,6 +176,7 @@ __all__ = [
     "RotationPair",
     "SATags",
     "SupportedAIModel",
+    "TYPE_NAMES",
     "TeamBuilder",
     "TeamRecommendation",
     "TurnSnapshot",
@@ -176,9 +186,11 @@ __all__ = [
     "endgame",
     "get_boss_catalog_path",
     "get_boss_stage",
+    "infer_boss_categories_from_name",
     "is_debug_telemetry_enabled",
     "list_boss_stages",
     "load_boss_catalog",
+    "parse_dodge_percentage_from_text",
     "parse_leader_spec",
     "parse_passive_tags",
     "parse_sa_tags",
