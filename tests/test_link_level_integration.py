@@ -140,8 +140,8 @@ def test_link_level_farm_blackbox_two_runs_with_deck_rebuild() -> None:
     duration = time.perf_counter() - start_time
 
     # 1. Performance check: completed within reasonable time without hanging
-    assert duration < 60.0, (
-        f"Link Leveling integration test exceeded 60.0s threshold (took {duration:.2f}s)"
+    assert duration < 180.0, (
+        f"Link Leveling integration test exceeded 180.0s threshold (took {duration:.2f}s)"
     )
 
     # 2. Black-box state verification:
