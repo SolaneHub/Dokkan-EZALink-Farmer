@@ -2,91 +2,62 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
 
+from dokkan_eza_link_farmer.ai.llm_advisor import (
+    AIConfig,
+    AIModelFamily,
+    FailureReport,
+    SupportedAIModel,
+)
+from dokkan_eza_link_farmer.ai.synergy import RotationPair
 
-class AIModelFamily(str, Enum):
-    """Supported AI model architectures."""
-
-    QWEN = "qwen"
-
-
-class SupportedAIModel(str, Enum):
-    """The single officially supported universal model for local AI inference (RTX 3060 Ti / 8GB VRAM)."""
-
-    QWEN_3_5_4B = "qwen3.5:4b"
-
-    @classmethod
-    def list_models(cls) -> list[str]:
-        return [m.value for m in cls]
-
-    @classmethod
-    def normalize(cls, _raw: str = "") -> str:
-        """Strictly validates and maps input to the supported qwen3.5:4b model."""
-        return cls.QWEN_3_5_4B.value
+TYPE_NAMES: dict[int, str] = {0: "AGL", 1: "TEQ", 2: "INT", 3: "STR", 4: "PHY"}
 
 
-@dataclass
-class AIConfig:
-    """Settings for local Ollama AI inference engine."""
+def parse_dodge_percentage_from_text(text: str) -> int:
+    """Extracts dodge / evasion percentage from passive skill or SA description."""
+    clean_text = " ".join(text.lower().split())
+    if not any(k in clean_text for k in ("evad", "evasion", "dodge")):
+        return 0
 
-    enabled: bool = False
-    provider: str = "ollama"
-    base_url: str = "http://localhost:11434/v1"
-    model_family: AIModelFamily = AIModelFamily.QWEN
-    model_name: str = SupportedAIModel.QWEN_3_5_4B.value
-    api_key: str = "ollama"
-    temperature: float = 0.6
-    timeout_seconds: float = 75.0
-    max_attempts: int = 10
-    confidence_threshold: float = 0.72
+    named = 0
+    if (
+        "guaranteed to evade" in clean_text
+        or "guaranteed to dodge" in clean_text
+        or "guaranteed evasion" in clean_text
+    ):
+        named = 100
+    elif "great chance" in clean_text:
+        named = 70
+    elif "high chance" in clean_text:
+        named = 50
+    elif "medium chance" in clean_text or "med chance" in clean_text:
+        named = 30
+    elif "rare chance" in clean_text:
+        named = 20
+    elif re.search(
+        r"(?<!chance of )(?<!chance to )(?<!great )(?<!high )(?<!medium )(?<!rare )(?<!med )(?<!guaranteed to )evades?\s+enemy(?:'s)?\s+attacks?",
+        clean_text,
+    ):
+        named = 100
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "enabled": self.enabled,
-            "provider": self.provider,
-            "base_url": self.base_url,
-            "model_family": self.model_family.value,
-            "model_name": self.model_name,
-            "api_key": self.api_key,
-            "temperature": self.temperature,
-            "timeout_seconds": self.timeout_seconds,
-            "max_attempts": self.max_attempts,
-            "confidence_threshold": self.confidence_threshold,
-            "ollama_url": self.base_url.replace("/v1", ""),
-            "ollama_model": self.model_name,
-        }
+    explicit_vals: list[int] = []
+    for m in re.finditer(r"(\d+)%\s*chance of evading", clean_text):
+        explicit_vals.append(int(m.group(1)))
+    for m in re.finditer(
+        r"(?:chance of evading|chance to evade|chance of dodging|chance to dodge|evasion rate)\s*(?:enemy(?:'s)?\s+attacks?)?\s*(?:\([^)]*\))?\s*(?:rate\s*)?\+?\s*(\d+)%",
+        clean_text,
+    ):
+        explicit_vals.append(int(m.group(1)))
+    for m in re.finditer(r"\(up to (\d+)%\)", clean_text):
+        explicit_vals.append(int(m.group(1)))
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> AIConfig:
-        if not data:
-            return cls()
+    valid_explicit = [v for v in explicit_vals if v <= 100]
+    if valid_explicit:
+        return max(named, max(valid_explicit))
 
-        raw_model = str(
-            data.get("ollama_model") or data.get("model_name") or SupportedAIModel.QWEN_3_5_4B.value
-        )
-        model_name = SupportedAIModel.normalize(raw_model)
-        family = AIModelFamily.QWEN
-
-        raw_url = str(data.get("ollama_url") or data.get("base_url") or "http://localhost:11434/v1")
-        if raw_url and not raw_url.endswith("/v1") and not raw_url.endswith("/v1/"):
-            base_url = f"{raw_url.rstrip('/')}/v1"
-        else:
-            base_url = raw_url
-
-        return cls(
-            enabled=bool(data.get("enabled", False)),
-            provider=str(data.get("provider", "ollama")),
-            base_url=base_url,
-            model_family=family,
-            model_name=model_name,
-            api_key=str(data.get("api_key", "ollama")),
-            temperature=float(data.get("temperature", 0.6)),
-            timeout_seconds=float(data.get("timeout_seconds", 75.0)),
-            max_attempts=int(data.get("max_attempts", 10)),
-            confidence_threshold=float(data.get("confidence_threshold", 0.72)),
-        )
+    return named if named > 0 else 30
 
 
 @dataclass
@@ -345,8 +316,7 @@ class DokkanCard:
 
         # Resolve element_name and card_class if not populated
         if not self.element_name:
-            type_names = {0: "AGL", 1: "TEQ", 2: "INT", 3: "STR", 4: "PHY"}
-            base_type = type_names.get(self.element % 10, "AGL")
+            base_type = TYPE_NAMES.get(self.element % 10, "AGL")
             if self.element >= 20:
                 self.element_name = f"Extreme {base_type}"
                 self.card_class = "Extreme"
@@ -357,6 +327,15 @@ class DokkanCard:
                 self.element_name = base_type
                 self.card_class = "Super" if self.element >= 10 else ""
 
+        if self.links is None:
+            self.links = []
+        if self.link_ids is None:
+            self.link_ids = []
+        if self.categories is None:
+            self.categories = []
+        if self.category_ids is None:
+            self.category_ids = []
+
         # Default base_form if omitted
         if self.base_form is None:
             self.base_form = CardForm(
@@ -364,8 +343,8 @@ class DokkanCard:
                 form_index=0,
                 form_name=self.name,
                 element=self.element,
-                links=list(self.links),
-                link_ids=list(self.link_ids),
+                links=list(self.links or []),
+                link_ids=list(self.link_ids or []),
                 passive_skill_text=self.passive_skill,
                 super_attack_text=self.super_attack,
                 min_turn=1,
@@ -381,13 +360,6 @@ class DokkanCard:
 
     @property
     def element_color(self) -> str:
-        """Returns the Rich color string according to the card's typing in Dokkan Battle:
-        AGL -> bold cyan (blue)
-        TEQ -> bold green
-        INT -> bold magenta (purple)
-        STR -> bold red
-        PHY -> bold yellow (orange/gold)
-        """
         elem_name = (self.element_name or "").upper()
         if "AGL" in elem_name:
             return "bold cyan"
@@ -411,24 +383,20 @@ class DokkanCard:
 
     @property
     def type_tag(self) -> str:
-        """Returns short Dokkan type tag, e.g. 'AGL', 'TEQ', 'INT', 'STR', 'PHY'."""
         elem_name = (self.element_name or "").upper()
         for t in ("AGL", "TEQ", "INT", "STR", "PHY"):
             if t in elem_name:
                 return t
-        type_names = {0: "AGL", 1: "TEQ", 2: "INT", 3: "STR", 4: "PHY"}
-        return type_names.get(self.element % 10, "AGL")
+        return TYPE_NAMES.get(self.element % 10, "AGL")
 
     @property
     def dokkan_colored_name(self) -> str:
-        """Returns the card's name formatted with Dokkan element tag and Rich color styling."""
         type_prefix = f"[{self.element_name}] " if self.element_name else ""
         clean_name = self.full_name.replace("[", "(").replace("]", ")")
         color = self.element_color
         return f"[{color}]{type_prefix}{clean_name}[/{color}]"
 
     def rich_formatted_name(self, include_type: bool = True) -> Any:
-        """Returns a rich.text.Text object styled with the card's Dokkan type color."""
         from rich.text import Text
 
         prefix = f"[{self.element_name}] " if (include_type and self.element_name) else ""
@@ -560,43 +528,7 @@ class DokkanCard:
                 # Dodge
                 if any(k in line for k in ("evad", "evasion", "dodge")):
                     has_dodge = True
-                    line_named = 0
-                    if (
-                        "guaranteed to evade" in line
-                        or "guaranteed to dodge" in line
-                        or "guaranteed evasion" in line
-                    ):
-                        line_named = 100
-                    elif "great chance" in line:
-                        line_named = 70
-                    elif "high chance" in line:
-                        line_named = 50
-                    elif "medium chance" in line or "med chance" in line:
-                        line_named = 30
-                    elif "rare chance" in line:
-                        line_named = 20
-                    elif re.search(
-                        r"(?<!chance of )(?<!chance to )(?<!great )(?<!high )(?<!medium )(?<!rare )(?<!med )(?<!guaranteed to )evades?\s+enemy(?:'s)?\s+attacks?",
-                        line,
-                    ):
-                        line_named = 100
-
-                    explicit_vals: list[int] = []
-                    for m in re.finditer(r"(\d+)%\s*chance of evading", line):
-                        explicit_vals.append(int(m.group(1)))
-                    for m in re.finditer(
-                        r"(?:chance of evading|chance to evade|chance of dodging|chance to dodge|evasion rate)\s*(?:enemy(?:'s)?\s+attacks?)?\s*(?:\([^)]*\))?\s*(?:rate\s*)?\+?\s*(\d+)%",
-                        line,
-                    ):
-                        explicit_vals.append(int(m.group(1)))
-                    for m in re.finditer(r"\(up to (\d+)%\)", line):
-                        explicit_vals.append(int(m.group(1)))
-
-                    valid_explicit = [v for v in explicit_vals if v <= 100]
-                    if valid_explicit:
-                        line_val = max(line_named, max(valid_explicit))
-                    else:
-                        line_val = line_named if line_named > 0 else 30
+                    line_val = parse_dodge_percentage_from_text(line)
 
                     if line_timed:
                         if line_turns:
@@ -645,68 +577,56 @@ class DokkanCard:
 
     @property
     def permanent_damage_reduction_percent(self) -> int:
-        """Extracts unconditional/permanent damage reduction percentage not bound to turn limits."""
         return self._parse_defense_mechanics()["permanent_dr"]
 
     @property
     def is_dr_permanent(self) -> bool:
-        """Checks if the damage reduction does not expire after a turn limit."""
         return self._parse_defense_mechanics()["is_dr_permanent"]
 
     @property
     def dr_turns_limit(self) -> int | None:
-        """Shortest turn duration limit for damage reduction buffs (None if permanent)."""
         return self._parse_defense_mechanics()["dr_turns_limit"]
 
     @property
     def is_guard_permanent(self) -> bool:
-        """Checks if guard against all attacks does not expire after a turn limit."""
         return self._parse_defense_mechanics()["is_guard_permanent"]
 
     @property
     def is_guard_unconditional(self) -> bool:
-        """Checks if guard is active unconditionally at start of turn without sphere or HP prerequisites."""
         return self._parse_defense_mechanics()["is_guard_unconditional"]
 
     @property
     def guard_turns_limit(self) -> int | None:
-        """Turn duration limit for guard buffs (None if permanent)."""
         return self._parse_defense_mechanics()["guard_turns_limit"]
 
     @property
     def is_dodge_permanent(self) -> bool:
-        """Checks if dodge buffs do not expire after a turn limit."""
         return self._parse_defense_mechanics()["is_dodge_permanent"]
 
     @property
     def dodge_turns_limit(self) -> int | None:
-        """Turn duration limit for dodge buffs (None if permanent)."""
         return self._parse_defense_mechanics()["dodge_turns_limit"]
 
     @property
     def has_guard(self) -> bool:
-        """Checks if the card has guaranteed or conditional guard against all attacks."""
         if self.base_form and self.base_form.passive_tags.has_guard:
             return True
         return bool(self._parse_defense_mechanics()["has_guard"])
 
     @property
     def has_damage_reduction(self) -> bool:
-        """Checks if the card reduces damage received."""
         if self.base_form and self.base_form.passive_tags.dr_base_percent > 0:
             return True
         return bool(self._parse_defense_mechanics()["max_dr"] > 0)
 
     @property
     def damage_reduction_percent(self) -> int:
-        """Extracts the highest damage reduction percentage from passive or super attack."""
         if self.base_form and self.base_form.passive_tags.dr_base_percent > 0:
             return self.base_form.passive_tags.dr_base_percent
         return int(self._parse_defense_mechanics()["max_dr"])
 
     @property
     def has_dodge(self) -> bool:
-        """Checks if the card has evasion / dodge mechanics."""
         if self.base_form and self.base_form.passive_tags.dodge_chance_percent > 0:
             return True
         text = f"{self.passive_skill} {self.super_attack}".lower()
@@ -724,13 +644,6 @@ class DokkanCard:
 
     @property
     def dodge_chance_percent(self) -> int:
-        """Canonical evasion / dodge percentage with strict tiering:
-        Guaranteed: 100%
-        Great chance: 70%
-        High chance: 50%
-        Medium / med chance: 30%
-        Rare chance: 20%
-        """
         if (
             self.base_form
             and self.base_form.passive_tags
@@ -741,50 +654,10 @@ class DokkanCard:
         if not self.has_dodge:
             return 0
 
-        text = f"{self.passive_skill} {self.super_attack}".lower()
-        t_clean = " ".join(text.split())
-
-        named = 0
-        if (
-            "guaranteed to evade" in t_clean
-            or "guaranteed to dodge" in t_clean
-            or "guaranteed evasion" in t_clean
-        ):
-            named = 100
-        elif "great chance" in t_clean:
-            named = 70
-        elif "high chance" in t_clean:
-            named = 50
-        elif "medium chance" in t_clean or "med chance" in t_clean:
-            named = 30
-        elif "rare chance" in t_clean:
-            named = 20
-        elif re.search(
-            r"(?<!chance of )(?<!chance to )(?<!great )(?<!high )(?<!medium )(?<!rare )(?<!med )(?<!guaranteed to )evades?\s+enemy(?:'s)?\s+attacks?",
-            t_clean,
-        ):
-            named = 100
-
-        explicit_vals: list[int] = []
-        for m in re.finditer(r"(\d+)%\s*chance of evading", t_clean):
-            explicit_vals.append(int(m.group(1)))
-        for m in re.finditer(
-            r"(?:chance of evading|chance to evade|chance of dodging|chance to dodge|evasion rate)\s*(?:enemy(?:'s)?\s+attacks?)?\s*(?:\([^)]*\))?\s*(?:rate\s*)?\+?\s*(\d+)%",
-            t_clean,
-        ):
-            explicit_vals.append(int(m.group(1)))
-        for m in re.finditer(r"\(up to (\d+)%\)", t_clean):
-            explicit_vals.append(int(m.group(1)))
-
-        valid_explicit = [v for v in explicit_vals if v <= 100]
-        if valid_explicit:
-            return max(named, max(valid_explicit))
-
-        return named if named > 0 else 30
+        return parse_dodge_percentage_from_text(f"{self.passive_skill} {self.super_attack}")
 
     @property
     def has_stacking_def(self) -> bool:
-        """Checks if the card permanently stacks defense on Super Attack."""
         if self.base_form and self.base_form.sa_tags.stacks_def:
             return True
         sa = self.super_attack.lower()
@@ -800,7 +673,6 @@ class DokkanCard:
 
     @property
     def has_stacking_atk(self) -> bool:
-        """Checks if the card permanently stacks attack on Super Attack."""
         if self.base_form and self.base_form.sa_tags.stacks_atk:
             return True
         sa = self.super_attack.lower()
@@ -816,7 +688,6 @@ class DokkanCard:
 
     @property
     def has_revive(self) -> bool:
-        """Checks if the card features a Revival skill."""
         if self.base_form and self.base_form.passive_tags.has_revive:
             return True
         text = f"{self.passive_skill} {self.super_attack}".lower()
@@ -824,7 +695,6 @@ class DokkanCard:
 
     @property
     def has_standby(self) -> bool:
-        """Checks if the card features a Standby skill / mode."""
         if self.base_form and self.base_form.passive_tags.has_standby:
             return True
         text = f"{self.passive_skill} {self.super_attack}".lower()
@@ -832,13 +702,11 @@ class DokkanCard:
 
     @property
     def has_active_skill(self) -> bool:
-        """Checks if the card features an Active Skill."""
         text = f"{self.passive_skill} {self.super_attack}".lower()
         return "active skill" in text or "can be activated" in text or "ultimate attack" in text
 
     @property
     def has_domain(self) -> bool:
-        """Checks if the card features a Domain expansion effect."""
         if self.base_form and self.base_form.passive_tags.has_domain:
             return True
         text = f"{self.passive_skill} {self.super_attack}".lower()
@@ -846,7 +714,6 @@ class DokkanCard:
 
     @property
     def has_target_taunt(self) -> bool:
-        """Checks if the card features target redirection / taunt."""
         if self.base_form and self.base_form.passive_tags.has_taunt:
             return True
         text = f"{self.passive_skill} {self.super_attack}".lower()
@@ -859,7 +726,6 @@ class DokkanCard:
 
     @property
     def has_support(self) -> bool:
-        """Checks if the card provides ally Ki, ATK, or DEF support."""
         if self.base_form and self.base_form.passive_tags.has_support:
             return True
         text = self.passive_skill.lower()
@@ -880,7 +746,6 @@ class DokkanCard:
 
     @property
     def has_orb_changing(self) -> bool:
-        """Checks if the card changes Ki spheres."""
         if self.base_form and self.base_form.passive_tags.has_orb_changing:
             return True
         text = self.passive_skill.lower()
@@ -893,7 +758,6 @@ class DokkanCard:
 
     @property
     def has_additionals_or_crit(self) -> bool:
-        """Checks if the card launches additional attacks or performs critical hits."""
         text = f"{self.passive_skill} {self.super_attack}".lower()
         return (
             "additional super attack" in text
@@ -904,14 +768,12 @@ class DokkanCard:
 
     @property
     def is_slot1_tank(self) -> bool:
-        """Determines if the card possesses reliable defensive mechanics for Slot 1."""
         from dokkan_eza_link_farmer.ai.solver import DokkanConstraintSolver
 
         return DokkanConstraintSolver.is_slot1_viable(self)
 
     @property
     def has_aoe(self) -> bool:
-        """Checks if the card performs AoE attacks that hit all enemies simultaneously."""
         if self.base_form and self.base_form.sa_tags and self.base_form.sa_tags.is_aoe:
             return True
         text = f"{self.super_attack} {self.passive_skill}".lower()
@@ -920,13 +782,11 @@ class DokkanCard:
 
     @property
     def lowers_enemy_atk(self) -> bool:
-        """Checks if the card lowers or debuffs enemy ATK via Super Attack or passive skill."""
         text = f"{self.super_attack} {self.passive_skill}".lower()
         debuff_pattern = r"(?:greatly\s+lowers?\s+atk|massively\s+lowers?\s+atk|lowers?\s+atk|reduces?\s+enemy(?:'s)?\s+atk)"
         return bool(re.search(debuff_pattern, text))
 
     def get_tactical_form_timeline(self) -> list[dict[str, str]]:
-        """Returns structured timeline for Standby, Exchange, Switch, and Transformations."""
         events: list[dict[str, str]] = []
 
         # 1. Standby Skill
@@ -999,11 +859,6 @@ class DokkanCard:
         return events
 
     def evaluate_kit_power(self) -> tuple[float, dict[str, Any]]:
-        """
-        Evaluates individual card effects and kit mechanics (Priority 2):
-        - Passive, Active, Standby, Stacking, Guard, DR %, Dodge, Revive, Domain, Taunt, Support
-        Returns: (total_kit_score, breakdown_dict)
-        """
         def_score = 0.0
         breakdown: dict[str, Any] = {}
 
@@ -1133,11 +988,6 @@ class DokkanCard:
         return total_score, breakdown
 
     def is_covered_by_leader(self, leader: DokkanCard) -> tuple[bool, float, str]:
-        """
-        Evaluates whether the card is covered under the leader's Leader Skill (Priority 1).
-        Supports LeaderSkillSpec instant set check and falls back to regex matching.
-        Returns: (is_covered, percentage_multiplier, matched_info)
-        """
         # Fast path: check leader_spec if available
         if leader.leader_spec and (
             leader.leader_spec.main_category_ids
@@ -1160,8 +1010,6 @@ class DokkanCard:
                     )
                 return True, float(spec.base_boost_pct), f"{spec.base_boost_pct}% Leader Spec Match"
 
-            # Strict Dokkan Battle Rule: If not has_main, matching extra_category_ids alone gives 0%!
-            # Sub-elements / classes only provide fallback if sub_elements_classes is defined:
             if spec.sub_elements_classes and (
                 self.element in spec.sub_elements_classes
                 or (self.element % 10) in spec.sub_elements_classes
@@ -1237,9 +1085,8 @@ class DokkanCard:
             return True, pct, "Extreme Class Leader"
 
         # Case C: Mono-Type Leader
-        types_map = {0: "agl", 1: "teq", 2: "int", 3: "str", 4: "phy"}
         card_type_idx = self.element % 10
-        card_type_name = types_map.get(card_type_idx, "")
+        card_type_name = TYPE_NAMES.get(card_type_idx, "").lower()
 
         if card_type_name and f"{card_type_name} type" in lead_lower:
             pct = 130.0 if "130%" in lead_lower else (120.0 if "120%" in lead_lower else 100.0)
@@ -1248,7 +1095,6 @@ class DokkanCard:
         return False, 0.0, "No matching category or type on Leader Skill"
 
     def to_dict(self) -> dict[str, Any]:
-        """Serializes DokkanCard into a dictionary suitable for JSON storage."""
         return {
             "id": self.id,
             "name": self.name,
@@ -1285,8 +1131,11 @@ class DokkanCard:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> DokkanCard:
-        """Constructs a DokkanCard instance from serialized dictionary."""
+    def from_dict(cls, data: dict[str, Any] | Any) -> DokkanCard:
+        if isinstance(data, DokkanCard):
+            return data
+        if not isinstance(data, dict):
+            raise TypeError(f"Expected dict for DokkanCard.from_dict, got {type(data)}")
         cid = int(data.get("id") or data.get("card_id") or 0)
         leader_spec_data = data.get("leader_spec")
         leader_spec = LeaderSkillSpec.from_dict(leader_spec_data) if leader_spec_data else None
@@ -1333,11 +1182,6 @@ class DokkanCard:
         is_eza: bool | None = None,
         is_seza: bool | None = None,
     ) -> DokkanCard:
-        """
-        Parses a DokkanDB card dictionary into a DokkanCard object,
-        distinguishing pre-EZA vs EZA vs SEZA text based on awakening state.
-        """
-        # Detect available EZA and SEZA versions
         has_seza_data = bool(
             data.get("eza_passive_skill_description_pre")
             or data.get("passive_skills_rows_eza_pre")
@@ -1352,7 +1196,6 @@ class DokkanCard:
         if is_seza is not None:
             card_is_seza = bool(is_seza)
         elif is_eza is not None:
-            # If is_eza is explicitly provided without is_seza, do not auto-upgrade to SEZA
             card_is_seza = False
         else:
             card_is_seza = has_seza_data
@@ -1362,7 +1205,6 @@ class DokkanCard:
         else:
             card_is_eza = has_eza_data or card_is_seza
 
-        # Select leader skill, passive skill, and super attack according to EZA/SEZA state
         if card_is_seza and has_seza_data:
             leader = data.get("eza_leader_skill") or data.get("leader_skill") or ""
             passive_text = (
@@ -1375,7 +1217,6 @@ class DokkanCard:
             )
         elif card_is_eza and has_eza_data:
             if has_seza_data:
-                # If card has SEZA, regular EZA is stored in '_pre' fields
                 leader = (
                     data.get("eza_leader_skill_pre")
                     or data.get("eza_leader_skill")
@@ -1399,12 +1240,10 @@ class DokkanCard:
                 data.get("special_descriptions_eza") or data.get("special_descriptions") or []
             )
         else:
-            # Pre-EZA Base Form
             leader = data.get("leader_skill") or ""
             passive_text = data.get("passive_skill_description") or ""
             special_descs = data.get("special_descriptions") or []
 
-        # Fallback to row joining if description text is empty
         if not passive_text:
             if card_is_eza:
                 p_rows = (
@@ -1434,60 +1273,58 @@ class DokkanCard:
                 links.append(str(link_name).strip())
         link_ids = [lid for lid in (data.get("link_ids") or []) if lid is not None]
 
-        cid = int(data.get("id") or data.get("real_id") or 0)
+        try:
+            cid = int(data.get("id") or data.get("real_id") or 0)
+        except (ValueError, TypeError):
+            cid = 0
+
         thumb_id = str(cid)[:-1] + "0" if cid else "0"
         thumb_url = f"https://enaskhebnjtktdfszdcb.supabase.co/storage/v1/object/public/assets/character/thumb/card_{thumb_id}_thumb_folder/card_{thumb_id}_thumb.png"
+
+        try:
+            rarity = int(data.get("rarity") or 4)
+        except (ValueError, TypeError):
+            rarity = 4
+
+        try:
+            element = int(data.get("element") or 0)
+        except (ValueError, TypeError):
+            element = 0
+
+        def _safe_int_list(raw: Any) -> list[int]:
+            if not isinstance(raw, (list, tuple, set)):
+                return []
+            res: list[int] = []
+            for item in raw:
+                try:
+                    if item is not None:
+                        res.append(int(item))
+                except (ValueError, TypeError):
+                    continue
+            return res
+
+        category_ids = _safe_int_list(cat_ids)
+        parsed_link_ids = _safe_int_list(link_ids)
 
         return cls(
             id=cid,
             name=str(data.get("name") or "Unknown"),
             subname=str(data.get("subname") or ""),
-            rarity=int(data.get("rarity") or 4),
-            element=int(data.get("element") or 0),
+            rarity=rarity,
+            element=element,
             leader_skill=leader,
             passive_skill=passive_text,
             super_attack=special_text,
-            categories=categories,
-            category_ids=[int(c) for c in cat_ids if c is not None],
+            categories=categories if isinstance(categories, list) else [],
+            category_ids=category_ids,
             links=links,
-            link_ids=[int(lid) for lid in link_ids if lid is not None],
+            link_ids=parsed_link_ids,
             thumb_url=thumb_url,
             has_eza=bool(card_is_eza),
             is_eza=bool(card_is_eza),
             is_seza=bool(card_is_seza),
             is_rainbow=is_rainbow,
             potential_percent=100 if is_rainbow else 0,
-        )
-
-
-@dataclass
-class RotationPair:
-    """A pair of cards locked together in main rotation."""
-
-    slot1: DokkanCard
-    slot2: DokkanCard
-    shared_links: list[str]
-    shared_ki_links: list[str]
-    synergy_score: float
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serializes RotationPair into a dictionary for JSON persistence."""
-        return {
-            "slot1": self.slot1.to_dict(),
-            "slot2": self.slot2.to_dict(),
-            "shared_links": list(self.shared_links),
-            "shared_ki_links": list(self.shared_ki_links),
-            "synergy_score": self.synergy_score,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> RotationPair:
-        return cls(
-            slot1=DokkanCard.from_dict(data["slot1"]),
-            slot2=DokkanCard.from_dict(data["slot2"]),
-            shared_links=list(data.get("shared_links", [])),
-            shared_ki_links=list(data.get("shared_ki_links", [])),
-            synergy_score=float(data.get("synergy_score", 0.0)),
         )
 
 
@@ -1504,13 +1341,12 @@ class TeamRecommendation:
     tactical_analysis: str
     recommended_items: list[str] = field(default_factory=list)
     turn_plan: list[str] = field(default_factory=list)
-    ai_reasoning: str | None = None  # DeepSeek-R1 chain of thought (<think>)
+    ai_reasoning: str | None = None
     target_missions: list[Any] = field(default_factory=list)
     mission_summary: str | None = None
     boss_stage: Any = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Serializes TeamRecommendation into a dictionary for JSON persistence."""
         return {
             "leader": self.leader.to_dict(),
             "friend_leader": self.friend_leader.to_dict(),
@@ -1618,7 +1454,6 @@ class BossPhase:
 
     @property
     def is_rainbow(self) -> bool:
-        # Base types in Dokkan are 0 (AGL), 1 (TEQ), 2 (INT), 3 (STR), 4 (PHY)
         return {b.element % 10 for b in self.bosses} >= {0, 1, 2, 3, 4}
 
     @property
@@ -1639,17 +1474,14 @@ class BossPhase:
         if self.atk > 0 and not self.estimated_sa_damage:
             self.estimated_sa_damage = int(self.atk * 2.5)
 
-        # If primary boss is provided, infer element and mechanics
         if self.bosses and not self.element:
             primary = self.bosses[0]
             self.element = primary.element
             if not self.element_name:
                 self.element_name = primary.type_name
 
-        # Infer element_name if not provided
         if not self.element_name and self.element:
-            type_names = {0: "AGL", 1: "TEQ", 2: "INT", 3: "STR", 4: "PHY"}
-            base_type = type_names.get(self.element % 10, "AGL")
+            base_type = TYPE_NAMES.get(self.element % 10, "AGL")
             if self.element >= 20:
                 self.element_name = f"Extreme {base_type}"
             elif self.element >= 10:
@@ -1657,7 +1489,6 @@ class BossPhase:
             else:
                 self.element_name = base_type
 
-        # Multi-enemy and rainbow naming enrichment
         if self.is_multi_enemy:
             if self.is_rainbow:
                 if (
@@ -1672,7 +1503,6 @@ class BossPhase:
                 ):
                     self.element_name = f"Multi-Type ({len(self.bosses)} Enemies)"
 
-        # Infer actions_per_turn from bosses if phase actions_per_turn == 0
         if self.actions_per_turn == 0 and any(b.actions_per_turn > 0 for b in self.bosses):
             self.actions_per_turn = sum(b.actions_per_turn for b in self.bosses)
 
@@ -1738,7 +1568,6 @@ class BossPhase:
                         ):
                             self.nullifies_def_down = True
 
-                    # Specific boss passive skills
                     if "goku" in m_desc and "atk" in m_desc:
                         if "ATK +30% vs 'Goku'" not in skill_tags:
                             skill_tags.append("ATK +30% vs 'Goku'")
@@ -1886,7 +1715,6 @@ class BossStage:
 
     @property
     def is_multi_battle(self) -> bool:
-        """Checks if the stage consists of multiple distinct battles (causing DEF stacking resets)."""
         return self.total_battles > 1 or any(p.battle_index > 1 for p in self.phases)
 
     def to_dict(self) -> dict[str, Any]:
@@ -1917,7 +1745,6 @@ class BossStage:
 
     @classmethod
     def from_dokkandb(cls, stage_data: dict[str, Any]) -> BossStage:
-        """Constructs a BossStage instance from DokkanDB stage info dictionary."""
         phases: list[BossPhase] = []
         for p in stage_data.get("phases", []):
             phases.append(BossPhase.from_dict(p))
@@ -1947,25 +1774,23 @@ class ChallengeStageInfo:
     phases: list[BossPhase] = field(default_factory=list)
 
 
-@dataclass
-class FailureReport:
-    """Structured report of combat defeat for AI telemetry and Advisor."""
-
-    defeat_turn: int = 1
-    phase_index: int = 1
-    boss_element: int = 0
-    boss_hp_percent: float = 100.0
-    culprit_card_id: int | None = None
-    classification: str = ""
-    reason: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "defeat_turn": self.defeat_turn,
-            "phase_index": self.phase_index,
-            "boss_element": self.boss_element,
-            "boss_hp_percent": self.boss_hp_percent,
-            "culprit_card_id": self.culprit_card_id,
-            "classification": self.classification,
-            "reason": self.reason,
-        }
+__all__ = [
+    "AIModelFamily",
+    "SupportedAIModel",
+    "AIConfig",
+    "PassiveTags",
+    "SATags",
+    "LeaderSkillSpec",
+    "CardForm",
+    "DokkanCard",
+    "RotationPair",
+    "TeamRecommendation",
+    "BossMechanic",
+    "BossEnemy",
+    "BossPhase",
+    "BossStage",
+    "ChallengeStageInfo",
+    "FailureReport",
+    "TYPE_NAMES",
+    "parse_dodge_percentage_from_text",
+]
