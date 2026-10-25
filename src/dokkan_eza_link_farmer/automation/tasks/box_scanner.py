@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 
 import numpy as np
@@ -15,7 +16,6 @@ from dokkan_eza_link_farmer.automation.scanner import (
     advance_to_next_card,
     compute_screen_diff,
     detect_rainbow_star,
-    execute_ocr_fallback,
     extract_banner_text,
     extract_element_badge,
     extract_level_and_sa,
@@ -24,25 +24,20 @@ from dokkan_eza_link_farmer.automation.scanner import (
     load_existing_box,
     match_card_by_text,
     match_card_candidate,
-    match_row_with_alignment,
     normalize_title,
     preprocess_text_banner,
     read_card_title_from_screen,
+    read_counter_total_cards,
     register_card,
     resolve_box_path,
     save_box,
+    scan_detail_screen,
     scroll_to_top,
     stitch_marquee_text,
     sync_box_cache,
-    track_vertical_shift,
     verify_and_enforce_filters,
 )
 from dokkan_eza_link_farmer.automation.scanner.catalog_matcher import CatalogMatcher
-from dokkan_eza_link_farmer.automation.scanner.legacy_grid import (
-    get_second_candidate,
-    init_thumbnails,
-    match_slot_thumbnail_with_delta,
-)
 from dokkan_eza_link_farmer.automation.tasks.base_task import BaseTask
 from dokkan_eza_link_farmer.automation.vision import Vision
 from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
@@ -209,43 +204,6 @@ class BoxScannerTask(BaseTask):
             if cands:
                 self._subname_index[norm] = cands[0]
 
-    def _init_thumbnails(self) -> None:
-        loaded, lrs = init_thumbnails(
-            self,
-            self._catalog,
-            self.dokkandb.cache_dir,
-            include_ssr=self.include_ssr,
-            syncer=self.syncer,
-        )
-        self._loaded_thumbs = loaded
-        self._lr_thumbs = lrs
-        self._special_thumbs = [
-            t
-            for t in self._loaded_thumbs
-            if t.get("rarity") == 5
-            or t.get("has_survival_passive")
-            or any(s in t.get("name", "") for s in (" & ", "/", " + ", "(Giant Ape)"))
-        ]
-        self.log(
-            f"Pre-loaded {len(self._loaded_thumbs)} character thumbnails ({len(self._lr_thumbs)} LRs, "
-            f"{len(self._special_thumbs)} special effect/duo/LRs) for visual pattern matching."
-        )
-
-    def _match_slot_thumbnail(self, crop: np.ndarray) -> tuple[dict[str, Any] | None, float]:
-        cand, score, _ = self._match_slot_thumbnail_with_delta(crop)
-        return cand, score
-
-    def _match_slot_thumbnail_with_delta(
-        self, crop: np.ndarray
-    ) -> tuple[dict[str, Any] | None, float, float]:
-        return match_slot_thumbnail_with_delta(self._loaded_thumbs, crop)
-
-    def _get_second_candidate(self, crop: np.ndarray) -> tuple[dict[str, Any] | None, float]:
-        return get_second_candidate(self._loaded_thumbs, crop)
-
-    def _execute_ocr_fallback(self, cx: int, cy: int) -> dict[str, Any] | None:
-        return execute_ocr_fallback(self, cx, cy)
-
     def _match_card_by_text(self, recognized_text: str) -> dict[str, Any] | None:
         matcher = CatalogMatcher()
         matcher._subname_index = {
@@ -319,11 +277,6 @@ class BoxScannerTask(BaseTask):
     ) -> tuple[np.ndarray, bool]:
         return advance_to_next_card(self, current_screen, current_card_id=current_card_id)
 
-    def _track_vertical_shift(
-        self, prev_img: np.ndarray, curr_img: np.ndarray, last_cy: float
-    ) -> float | None:
-        return track_vertical_shift(prev_img, curr_img, last_cy, col_ratios=self.COL_RATIOS)
-
     def _register_card(
         self,
         cand: dict[str, Any] | None,
@@ -333,6 +286,9 @@ class BoxScannerTask(BaseTask):
         cx: int = 0,
         swipe_page: int = 0,
         grid_slot: int = 0,
+        is_rainbow: bool | None = None,
+        is_eza: bool | None = None,
+        potential_percent: int | None = None,
     ) -> bool:
         return register_card(
             self,
@@ -343,18 +299,134 @@ class BoxScannerTask(BaseTask):
             cx=cx,
             swipe_page=swipe_page,
             grid_slot=grid_slot,
+            is_rainbow=is_rainbow,
+            is_eza=is_eza,
+            potential_percent=potential_percent,
         )
 
-    def _match_row_with_alignment(
-        self, grid_img: np.ndarray, cy: float, col_xs: list[int], half_w: int, half_h: int
-    ) -> tuple[float, list[tuple[dict[str, Any] | None, float, np.ndarray, int, int]]]:
-        return match_row_with_alignment(self, grid_img, cy, col_xs, half_w, half_h)
-
     def run(self) -> None:
-        """Main automated scanning loop with visual tracking, filter verification, and position logging."""
-        from dokkan_eza_link_farmer.automation.scanner.legacy_grid import run_grid_scan
+        """Main automated scanning loop using OCR detail evaluation and swipe progression."""
+        self._setup_file_logger()
+        start_time = datetime.now(timezone.utc)
+        logger.info("=" * 70)
+        logger.info(
+            f"=== Dokkan Box Scanner Session Started: {start_time.strftime('%Y-%m-%d %H:%M:%S UTC')} ==="
+        )
+        logger.info(f"Log destination: {self.log_file}")
+        logger.info(f"Box output target: {self.output_file}")
+        logger.info(
+            f"Max cards to scan: {self.max_cards_to_scan if self.max_cards_to_scan else 'unlimited'}"
+        )
+        logger.info(f"Include SSR: {self.include_ssr}")
+        logger.info("=" * 70)
 
-        run_grid_scan(self)
+        self.is_running = True
+        try:
+            self.log(
+                "🚀 Starting Autonomous Character Box Scanner (Detail Evaluator & Swipe Controller)..."
+            )
+
+            self._init_catalog()
+            self.ensure_box_filters()
+
+            w, h = self.adb.get_screen_size()
+            self.log(f"Device resolution: {w}x{h}. Initializing detail scanning pipeline...")
+
+            initial_screen = self.adb.screencap()
+            if not self._is_card_details_screen(initial_screen):
+                self.scroll_to_top()
+                slot1_x = int(w * (110 / 1080.0))
+                slot1_y = int(h * (604 / 2400.0))
+                self.log(f"Opening first card details at ({slot1_x}, {slot1_y})...")
+                self.adb.tap(slot1_x, slot1_y, delay_after=1.5)
+                current_screen = self.adb.screencap()
+                if not self._is_card_details_screen(current_screen):
+                    self.log("Retrying opening card details...")
+                    self.adb.tap(slot1_x, slot1_y, delay_after=1.5)
+                    current_screen = self.adb.screencap()
+            else:
+                current_screen = initial_screen
+
+            if not hasattr(self, "scanned_cards") or self.scanned_cards is None:
+                self.scanned_cards = {}
+            self._recently_scanned_positions = {}
+            self._last_registered_card_id = None
+
+            total_detected = read_counter_total_cards(current_screen, ocr=self._ocr)
+            if total_detected:
+                self.log(f"Detected total cards to scan from counter: {total_detected}")
+
+            target_limit = self.max_cards_to_scan or total_detected or 9999
+            scanned_count = 0
+
+            while not self.is_stopped() and scanned_count < target_limit:
+                cand, score, is_rainbow, is_eza, pot_pct = scan_detail_screen(self, current_screen)
+                card_id = int(cand.get("id") or cand.get("card_id") or 0) if cand else None
+
+                registered = self._register_card(
+                    cand,
+                    score=score,
+                    crop=None,
+                    swipe_page=scanned_count // 25,
+                    grid_slot=scanned_count % 25,
+                    is_rainbow=is_rainbow,
+                    is_eza=is_eza,
+                    potential_percent=pot_pct,
+                )
+                if registered:
+                    scanned_count += 1
+
+                total_instances = sum(int(c.get("copies", 1)) for c in self.scanned_cards.values())
+                if self.max_cards_to_scan and total_instances >= self.max_cards_to_scan:
+                    self.log(f"Reached target scan limit of {self.max_cards_to_scan} cards.")
+                    break
+
+                if scanned_count >= target_limit:
+                    break
+
+                current_screen, advanced = advance_to_next_card(
+                    self, current_screen, current_card_id=card_id
+                )
+                if not advanced:
+                    self.log("No further card advancement detected. End of character box reached.")
+                    break
+
+                if scanned_count % 5 == 0:
+                    self._save_box(enrich=False)
+
+            self.log("Enriching owned cards with DokkanDB links and optimal linking partners...")
+            self._save_box(enrich=True)
+            total_instances = sum(int(c.get("copies", 1)) for c in self.scanned_cards.values())
+            self.log(
+                f"✅ Box Scan Completed! Stored {total_instances} total cards ({len(self.scanned_cards)} unique) in '{self.output_file}'."
+            )
+        except Exception as exc:
+            logger.exception(f"Unhandled exception during box scanning: {exc}")
+            self.log(f"❌ Box scan interrupted by error: {exc}")
+            raise
+        finally:
+            end_time = datetime.now(timezone.utc)
+            duration = end_time - start_time
+            total_cards = (
+                sum(int(c.get("copies", 1)) for c in self.scanned_cards.values())
+                if hasattr(self, "scanned_cards") and self.scanned_cards
+                else 0
+            )
+            unique_cards = (
+                len(self.scanned_cards)
+                if hasattr(self, "scanned_cards") and self.scanned_cards
+                else 0
+            )
+            logger.info("=" * 70)
+            logger.info(
+                f"=== Dokkan Box Scanner Session Ended: {end_time.strftime('%Y-%m-%d %H:%M:%S UTC')} (Duration: {duration}) ==="
+            )
+            logger.info(
+                f"Final Count: {total_cards} total cards ({unique_cards} unique) in '{self.output_file}'"
+            )
+            logger.info("=" * 70)
+            self.is_running = False
+            self._close_file_logger()
 
 
 __all__ = [
@@ -367,7 +439,6 @@ __all__ = [
     "advance_to_next_card",
     "compute_screen_diff",
     "detect_rainbow_star",
-    "execute_ocr_fallback",
     "extract_banner_text",
     "extract_element_badge",
     "extract_level_and_sa",
@@ -376,16 +447,16 @@ __all__ = [
     "load_existing_box",
     "match_card_by_text",
     "match_card_candidate",
-    "match_row_with_alignment",
     "normalize_title",
     "preprocess_text_banner",
     "read_card_title_from_screen",
+    "read_counter_total_cards",
     "register_card",
     "resolve_box_path",
     "save_box",
+    "scan_detail_screen",
     "scroll_to_top",
     "stitch_marquee_text",
     "sync_box_cache",
-    "track_vertical_shift",
     "verify_and_enforce_filters",
 ]

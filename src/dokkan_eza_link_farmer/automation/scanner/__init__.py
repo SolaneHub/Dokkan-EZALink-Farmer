@@ -39,11 +39,6 @@ from dokkan_eza_link_farmer.automation.scanner.detail_evaluator import (
 from dokkan_eza_link_farmer.automation.scanner.filter_manager import (
     verify_and_enforce_filters,
 )
-from dokkan_eza_link_farmer.automation.scanner.legacy_grid import (
-    execute_ocr_fallback,
-    match_row_with_alignment,
-    track_vertical_shift,
-)
 from dokkan_eza_link_farmer.automation.scanner.swipe_controller import (
     advance_to_next_card,
     compute_screen_diff,
@@ -63,7 +58,6 @@ __all__ = [
     "advance_to_next_card",
     "compute_screen_diff",
     "detect_rainbow_star",
-    "execute_ocr_fallback",
     "extract_banner_text",
     "extract_banner_tokens",
     "extract_element_badge",
@@ -75,7 +69,6 @@ __all__ = [
     "load_existing_box",
     "match_card_by_text",
     "match_card_candidate",
-    "match_row_with_alignment",
     "normalize_title",
     "preprocess_text_banner",
     "read_card_title_from_screen",
@@ -88,6 +81,5 @@ __all__ = [
     "scroll_to_top",
     "stitch_marquee_text",
     "sync_box_cache",
-    "track_vertical_shift",
     "verify_and_enforce_filters",
 ]

@@ -18,12 +18,6 @@ from typing import Any
 import cv2
 import numpy as np
 
-# ruff: noqa: E402
-# Ensure root directory is in sys.path
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
-
 from dokkan_eza_link_farmer.automation import scanner as scanner_module
 from dokkan_eza_link_farmer.automation.scanner.banner_extractor import (
     BANNER_CROP_X,
@@ -36,6 +30,11 @@ from dokkan_eza_link_farmer.automation.scanner.detail_evaluator import (
 )
 from dokkan_eza_link_farmer.automation.tasks.box_scanner import BoxScannerTask
 from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
+
+# Ensure root directory is in sys.path
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("self_improve_scanner")

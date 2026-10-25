@@ -3,6 +3,8 @@ from typing import Any
 
 import numpy as np
 
+from dokkan_eza_link_farmer.automation.vision import Vision
+
 
 class GameState(enum.Enum):
     UNKNOWN = "UNKNOWN"
@@ -28,9 +30,6 @@ class GameState(enum.Enum):
     CHARACTER_BOX = "CHARACTER_BOX"
     FILTER_MODAL = "FILTER_MODAL"
     QUEST_SELECT = "QUEST_SELECT"
-
-
-from dokkan_eza_link_farmer.automation.vision import Vision  # noqa: E402
 
 
 class StateDetector:
