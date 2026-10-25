@@ -39,7 +39,10 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     markexpr = getattr(config.option, "markexpr", "")
 
     # When tests/e2e is explicitly requested and default addopts ('not slow') is active, allow tests/e2e to run
-    if any("tests/e2e" in str(arg).replace("\\", "/") for arg in config.args) and markexpr == "not slow":
+    if (
+        any("tests/e2e" in str(arg).replace("\\", "/") for arg in config.args)
+        and markexpr == "not slow"
+    ):
         config.option.markexpr = ""
 
     for item in items:

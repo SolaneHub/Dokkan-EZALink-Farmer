@@ -145,14 +145,20 @@ class TestFakeDokkanDBHarness:
 class TestSystemTools:
     def test_get_resource_path(self):
         res_path = get_resource_path("templates")
-        assert os.path.isdir(res_path), f"Resource path '{res_path}' should be an existing directory"
+        assert os.path.isdir(res_path), (
+            f"Resource path '{res_path}' should be an existing directory"
+        )
 
         locales_path = get_resource_path("locales")
-        assert os.path.isdir(locales_path), f"Locales path '{locales_path}' should be an existing directory"
+        assert os.path.isdir(locales_path), (
+            f"Locales path '{locales_path}' should be an existing directory"
+        )
 
     def test_get_config_path(self):
         cfg_path = get_config_path("config/settings.yaml")
-        assert os.path.isfile(cfg_path), f"Config path '{cfg_path}' should resolve to an existing file"
+        assert os.path.isfile(cfg_path), (
+            f"Config path '{cfg_path}' should resolve to an existing file"
+        )
 
     def test_diagnose_system_structure(self):
         diag = ToolLocator.diagnose_system()

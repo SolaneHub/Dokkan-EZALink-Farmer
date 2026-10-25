@@ -10,10 +10,10 @@ Asserts high-level black-box invariants under randomized Dokkan boxes and missio
 from __future__ import annotations
 
 import pytest
+from tests.harness.fake_dokkandb import FakeDokkanDBClient
 from tools.fuzz_team_solver import execute_fuzz_run, run_fuzzer
 
 from dokkan_eza_link_farmer.ai.solver import DokkanConstraintSolver
-from tests.harness.fake_dokkandb import FakeDokkanDBClient
 
 
 @pytest.mark.fast

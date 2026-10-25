@@ -499,7 +499,8 @@ class TestSchemaSerializationImmutability:
         import ast
         from pathlib import Path
 
-        build_file = Path(__file__).resolve().parent.parent / "build_exe.py"
+        # Resolve repository root: tests/ai -> tests -> repo root
+        build_file = Path(__file__).resolve().parent.parent.parent / "build_exe.py"
         assert build_file.exists(), "build_exe.py must exist in repo root"
         tree = ast.parse(build_file.read_text(encoding="utf-8"))
 

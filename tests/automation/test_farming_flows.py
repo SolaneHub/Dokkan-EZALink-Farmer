@@ -37,7 +37,7 @@ def _make_card(
     spec = None
     if main_cats:
         spec = LeaderSkillSpec(
-            main_category_ids=set(main_cats),
+            main_category_ids=list(main_cats),
             base_boost_pct=base_boost,
         )
     return DokkanCard(
@@ -78,7 +78,9 @@ class TestStateDetectorTransitions:
         canvas = np.zeros((2400, 1080, 3), dtype=np.uint8)
 
         vision._template_cache["button_start"] = np.ones((60, 120, 3), dtype=np.uint8) * 220
-        vision._template_cache["button_team_formation"] = np.ones((50, 100, 3), dtype=np.uint8) * 220
+        vision._template_cache["button_team_formation"] = (
+            np.ones((50, 100, 3), dtype=np.uint8) * 220
+        )
         canvas[1900:1960, 750:870] = vision._template_cache["button_start"]
         canvas[1150:1200, 750:850] = vision._template_cache["button_team_formation"]
 
@@ -115,7 +117,6 @@ class TestStateDetectorTransitions:
         assert state == GameState.FILTER_MODAL
 
 
-
 class TestFriendLeaderFallback:
     """Tests the Friend Leader resolution hierarchy and fallback logic."""
 
@@ -133,7 +134,9 @@ class TestFriendLeaderFallback:
         team = [leader] + [
             _make_card(2000 + i, f"Member {i}", category_ids=[10, 20]) for i in range(5)
         ]
-        cand = _make_card(9001, "Compatible Leader", category_ids=[10], main_cats=[10], base_boost=200.0)
+        cand = _make_card(
+            9001, "Compatible Leader", category_ids=[10], main_cats=[10], base_boost=200.0
+        )
 
         friend = select_best_friend_leader(team, [cand])
         assert friend.id == 9001
@@ -141,9 +144,7 @@ class TestFriendLeaderFallback:
 
     def test_fallback_to_exact_copy_of_leader_when_pool_incompatible_or_empty(self) -> None:
         leader = _make_card(1001, "SSJ Goku", category_ids=[10], main_cats=[10])
-        team = [leader] + [
-            _make_card(2000 + i, f"Member {i}", category_ids=[10]) for i in range(5)
-        ]
+        team = [leader] + [_make_card(2000 + i, f"Member {i}", category_ids=[10]) for i in range(5)]
 
         # Case 1: Empty candidate pool
         friend_empty = select_best_friend_leader(team, [])
@@ -210,6 +211,8 @@ class TestVisionROIBenchmark:
         _ = cv2.minMaxLoc(res)
 
         t0 = time.perf_counter()
+        max_val = 0.0
+        max_loc = (0, 0)
         for _ in range(10):
             res = cv2.matchTemplate(c_roi, tmpl, cv2.TM_CCOEFF_NORMED)
             _min_val, max_val, _min_loc, max_loc = cv2.minMaxLoc(res)

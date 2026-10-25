@@ -11,6 +11,7 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
+from tests.harness.fake_dokkandb import FakeDokkanDBClient
 
 from dokkan_eza_link_farmer.ai.client import DokkanAIClient
 from dokkan_eza_link_farmer.ai.models import (
@@ -21,7 +22,6 @@ from dokkan_eza_link_farmer.ai.models import (
     TeamRecommendation,
 )
 from dokkan_eza_link_farmer.ai.team_builder import TeamBuilder
-from tests.harness.fake_dokkandb import FakeDokkanDBClient
 
 
 @pytest.fixture

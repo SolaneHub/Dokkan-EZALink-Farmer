@@ -99,7 +99,9 @@ class TestCardDeduplicationAndAntiCollision:
         assert scanner.scanned_cards[1020281]["copies"] == 2
 
     def test_anti_collision_dupe_mandatory_adjacency(self) -> None:
-        scanner = BoxScannerTask(adb=MagicMock(), vision=MagicMock(), config={"pure_grid_mode": False})
+        scanner = BoxScannerTask(
+            adb=MagicMock(), vision=MagicMock(), config={"pure_grid_mode": False}
+        )
         crop = np.zeros((100, 100, 3), dtype=np.uint8)
 
         card_a = {"card_id": 1001, "name": "Goku A", "rarity": 4}
