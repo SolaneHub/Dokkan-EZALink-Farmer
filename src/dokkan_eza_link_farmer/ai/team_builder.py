@@ -43,6 +43,7 @@ from dokkan_eza_link_farmer.ai.synergy import (
     calculate_link_synergy,
     calculate_slot1_anchor_weight,
     calculate_slot1_def_priority,
+    calculate_slot2_partner_weight,
     check_type_matchup,
     evaluate_rotation_pair,
     find_best_partners_for_card,
@@ -91,6 +92,10 @@ class TeamBuilder:
     @staticmethod
     def calculate_slot1_anchor_weight(card: DokkanCard, boss_stage: Any = None) -> float:
         return calculate_slot1_anchor_weight(card, boss_stage=boss_stage)
+
+    @staticmethod
+    def calculate_slot2_partner_weight(card: DokkanCard, boss_stage: Any = None) -> float:
+        return calculate_slot2_partner_weight(card, boss_stage=boss_stage)
 
     def evaluate_rotation_pair(
         self, card_a: DokkanCard, card_b: DokkanCard, boss_stage: Any = None
@@ -255,7 +260,12 @@ class TeamBuilder:
 
         if not tactical_guide:
             tactical_guide = generate_deterministic_tactical_guide(
-                rot_a=rot_a, rot_b=rot_b, floaters=floaters, leader=leader, friend=friend
+                rot_a=rot_a,
+                rot_b=rot_b,
+                floaters=floaters,
+                leader=leader,
+                friend=friend,
+                boss_stage=boss_stage,
             )
 
         return TeamRecommendation(
@@ -327,11 +337,7 @@ class TeamBuilder:
         ev = self.solver.evaluate_card(
             card, leader, boss_stage=boss_stage, selected_team=selected_team
         )
-        base_s1 = (
-            bool(card.base_form.passive_tags.slot1_viable)
-            if (card.base_form and card.base_form.passive_tags)
-            else bool(card.is_slot1_tank)
-        )
+        base_s1 = self.solver.is_slot1_viable(card, boss_stage)
         ev.base_slot1_viable = base_s1
         if not base_s1:
             ev.counter_points = [
@@ -575,6 +581,8 @@ __all__ = [
     "ELEMENT_ADVANTAGE",
     "ELEMENT_DISADVANTAGE",
     "calculate_link_synergy",
+    "calculate_slot1_anchor_weight",
+    "calculate_slot2_partner_weight",
     "consult_ollama_advisor",
     "recommend_candidate",
     "build_team",

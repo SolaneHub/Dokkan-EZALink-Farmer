@@ -76,28 +76,25 @@ def format_team_summary_table(
     if len(team_cards) == 6:
         try:
             rot_a, rot_b, floaters = optimize_rotations_for_team(team_cards)
+
+            def _slot2_role_label(c: DokkanCard, rot_name: str) -> str:
+                stacks = c.has_stacking_def or bool(
+                    c.base_form and c.base_form.sa_tags and c.base_form.sa_tags.stacks_def
+                )
+                on_hit = getattr(c, "has_on_hit_defense", False)
+                if stacks and on_hit:
+                    return f"Slot 2 Stacker / On-Hit Tank ({rot_name})"
+                elif on_hit:
+                    return f"Slot 2 On-Hit Partner ({rot_name})"
+                elif stacks:
+                    return f"Slot 2 Stacker ({rot_name})"
+                else:
+                    return f"Slot 2 DPS ({rot_name})"
+
             rot_role_map[rot_a.slot1.id] = "Slot 1 Tank (Rot A)"
-            rot_role_map[rot_a.slot2.id] = (
-                "Slot 2 Stacker (Rot A)"
-                if rot_a.slot2.has_stacking_def
-                or (
-                    rot_a.slot2.base_form
-                    and rot_a.slot2.base_form.sa_tags
-                    and rot_a.slot2.base_form.sa_tags.stacks_def
-                )
-                else "Slot 2 DPS (Rot A)"
-            )
+            rot_role_map[rot_a.slot2.id] = _slot2_role_label(rot_a.slot2, "Rot A")
             rot_role_map[rot_b.slot1.id] = "Slot 1 Tank (Rot B)"
-            rot_role_map[rot_b.slot2.id] = (
-                "Slot 2 Stacker (Rot B)"
-                if rot_b.slot2.has_stacking_def
-                or (
-                    rot_b.slot2.base_form
-                    and rot_b.slot2.base_form.sa_tags
-                    and rot_b.slot2.base_form.sa_tags.stacks_def
-                )
-                else "Slot 2 DPS (Rot B)"
-            )
+            rot_role_map[rot_b.slot2.id] = _slot2_role_label(rot_b.slot2, "Rot B")
             for fl in floaters:
                 if fl.has_support or (
                     fl.base_form
@@ -231,7 +228,11 @@ def format_team_summary_table(
         dr_limit = getattr(c, "dr_turns_limit", None)
         perm_dr = getattr(c, "permanent_damage_reduction_percent", 0)
         if dr_pct > 0:
-            if perm_dr == dr_pct and getattr(c, "is_dr_permanent", False):
+            if getattr(c, "has_on_hit_dr", False):
+                dr_label = f"DR {dr_pct}% (On-Hit)"
+            elif getattr(c, "is_once_only_dr", False):
+                dr_label = f"DR {dr_pct}% (1-Hit)"
+            elif perm_dr == dr_pct and getattr(c, "is_dr_permanent", False):
                 dr_label = f"DR {dr_pct}% (Perm)"
             elif dr_limit:
                 dr_label = f"DR {dr_pct}% ({dr_limit}T)"
@@ -318,28 +319,25 @@ def render_team_summary_table_rich(
     if len(team_cards) == 6:
         try:
             rot_a, rot_b, floaters = optimize_rotations_for_team(team_cards)
+
+            def _slot2_role_label(c: DokkanCard, rot_name: str) -> str:
+                stacks = c.has_stacking_def or bool(
+                    c.base_form and c.base_form.sa_tags and c.base_form.sa_tags.stacks_def
+                )
+                on_hit = getattr(c, "has_on_hit_defense", False)
+                if stacks and on_hit:
+                    return f"Slot 2 Stacker / On-Hit Tank ({rot_name})"
+                elif on_hit:
+                    return f"Slot 2 On-Hit Partner ({rot_name})"
+                elif stacks:
+                    return f"Slot 2 Stacker ({rot_name})"
+                else:
+                    return f"Slot 2 DPS ({rot_name})"
+
             rot_role_map[rot_a.slot1.id] = "Slot 1 Tank (Rot A)"
-            rot_role_map[rot_a.slot2.id] = (
-                "Slot 2 Stacker (Rot A)"
-                if rot_a.slot2.has_stacking_def
-                or (
-                    rot_a.slot2.base_form
-                    and rot_a.slot2.base_form.sa_tags
-                    and rot_a.slot2.base_form.sa_tags.stacks_def
-                )
-                else "Slot 2 DPS (Rot A)"
-            )
+            rot_role_map[rot_a.slot2.id] = _slot2_role_label(rot_a.slot2, "Rot A")
             rot_role_map[rot_b.slot1.id] = "Slot 1 Tank (Rot B)"
-            rot_role_map[rot_b.slot2.id] = (
-                "Slot 2 Stacker (Rot B)"
-                if rot_b.slot2.has_stacking_def
-                or (
-                    rot_b.slot2.base_form
-                    and rot_b.slot2.base_form.sa_tags
-                    and rot_b.slot2.base_form.sa_tags.stacks_def
-                )
-                else "Slot 2 DPS (Rot B)"
-            )
+            rot_role_map[rot_b.slot2.id] = _slot2_role_label(rot_b.slot2, "Rot B")
             for fl in floaters:
                 if fl.has_support or (
                     fl.base_form
@@ -446,7 +444,11 @@ def render_team_summary_table_rich(
         dr_limit = getattr(c, "dr_turns_limit", None)
         perm_dr = getattr(c, "permanent_damage_reduction_percent", 0)
         if dr_pct > 0:
-            if perm_dr == dr_pct and getattr(c, "is_dr_permanent", False):
+            if getattr(c, "has_on_hit_dr", False):
+                dr_part = f"DR {dr_pct}% (On-Hit)"
+            elif getattr(c, "is_once_only_dr", False):
+                dr_part = f"DR {dr_pct}% (1-Hit)"
+            elif perm_dr == dr_pct and getattr(c, "is_dr_permanent", False):
                 dr_part = f"DR {dr_pct}% (Perm)"
             elif dr_limit:
                 dr_part = f"DR {dr_pct}% ({dr_limit}T)"
@@ -841,6 +843,7 @@ def generate_deterministic_tactical_guide(
     floaters: list[DokkanCard],
     leader: DokkanCard,
     friend: DokkanCard,
+    boss_stage: Any = None,
 ) -> str:
     """Generates the clean algorithmic fallback guide adhering to standard tactical structure."""
 
@@ -852,15 +855,65 @@ def generate_deterministic_tactical_guide(
             badge = " [Leader]"
         return f"{c.name}{badge}"
 
+    def _slot2_desc(c: DokkanCard, shared_links_count: int) -> str:
+        stacks = getattr(c, "has_stacking_def", False) or bool(
+            c.base_form and c.base_form.sa_tags and c.base_form.sa_tags.stacks_def
+        )
+        on_hit = getattr(c, "has_on_hit_defense", False)
+        if stacks and on_hit:
+            return f"in Slot 2 attacca prima con Super Attack (attivando il boost DEF post-super e accumulando stack difensivi), assorbendo poi in sicurezza i colpi successivi per caricare i bonus on-hit ({shared_links_count} link attivi)"
+        elif stacks:
+            return f"in Slot 2 lancia la Super Attack per accumulare DEF (stacking) turno dopo turno e massimizzare i danni ({shared_links_count} link attivi)"
+        elif on_hit:
+            return f"in Slot 2 attacca per prima sfruttando i bonus post-super, per poi assorbire i colpi in sicurezza e attivare le abilità on-hit ({shared_links_count} link attivi)"
+        else:
+            return f"in Slot 2 attiva {shared_links_count} link e guida la fase offensiva"
+
+    warnings_section = ""
+    on_hit_units = [
+        c for c in (rot_a.slot1, rot_b.slot1) if getattr(c, "has_on_hit_defense", False)
+    ]
+    if on_hit_units:
+        warn_lines = [
+            f"- ⚠️ **{_name_with_badge(c)}**: attiva parte delle sue difese o riduzione SOLO dopo aver ricevuto colpi. Fai molta attenzione se il nemico attacca con una Super Attack prima che l'unità sia pronta (rischio oneshot); proteggila con Whis o invertila con Slot 2 se il primo colpo è letale."
+            for c in on_hit_units
+        ]
+        warnings_section = (
+            "\n\n### ⚠️ Avvisi Critici di Sopravvivenza (Difesa On-Hit)\n" + "\n".join(warn_lines)
+        )
+
+    cond_warn_lines = []
+    if boss_stage:
+        all_units = [rot_a.slot1, rot_a.slot2, rot_b.slot1, rot_b.slot2] + list(floaters)
+        seen_ids = set()
+        for u in all_units:
+            if u.id in seen_ids:
+                continue
+            seen_ids.add(u.id)
+            if getattr(u, "has_enemy_conditional_defense", False):
+                all_match, failing = u.check_enemy_conditions_match_all_phases(boss_stage)
+                if not all_match:
+                    req_cats = ", ".join(getattr(u, "enemy_conditional_categories", []))
+                    failing_str = ", ".join(str(p) for p in failing)
+                    cond_warn_lines.append(
+                        f"- 🛑 **{_name_with_badge(u)}**: La sua riduzione del danno/guardia richiede nemici di categoria ({req_cats}). Nelle Fasi {failing_str} il boss non appartiene a tale categoria: la carta perde ogni difesa (0% DR) ed è soggetta a oneshot immediato!"
+                    )
+    if cond_warn_lines:
+        warnings_section += (
+            "\n\n### 🛑 Allerta Critica Categoria Nemica (Rischio Oneshot)\n"
+            + "\n".join(cond_warn_lines)
+        )
+
     return (
         f"### 🛡️ Piano Tattico Deterministico - Rotazioni\n"
-        f"- **Rotazione A**: Mantieni **{_name_with_badge(rot_a.slot1)}** in Slot 1 come difensore primario. **{_name_with_badge(rot_a.slot2)}** in Slot 2 attiva {len(rot_a.shared_links)} link e massimizza i danni.\n"
-        f"- **Rotazione B**: **{_name_with_badge(rot_b.slot1)}** in Slot 1 assorbe i colpi diretti. **{_name_with_badge(rot_b.slot2)}** in Slot 2 guida la fase offensiva.\n"
+        f"- **Rotazione A**: Mantieni **{_name_with_badge(rot_a.slot1)}** in Slot 1 come difensore primario (assorbe i colpi pre-attacco). **{_name_with_badge(rot_a.slot2)}** {_slot2_desc(rot_a.slot2, len(rot_a.shared_links))}.\n"
+        f"- **Rotazione B**: Mantieni **{_name_with_badge(rot_b.slot1)}** in Slot 1 come difensore primario. **{_name_with_badge(rot_b.slot2)}** {_slot2_desc(rot_b.slot2, len(rot_b.shared_links))}.\n"
         f"- **Floaters (Slot 3)**: Fai ruotare **{', '.join(_name_with_badge(f) for f in floaters)}** in Slot 3 per Ki support, gestione orbi e rotazione difensiva.\n\n"
         f"### 💊 Gestione Oggetti di Supporto\n"
         f"- **Whis**: Attivalo nei turni ad alto rischio o contro la Super Attack nemica per ridurre il danno del 40% per 2 turni.\n"
         f"- **Ghost Usher**: Usalo se il floater in Slot 3 subisce troppi attacchi o per saltare un turno critico del boss.\n"
         f"- **Princess Snake**: Usalo per recuperare il 55% di HP e ottenere il 30% di riduzione danno nei turni di emergenza."
+        f"{warnings_section}"
     )
 
 

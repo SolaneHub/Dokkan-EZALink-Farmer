@@ -689,6 +689,21 @@ class DokkanDBClient:
         cards_list = self.get_cards_by_ids(list(all_card_ids), region=region)
         cards_map = {c.get("id"): c for c in cards_list if isinstance(c, dict) and "id" in c}
 
+        # Enrich boss cards with categories if not present
+        from dokkan_eza_link_farmer.ai.models import infer_boss_categories_from_name
+
+        for cid in all_card_ids:
+            card = cards_map.get(cid)
+            if card and not card.get("category_names") and not card.get("categories"):
+                try:
+                    full_card = self.get_card(cid, region=region)
+                    if full_card and isinstance(full_card, dict):
+                        card["category_names"] = full_card.get("category_names") or []
+                        card["category_ids"] = full_card.get("category_ids") or []
+                        card["categories"] = full_card.get("category_names") or []
+                except Exception:
+                    pass
+
         skills_list = self.get_enemy_skills_by_ids(list(all_skill_ids), region=region)
         skills_map = {s.get("id"): s for s in skills_list if isinstance(s, dict) and "id" in s}
 
@@ -732,6 +747,11 @@ class DokkanDBClient:
                     phase_def = max(phase_def, e_def)
                     phase_actions += max(1, e_actions)
 
+                    b_cats = card.get("category_names") or card.get("categories") or []
+                    if not b_cats:
+                        b_cats = infer_boss_categories_from_name(card.get("name", ""))
+                    b_class = "Extreme" if elem >= 20 else ("Super" if elem >= 10 else "")
+
                     bosses.append(
                         {
                             "name": card.get("name", "Unknown Boss"),
@@ -745,6 +765,9 @@ class DokkanDBClient:
                             "def_stat": e_def,
                             "multi_atk_num": e_actions,
                             "actions_per_turn": max(1, e_actions),
+                            "categories": b_cats,
+                            "category_ids": card.get("category_ids") or [],
+                            "card_class": b_class,
                             "mechanics": [
                                 {
                                     "id": s.get("id"),

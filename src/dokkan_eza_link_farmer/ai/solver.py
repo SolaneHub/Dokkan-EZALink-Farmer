@@ -206,15 +206,21 @@ class DokkanConstraintSolver:
         """
         Determines whether a card is viable as a defensive anchor in Slot 1 in its Base Form (Turns 1-3).
         A true Slot 1 anchor must have pre-attack defensive survival against Endgame Super Attacks:
-        1. Guaranteed Guard against all attacks (excludes RNG chance of guarding or enemy guard disabling).
-        2. High Damage Reduction (DR >= 50% against all attacks, excludes normal-attacks-only DR).
+        1. Guaranteed Pre-Attack Guard (excludes RNG chance, enemy guard disabling, and on-hit guard).
+        2. High Pre-Attack Damage Reduction (DR >= 50% persistent against all attacks, excludes on-hit DR,
+           once-only DR, and slot 2/3 DR).
         3. High/Guaranteed Dodge (>= 70% great chance or guaranteed to evade), neutralized if Boss cancels dodge.
-        4. Explicit 1st Slot passive buffs granting Guard or DR >= 30% when placed in Slot 1.
+        4. Explicit 1st Slot passive buffs granting persistent Guard or DR >= 30% (pre-attack, not once-only).
         In long battles (>= 3 phases or multi-battle), temporary guard/DR (<= 6T) that expires is disqualified.
+        CRITICAL: Units whose Guard, DR, or DEF only activate on/after receiving an attack (on-hit) or are
+        once-only cannot anchor Slot 1 because they will be oneshotted by an initial enemy Super Attack.
         """
         if card.is_tank_override is not None:
             return card.is_tank_override
 
+        def_mech = (
+            card._parse_defense_mechanics() if hasattr(card, "_parse_defense_mechanics") else {}
+        )
         text = f"{card.passive_skill or ''} {card.super_attack or ''}".lower()
 
         cancels_dodge = False
@@ -224,21 +230,38 @@ class DokkanConstraintSolver:
             cancels_dodge = any(getattr(p, "cancels_dodge", False) for p in phases)
             is_long_event = len(phases) >= 3 or getattr(boss_stage, "is_multi_battle", False)
 
+        # Check enemy conditional defense mechanics
+        has_enemy_cond = getattr(card, "has_enemy_conditional_defense", False) or bool(
+            def_mech.get("has_enemy_conditional_defense", False)
+        )
+        if has_enemy_cond:
+            if not boss_stage:
+                return False
+            all_match, _ = card.check_enemy_conditions_match_all_phases(boss_stage)
+            if not all_match:
+                return False
+
+        # Disqualify if guard only activates on/after receiving attacks and not pre-hit
+        if def_mech.get("has_on_hit_guard") and not def_mech.get("pre_hit_guard"):
+            return False
+
         # 1. Guaranteed Pre-Attack Guard (Start-of-Turn)
         has_guard = False
-        if (
-            getattr(card, "is_guard_unconditional", False)
-            or (
-                "guards all attacks" in text
-                or "guards against all attacks" in text
-                or "all attacks guarded" in text
-                or "guaranteed to guard" in text
-            )
-            or card.has_guard
+        if def_mech.get("pre_hit_guard") or (
+            def_mech.get("is_guard_unconditional") and card.has_guard
         ):
             has_guard = True
+        elif (
+            not card.passive_skill
+            and card.base_form
+            and card.base_form.passive_tags
+            and card.base_form.passive_tags.has_guard
+            and not card.base_form.passive_tags.has_on_hit_defense
+        ):
+            # Synthetic card without text (e.g., unit test fixtures)
+            has_guard = True
 
-        # Invalidate guard if it is an RNG chance or enemy-oriented
+        # Invalidate guard if RNG chance or enemy-oriented
         if re.search(r"chance\s+of\s+guarding", text):
             has_guard = False
         if (
@@ -261,14 +284,16 @@ class DokkanConstraintSolver:
         ):
             has_guard = False
 
-        # 2. Damage Reduction %
-        dr = 0
-        if card.base_form and card.base_form.passive_tags:
-            dr = card.base_form.passive_tags.dr_base_percent
+        # 2. Damage Reduction % (strictly pre-hit persistent)
+        if not card.passive_skill and card.base_form and card.base_form.passive_tags:
+            dr = (
+                card.base_form.passive_tags.permanent_dr_percent
+                or card.base_form.passive_tags.dr_base_percent
+            )
         else:
-            dr = card.damage_reduction_percent
+            dr = def_mech.get("pre_hit_dr", 0)
 
-        # Exclude normal-attacks-only DR (e.g. PHY Vegito Blue takes full super attack damage)
+        # Exclude normal-attacks-only DR
         if "damage received from normal attacks" in text:
             clean_text = text.replace("damage received from normal attacks", "")
             if not any(
@@ -277,30 +302,52 @@ class DokkanConstraintSolver:
                 dr = 0
 
         # In long fights or multi-battles, timed DR <= 6 turns expires before the boss
-        if (
-            is_long_event
-            and card.dr_turns_limit
-            and card.dr_turns_limit <= 6
-            and getattr(card, "permanent_damage_reduction_percent", 0) < 50
-        ):
-            dr = getattr(card, "permanent_damage_reduction_percent", 0)
+        if is_long_event and card.dr_turns_limit and card.dr_turns_limit <= 6 and dr < 50:
+            dr = 0
 
         # 3. Dodge % (Neutralized if boss cancels dodge)
         dodge = 0 if cancels_dodge else card.dodge_chance_percent
 
-        # 4. Slot 1 specific buffs
+        # 4. Slot 1 specific buffs (must be pre-hit persistent, not once-only, not on-hit)
         slot1_exclusive = (
-            "1st attacker in a turn" in text
-            or "in the 1st slot" in text
-            or "as the 1st attacker" in text
-        ) and ("guard" in text or "damage reduction" in text or "reduces damage" in text)
+            (
+                "1st attacker in a turn" in text
+                or "in the 1st slot" in text
+                or "as the 1st attacker" in text
+            )
+            and not def_mech.get("is_once_only_dr")
+            and not def_mech.get("has_on_hit_dr")
+            and not def_mech.get("has_on_hit_guard")
+            and ("guard" in text or "damage reduction" in text or "reduces damage" in text)
+        )
 
-        if has_guard:
-            return True
+        # If enemy conditional defense matched across all phases, apply active conditional defensive buffs
+        if has_enemy_cond:
+            cond_dr = int(
+                getattr(card, "enemy_conditional_dr", 0) or def_mech.get("enemy_conditional_dr", 0)
+            )
+            if cond_dr > dr:
+                dr = cond_dr
+            if getattr(card, "enemy_conditional_guard", False) or def_mech.get(
+                "enemy_conditional_guard", False
+            ):
+                has_guard = True
+            cond_dodge = int(
+                getattr(card, "enemy_conditional_dodge", 0)
+                or def_mech.get("enemy_conditional_dodge", 0)
+            )
+            if cond_dodge > 0 and not cancels_dodge:
+                dodge = max(dodge, cond_dodge)
+
         if dr >= 50:
             return True
         if dodge >= 70:
             return True
+        if has_guard:
+            # If the unit has on-hit defense (e.g. DEF only when receiving attack, or once-only DR),
+            # raw guard is not sufficient in Slot 1 against high-difficulty Super Attacks.
+            return not getattr(card, "has_on_hit_defense", False)
+
         return bool(slot1_exclusive and (dr >= 30 or has_guard))
 
     def filter_by_leader_skill(
@@ -613,7 +660,7 @@ class DokkanConstraintSolver:
 
         # 6. Locks Slots Gimmick
         if locks_slots_any:
-            is_slot1 = self.is_slot1_viable(card)
+            is_slot1 = self.is_slot1_viable(card, boss_stage)
             if is_slot1:
                 delta += 15.0
                 counters.append(
@@ -676,6 +723,31 @@ class DokkanConstraintSolver:
                     "Rainbow Phase Vulnerability: lacks unconditional Guard or high DR (>= 50%) against diverse enemy typings (-15.0)"
                 )
 
+        # 8. Enemy Category / Class Conditional Defense Check
+        has_enemy_cond = getattr(card, "has_enemy_conditional_defense", False) or bool(
+            card.base_form
+            and getattr(card.base_form.passive_tags, "has_enemy_conditional_defense", False)
+        )
+        if has_enemy_cond:
+            all_match, failing_phases = card.check_enemy_conditions_match_all_phases(boss_stage)
+            req_cats = getattr(card, "enemy_conditional_categories", [])
+            req_classes = getattr(card, "enemy_conditional_classes", [])
+            req_desc = ", ".join(req_cats + req_classes)
+
+            if not all_match:
+                # Disqualifying penalty for each phase where the enemy does not match
+                penalty_amount = 35.0 * len(failing_phases)
+                delta -= penalty_amount
+                failing_str = ", ".join(str(p) for p in failing_phases)
+                penalties.append(
+                    f"Conditional Defense Inactive: requires enemy ({req_desc}) missing in Phase(s) {failing_str}. Card loses DR/Guard/Dodge and is extremely vulnerable to oneshots (-{penalty_amount:.1f})"
+                )
+            else:
+                delta += 20.0
+                counters.append(
+                    f"Enemy Condition Satisfied: ({req_desc}) present across all phases, granting full conditional defense (+20.0)"
+                )
+
         return delta, counters, penalties
 
     def evaluate_card(
@@ -705,7 +777,7 @@ class DokkanConstraintSolver:
                 card=card,
                 score=-1000.0,
                 lead_boost_pct=0.0,
-                base_slot1_viable=self.is_slot1_viable(card),
+                base_slot1_viable=self.is_slot1_viable(card, boss_stage),
                 penalty_points=["Insufficient Leader Coverage (< 170% or un-enriched leader/card)"],
             )
 
@@ -715,7 +787,7 @@ class DokkanConstraintSolver:
                 card=card,
                 score=-1000.0,
                 lead_boost_pct=0.0,
-                base_slot1_viable=self.is_slot1_viable(card),
+                base_slot1_viable=self.is_slot1_viable(card, boss_stage),
                 penalty_points=["Zero shared categories with Leader main categories"],
             )
 
@@ -725,7 +797,7 @@ class DokkanConstraintSolver:
                 card=card,
                 score=-1000.0,
                 lead_boost_pct=lead_pct,
-                base_slot1_viable=self.is_slot1_viable(card),
+                base_slot1_viable=self.is_slot1_viable(card, boss_stage),
                 penalty_points=[
                     f"Insufficient Leader Coverage ({lead_pct}% < {MIN_LEADER_BOOST_PCT}%)"
                 ],
@@ -742,10 +814,18 @@ class DokkanConstraintSolver:
             counter_points.append(f"150% Sub-Leader Boost ({lead_pct}%)")
 
         # 2. Early-Game Slot 1 Viability (Turns 1-3 Survival)
-        base_s1 = self.is_slot1_viable(card)
+        base_s1 = self.is_slot1_viable(card, boss_stage)
         if base_s1:
             score += 28.0
             counter_points.append("Base Form is Slot 1 viable (guaranteed survival Turns 1-3)")
+        elif getattr(card, "has_on_hit_defense", False):
+            penalty_points.append(
+                "On-hit defense (guard/DR/DEF requires receiving attacks first) - Vulnerable to Turn 1 Super Attack in Slot 1 (must be placed in Slot 2)"
+            )
+            counter_points.append(
+                "Optimal Slot 2 Partner: launches Super Attack first (triggering post-SA DEF / stacks), then safely absorbs incoming hits for on-hit build-up"
+            )
+            score += 8.0
 
         # 3. Base Kit Power
         kit_power, _ = card.evaluate_kit_power()
@@ -761,6 +841,11 @@ class DokkanConstraintSolver:
             counter_points.append(
                 "Permanent DEF stacking on Super Attack provides late-game defense scaling"
             )
+            if getattr(card, "has_on_hit_defense", False):
+                score += 5.0
+                counter_points.append(
+                    "Synergistic Slot 2 Stacker: Post-Super DEF stacking massively amplifies on-hit damage reduction/defense in Slot 2"
+                )
 
         # 5. Boss Gimmick Overrides
         gimmick_delta, g_counters, g_penalties = self.evaluate_boss_gimmicks(card, boss_stage)
@@ -1113,7 +1198,7 @@ class DokkanConstraintSolver:
                     count_200 = len(boosted_200)
 
                     kit_power, _ = c.evaluate_kit_power()
-                    s1_bonus = 15.0 if self.is_slot1_viable(c) else 0.0
+                    s1_bonus = 15.0 if self.is_slot1_viable(c, boss_stage) else 0.0
 
                     type_bonus = 0.0
                     if boss_stage and boss_stage.phases:
@@ -1234,7 +1319,7 @@ class DokkanConstraintSolver:
 
         while len(team_cards) < 6 and remaining_candidates:
             slots_left = 6 - len(team_cards)
-            current_s1_count = sum(1 for c in team_cards if self.is_slot1_viable(c))
+            current_s1_count = sum(1 for c in team_cards if self.is_slot1_viable(c, boss_stage))
             s1_deficit = max(0, MIN_SLOT1_REQUIRED - current_s1_count)
 
             candidate_subset = remaining_candidates
@@ -1279,7 +1364,7 @@ class DokkanConstraintSolver:
                             )
 
             if slots_left <= s1_deficit:
-                s1_pool = [c for c in candidate_subset if self.is_slot1_viable(c)]
+                s1_pool = [c for c in candidate_subset if self.is_slot1_viable(c, boss_stage)]
                 if s1_pool:
                     candidate_subset = s1_pool
                 else:
@@ -1322,7 +1407,7 @@ class DokkanConstraintSolver:
                 f"Added Slot {len(team_cards)}: {best_card.full_name} (Score: {best_ev.score:.1f}, S1: {best_ev.base_slot1_viable})"
             )
 
-        base_slot1_count = sum(1 for c in team_cards if self.is_slot1_viable(c))
+        base_slot1_count = sum(1 for c in team_cards if self.is_slot1_viable(c, boss_stage))
         if base_slot1_count < MIN_SLOT1_REQUIRED:
             logs.append(
                 f"Warning: Final team has {base_slot1_count} base slot 1 viable units (required >= {MIN_SLOT1_REQUIRED})."

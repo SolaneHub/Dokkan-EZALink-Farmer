@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from dokkan_eza_link_farmer.ai.models import DokkanCard
+    from dokkan_eza_link_farmer.ai.card_models import DokkanCard
 
 KI_LINKS = {
     "Prepared for Battle",
@@ -64,19 +64,30 @@ class RotationPair:
             return data
         if not isinstance(data, dict):
             raise TypeError(f"Expected dict for RotationPair.from_dict, got {type(data)}")
-        from dokkan_eza_link_farmer.ai.models import DokkanCard
+        from dokkan_eza_link_farmer.ai.card_models import DokkanCard
 
         slot1_raw = data["slot1"]
         slot2_raw = data["slot2"]
         slot1 = slot1_raw if isinstance(slot1_raw, DokkanCard) else DokkanCard.from_dict(slot1_raw)
         slot2 = slot2_raw if isinstance(slot2_raw, DokkanCard) else DokkanCard.from_dict(slot2_raw)
 
+        shared_links = list(data.get("shared_links") or [])
+        shared_ki_links = list(data.get("shared_ki_links") or [])
+        raw_score = data.get("synergy_score")
+        if raw_score is not None:
+            try:
+                score = float(raw_score)
+            except (ValueError, TypeError):
+                score = 0.0
+        else:
+            score = 0.0
+
         return cls(
             slot1=slot1,
             slot2=slot2,
-            shared_links=list(data.get("shared_links", [])),
-            shared_ki_links=list(data.get("shared_ki_links", [])),
-            synergy_score=float(data.get("synergy_score", 0.0)),
+            shared_links=shared_links,
+            shared_ki_links=shared_ki_links,
+            synergy_score=score,
         )
 
 
@@ -119,7 +130,9 @@ def calculate_link_synergy(
 
 
 def calculate_slot1_def_priority(card: DokkanCard, boss_stage: Any = None) -> float:
-    """Evaluates defensive priority for Slot 1 anchor: Permanent Guard > Permanent DR > Taunt/Revive > Infinite DEF Stack."""
+    """Evaluates defensive priority for Slot 1 anchor: Permanent Guard > Permanent DR > Taunt/Revive > Infinite DEF Stack.
+    Strictly penalizes units that rely on on-hit defense (receiving attacks first) or once-only DR.
+    """
     from dokkan_eza_link_farmer.ai.solver import DokkanConstraintSolver
 
     priority = 0.0
@@ -130,19 +143,36 @@ def calculate_slot1_def_priority(card: DokkanCard, boss_stage: Any = None) -> fl
         cancels_dodge = any(getattr(p, "cancels_dodge", False) for p in phases)
         is_long_event = len(phases) >= 3 or getattr(boss_stage, "is_multi_battle", False)
 
+    def_mech = card._parse_defense_mechanics() if hasattr(card, "_parse_defense_mechanics") else {}
+    pre_hit_guard = def_mech.get("pre_hit_guard", False)
+    pre_hit_dr = def_mech.get("pre_hit_dr", 0)
+    has_on_hit_guard = def_mech.get("has_on_hit_guard", False)
+    has_on_hit_dr = def_mech.get("has_on_hit_dr", False)
+    is_once_only_dr = def_mech.get("is_once_only_dr", False)
+
     has_guard = getattr(card, "has_guard", False)
     guard_limit = getattr(card, "guard_turns_limit", None)
-    if getattr(card, "is_guard_permanent", False) and getattr(
-        card, "is_guard_unconditional", False
+
+    # 1. Guard Priority: only genuine pre-hit guard gets top priority
+    if (
+        getattr(card, "is_guard_permanent", False)
+        and getattr(card, "is_guard_unconditional", False)
+        and pre_hit_guard
     ):
         priority += 50.0
-    elif has_guard:
+    elif has_guard and not has_on_hit_guard:
         if is_long_event and guard_limit and guard_limit <= 6:
             priority += 5.0
         else:
             priority += 20.0
 
-    perm_dr = getattr(card, "permanent_damage_reduction_percent", 0)
+    # 2. Damage Reduction: only genuine pre-hit persistent DR gets full priority
+    perm_dr = (
+        pre_hit_dr if pre_hit_dr > 0 else getattr(card, "permanent_damage_reduction_percent", 0)
+    )
+    if is_once_only_dr or has_on_hit_dr:
+        perm_dr = pre_hit_dr
+
     if perm_dr > 0:
         priority += float(perm_dr) * 1.0
 
@@ -152,7 +182,7 @@ def calculate_slot1_def_priority(card: DokkanCard, boss_stage: Any = None) -> fl
         priority += 2.0
     elif dr_limit and dr_limit <= 3:
         priority += 10.0
-    elif dr_percent >= 40 and not perm_dr:
+    elif dr_percent >= 40 and not perm_dr and not has_on_hit_dr and not is_once_only_dr:
         priority += 15.0
 
     if getattr(card, "has_target_taunt", False):
@@ -170,8 +200,30 @@ def calculate_slot1_def_priority(card: DokkanCard, boss_stage: Any = None) -> fl
         elif dodge >= 50:
             priority += 10.0
 
-    if DokkanConstraintSolver.is_slot1_viable(card, boss_stage):
+    is_s1 = DokkanConstraintSolver.is_slot1_viable(card, boss_stage)
+    if is_s1:
         priority += 25.0
+    else:
+        # Severe penalty for units whose defense is on-hit, once-only, or missing required enemy categories:
+        # They MUST NOT take Slot 1 over true tanks or safer slot 1 units
+        if getattr(card, "has_enemy_conditional_defense", False):
+            if boss_stage:
+                all_match, _ = card.check_enemy_conditions_match_all_phases(boss_stage)
+                if not all_match:
+                    priority -= 60.0
+                else:
+                    priority -= 20.0
+            else:
+                priority -= 40.0
+        elif (
+            getattr(card, "has_on_hit_defense", False)
+            or has_on_hit_guard
+            or has_on_hit_dr
+            or is_once_only_dr
+        ):
+            priority -= 45.0
+        else:
+            priority -= 20.0
 
     return priority
 
@@ -180,18 +232,95 @@ def calculate_slot1_anchor_weight(card: DokkanCard, boss_stage: Any = None) -> f
     """Assigns rotation anchor fitness bonus: Heavily rewards god-tier permanent tanks in Slot 1."""
     from dokkan_eza_link_farmer.ai.solver import DokkanConstraintSolver
 
+    if not DokkanConstraintSolver.is_slot1_viable(card, boss_stage):
+        return 0.0
+
+    if getattr(card, "has_enemy_conditional_defense", False):
+        if not boss_stage:
+            return 0.0
+        all_match, _ = card.check_enemy_conditions_match_all_phases(boss_stage)
+        if not all_match:
+            return 0.0
+
+    def_mech = card._parse_defense_mechanics() if hasattr(card, "_parse_defense_mechanics") else {}
+    if def_mech.get("has_on_hit_defense", False) or getattr(card, "has_on_hit_defense", False):
+        return 0.0
+
     bonus = 0.0
-    if getattr(card, "is_guard_permanent", False) and getattr(
-        card, "is_guard_unconditional", False
+    if (
+        getattr(card, "is_guard_permanent", False)
+        and getattr(card, "is_guard_unconditional", False)
+        and def_mech.get("pre_hit_guard", False)
     ):
         bonus += 10.0
-    if getattr(card, "permanent_damage_reduction_percent", 0) >= 40:
+    if def_mech.get("pre_hit_dr", 0) >= 40:
         bonus += 8.0
     if getattr(card, "has_target_taunt", False) or getattr(card, "has_revive", False):
         bonus += 6.0
-    if DokkanConstraintSolver.is_slot1_viable(card, boss_stage):
-        bonus += 6.0
+    bonus += 6.0
     return bonus
+
+
+def calculate_slot2_partner_weight(card: DokkanCard, boss_stage: Any = None) -> float:
+    """Evaluates suitability of a card to be locked as the Slot 2 partner in a main rotation.
+
+    Heavily rewards:
+    1. Permanent DEF Stacking: Main rotation ensures SA launches every 2 turns (vital for scaling).
+    2. Post-Super DEF / Raises DEF on SA: Attacks before Slot 2 hits, raising defense pre-impact.
+    3. On-Hit Defense / Buildup: Safely triggers after Super Attack raises DEF, avoiding pre-super oneshots.
+    4. Slot 2/3 specific passive bonuses (e.g. LR Buu Boys 60% DR in Slot 2/3).
+    5. High Kit Power / Damage output.
+    """
+    if card is None:
+        return 0.0
+
+    weight = 0.0
+    is_long_event = False
+    if boss_stage:
+        phases = getattr(boss_stage, "phases", [])
+        is_long_event = len(phases) >= 3 or getattr(boss_stage, "is_multi_battle", False)
+
+        # Severe penalty if card depends on enemy conditions that are NOT met in this stage
+        if getattr(card, "has_enemy_conditional_defense", False):
+            all_match, _ = card.check_enemy_conditions_match_all_phases(boss_stage)
+            if not all_match:
+                weight -= 30.0
+
+    # 1. DEF Stacking: Crucial to keep in main rotation to stack every 2 turns
+    has_stacking = bool(
+        getattr(card, "has_stacking_def", False)
+        or (card.base_form and card.base_form.sa_tags and card.base_form.sa_tags.stacks_def)
+    )
+    if has_stacking:
+        weight += 16.0 if is_long_event else 12.0
+
+    # 2. Raises DEF on Super Attack (1-turn or multi-turn boost)
+    if getattr(card, "raises_def_on_sa", False) or has_stacking:
+        weight += 6.0
+
+    # 3. On-Hit Defense: Needs Slot 2 to attack first, then absorb hits safely
+    has_on_hit = (
+        getattr(card, "has_on_hit_defense", False)
+        or getattr(card, "has_on_hit_dr", False)
+        or getattr(card, "has_on_hit_def", False)
+        or getattr(card, "has_on_hit_guard", False)
+    )
+    if has_on_hit:
+        # High bonus for Slot 2 placement: attacks first, then safely absorbs hits!
+        weight += 14.0
+        # If it ALSO stacks or raises DEF on SA, the synergy is exceptional
+        if has_stacking or getattr(card, "raises_def_on_sa", False):
+            weight += 6.0
+
+    # 4. Slot 2/3 specific passive bonus
+    if getattr(card, "has_slot_2_3_buff", False):
+        weight += 10.0
+
+    # 5. Kit power / damage output in Slot 2
+    kit_power, _ = card.evaluate_kit_power() if hasattr(card, "evaluate_kit_power") else (0.0, None)
+    weight += min(kit_power * 0.1, 10.0)
+
+    return weight
 
 
 def evaluate_rotation_pair(
@@ -221,6 +350,18 @@ def evaluate_rotation_pair(
                 if getattr(card_a, "id", 0) <= getattr(card_b, "id", 0)
                 else (card_b, card_a)
             )
+
+    # Symbiotic Tank + Slot 2 Specialist Bonus:
+    # True Slot 1 Tank shields pre-attack hits, while Slot 2 attacks first, raises DEF/stacks, and safely absorbs hits
+    from dokkan_eza_link_farmer.ai.solver import DokkanConstraintSolver
+
+    if DokkanConstraintSolver.is_slot1_viable(slot1, boss_stage) and (
+        getattr(slot2, "has_stacking_def", False)
+        or getattr(slot2, "has_on_hit_defense", False)
+        or getattr(slot2, "has_slot_2_3_buff", False)
+        or getattr(slot2, "raises_def_on_sa", False)
+    ):
+        score += 5.0
 
     return RotationPair(
         slot1=slot1,
@@ -272,10 +413,30 @@ def optimize_rotations_for_team(
         for (p1_a, p1_b), (p2_a, p2_b) in pairings:
             rot1 = evaluate_rotation_pair(p1_a, p1_b, boss_stage=boss_stage)
             rot2 = evaluate_rotation_pair(p2_a, p2_b, boss_stage=boss_stage)
-            total = (rot1.synergy_score + rot2.synergy_score) + (
-                calculate_slot1_anchor_weight(rot1.slot1, boss_stage=boss_stage)
-                + calculate_slot1_anchor_weight(rot2.slot1, boss_stage=boss_stage)
+            total = (
+                (rot1.synergy_score + rot2.synergy_score)
+                + (
+                    calculate_slot1_anchor_weight(rot1.slot1, boss_stage=boss_stage)
+                    + calculate_slot1_anchor_weight(rot2.slot1, boss_stage=boss_stage)
+                )
+                + (
+                    calculate_slot2_partner_weight(rot1.slot2, boss_stage=boss_stage)
+                    + calculate_slot2_partner_weight(rot2.slot2, boss_stage=boss_stage)
+                )
             )
+
+            # Floater opportunity cost: Stacking and on-hit units should NOT be floated!
+            cand_floaters = [cards[i] for i in range(n) if i not in idxs]
+            for fl in cand_floaters:
+                fl_stacks = getattr(fl, "has_stacking_def", False) or bool(
+                    fl.base_form and fl.base_form.sa_tags and fl.base_form.sa_tags.stacks_def
+                )
+                fl_on_hit = getattr(fl, "has_on_hit_defense", False)
+                if fl_stacks:
+                    # Floating a stacking unit cuts its SA frequency by ~33-50%
+                    total -= 12.0
+                elif fl_on_hit and not getattr(fl, "has_support", False):
+                    total -= 8.0
 
             # Rotation consistency: Friend Leader should not displace a core unit if receiving lower boost
             leader_card = cards[0]
@@ -518,6 +679,7 @@ __all__ = [
     "calculate_link_synergy",
     "calculate_slot1_def_priority",
     "calculate_slot1_anchor_weight",
+    "calculate_slot2_partner_weight",
     "evaluate_rotation_pair",
     "optimize_rotations_for_team",
     "select_best_friend_leader",

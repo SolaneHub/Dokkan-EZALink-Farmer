@@ -269,7 +269,15 @@ def build_advisor_payload(
                         and c.base_form.passive_tags.slot1_viable
                     )
                 )
-                else "Damage/Support"
+                else (
+                    "Slot 2 Specialist (On-Hit Buildup / Stacker - Attacks First, Post-SA Tank)"
+                    if getattr(c, "has_on_hit_defense", False)
+                    else (
+                        "Slot 2 Stacker"
+                        if getattr(c, "has_stacking_def", False)
+                        else "Damage/Support"
+                    )
+                )
             ),
         }
         for c in current_team
@@ -371,6 +379,9 @@ def build_advisor_messages(
         "CRITICAL MANDATORY REQUIREMENT: You MUST evaluate unit survivability and effectiveness across ALL battles and ALL phases of the stage "
         "(from Phase 1 / Turn 1 to the final phase). A candidate that is strong against the final boss but has severe type disadvantage "
         "or dies in Phase 1 (especially against initial multi-enemy attack barrages) is UNACCEPTABLE. Favor candidates that guarantee survival across the entire gauntlet. "
+        "CRITICAL SLOT 1 SURVIVABILITY: Units whose Guard, Damage Reduction, or DEF only activate 'when receiving an attack', 'after receiving an attack', 'for every attack received', or are '(once only)' are NOT true Slot 1 tanks and will get oneshotted by an initial enemy Super Attack. Never select or recommend them as Slot 1 anchors. True Slot 1 anchors must possess unconditional pre-attack Guard, high pre-attack Damage Reduction (>= 50%), or high Dodge (>= 70%). "
+        "CRITICAL SLOT 2 OPTIMIZATION: Units with on-hit defense mechanics or defense stacking on Super Attack are PRIME SLOT 2 SPECIALISTS. In Slot 2, they launch their Super Attack first (raising/stacking DEF and activating post-super passives), and only then receive attacks to safely trigger their on-hit build-up. Keep them in main rotation (Slot 2) paired with a true Slot 1 tank so they stack every 2 turns; do NOT place them in Slot 1, and avoid floating them to Slot 3 (which delays their stacking). "
+        "CRITICAL ENEMY-CONDITIONAL PASSIVE RESTRICTION: Units whose Damage Reduction, Guard, or Dodge depend on specific enemy categories or classes (e.g. TEQ SSG Goku with 77% DR against 'Movie Bosses' or 'Pure Saiyans') LOSE their defense entirely if ANY phase of the stage does not feature that enemy category (e.g. Toppo, Goku Black, Cell, Buu). If a stage contains ANY non-matching phase, NEVER select or place such units in rotation as they will take catastrophic fatal damage. "
         + mission_constraint_rules
         + "When multi-enemy phases are present, strongly prioritize AoE attackers that hit all targets simultaneously "
         "and units with unconditional Guard that protect against rainbow attacks. "

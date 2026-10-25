@@ -25,85 +25,316 @@ logger = logging.getLogger(__name__)
 def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> PassiveTags:
     """
     Parses tactical tags from passive skill text, identifying defensive viability,
-    damage reduction %, dodge chance %, guard, revive, taunt, and support.
+    damage reduction %, dodge chance %, guard, revive, taunt, support, on-hit defense,
+    and enemy category/class conditional defense mechanics.
     """
     _ = sa_tags
-    text = (passive_text or "").lower()
+    raw_text = passive_text or ""
+    text = raw_text.lower()
 
-    # 1. Guard
+    # Split by markdown headers / condition blocks
+    blocks = re.split(r"\*([^*]+)\*", raw_text)
+    sections: list[tuple[str, str]] = []
+    if len(blocks) == 1:
+        sections.append(("", blocks[0].lower()))
+    else:
+        sections.append(("", blocks[0].lower()))
+        for i in range(1, len(blocks), 2):
+            header = blocks[i].lower().strip()
+            content = blocks[i + 1].lower().strip() if i + 1 < len(blocks) else ""
+            sections.append((header, content))
+
+    ON_HIT_PATTERNS = (
+        "when receiving an attack",
+        "after receiving an attack",
+        "after receiving attack",
+        "for every attack received",
+        "for each attack received",
+        "with each attack received",
+        "per attack received",
+        "when receiving a super attack",
+        "when receiving a normal attack",
+        "starting from the turn in which the character receives an attack",
+        "starting from the turn in which the character receives a super attack",
+        "when receiving damage",
+        "after receiving damage",
+    )
+    ONCE_ONLY_PATTERNS = (
+        "{passiveimg:once}",
+        "(once only)",
+        "once only",
+    )
+    SLOT_2_3_PATTERNS = (
+        "as the 2nd or 3rd attacker",
+        "as the 2nd attacker",
+        "as the 3rd attacker",
+        "in the 2nd or 3rd slot",
+        "in the 2nd slot",
+        "in the 3rd slot",
+    )
+    ALLY_CONDITIONAL_PATTERNS = (
+        "allies attacking in the same turn",
+        "when there are",
+        "when there is another",
+        "extreme class allies",
+        "super class allies",
+        "category ally",
+        "category allies",
+    )
+
+    unconditional_dr_base = 0
+    pre_hit_dr = 0
     has_guard = False
+    pre_hit_guard = False
+    dodge_chance = 0
+
+    has_on_hit_def = False
+    has_on_hit_guard = False
+    has_on_hit_dr = False
+    is_once_only_dr = False
+    has_slot_2_3_buff = False
+
+    has_enemy_conditional_defense = False
+    enemy_conditional_categories: list[str] = []
+    enemy_conditional_classes: list[str] = []
+    enemy_conditional_dr = 0
+    enemy_conditional_guard = False
+    enemy_conditional_dodge = 0
+
+    for header, content in sections:
+        header_is_on_hit = any(p in header for p in ON_HIT_PATTERNS)
+        header_is_once_only = any(p in header for p in ONCE_ONLY_PATTERNS)
+        header_is_slot_2_3 = any(p in header for p in SLOT_2_3_PATTERNS)
+        header_is_ally_conditional = any(p in header for p in ALLY_CONDITIONAL_PATTERNS)
+
+        header_clean = " ".join(header.split())
+        header_is_enemy_conditional = (
+            any(
+                p in header_clean
+                for p in ("category enemy", "category enemies", "class enemy", "class enemies")
+            )
+            or (
+                "when facing" in header_clean
+                and any(k in header_clean for k in ("enemy", "enemies"))
+            )
+            or (
+                "when there is a" in header_clean
+                and any(k in header_clean for k in ("enemy", "enemies"))
+            )
+            or ("against" in header_clean and any(k in header_clean for k in ("enemy", "enemies")))
+        )
+        header_req_cats: list[str] = []
+        header_req_classes: list[str] = []
+        if header_is_enemy_conditional:
+            cats_found = [x.title() for x in re.findall(r'"([^"]+)"', header_clean)]
+            header_req_cats = [c for c in cats_found if "class" not in c.lower()]
+            class_m = re.search(r"(extreme|super)\s+class", header_clean, re.I)
+            if class_m:
+                header_req_classes.append(class_m.group(1).title())
+            for c in cats_found:
+                if "extreme" in c.lower() and "Extreme" not in header_req_classes:
+                    header_req_classes.append("Extreme")
+                elif "super" in c.lower() and "Super" not in header_req_classes:
+                    header_req_classes.append("Super")
+
+        is_basic = "basic effect" in header or header == ""
+        is_conditional_header = (
+            "ki spheres obtained" in header
+            or "collecting" in header
+            or "when hp is" in header
+            or "when attacking" in header
+            or header_is_slot_2_3
+            or header_is_on_hit
+            or header_is_ally_conditional
+            or header_is_enemy_conditional
+            or "starting from" in header
+            or "after the character's" in header
+        )
+
+        lines = [line.strip() for line in content.split("\n") if line.strip()]
+        for line in lines:
+            line_clean = " ".join(line.split())
+            line_is_on_hit = header_is_on_hit or any(p in line for p in ON_HIT_PATTERNS)
+            line_is_once_only = header_is_once_only or any(p in line for p in ONCE_ONLY_PATTERNS)
+            line_is_slot_2_3 = header_is_slot_2_3 or any(p in line for p in SLOT_2_3_PATTERNS)
+            line_is_ally_conditional = header_is_ally_conditional or any(
+                p in line for p in ALLY_CONDITIONAL_PATTERNS
+            )
+
+            line_is_enemy_conditional = header_is_enemy_conditional or (
+                any(
+                    p in line_clean
+                    for p in ("category enemy", "category enemies", "class enemy", "class enemies")
+                )
+                or (
+                    "when facing" in line_clean
+                    and any(k in line_clean for k in ("enemy", "enemies"))
+                )
+                or (
+                    "when there is a" in line_clean
+                    and any(k in line_clean for k in ("enemy", "enemies"))
+                )
+                or ("against" in line_clean and any(k in line_clean for k in ("enemy", "enemies")))
+            )
+            line_req_cats = list(header_req_cats)
+            line_req_classes = list(header_req_classes)
+            if line_is_enemy_conditional and not line_req_cats and not line_req_classes:
+                cats_found = [x.title() for x in re.findall(r'"([^"]+)"', line_clean)]
+                line_req_cats = [c for c in cats_found if "class" not in c.lower()]
+                class_m = re.search(r"(extreme|super)\s+class", line_clean, re.I)
+                if class_m:
+                    line_req_classes.append(class_m.group(1).title())
+                for c in cats_found:
+                    if "extreme" in c.lower() and "Extreme" not in line_req_classes:
+                        line_req_classes.append("Extreme")
+                    elif "super" in c.lower() and "Super" not in line_req_classes:
+                        line_req_classes.append("Super")
+
+            if line_is_slot_2_3:
+                has_slot_2_3_buff = True
+
+            # On-Hit DEF check
+            if line_is_on_hit and re.search(r"def\s*\+?\s*(\d+)%", line):
+                has_on_hit_def = True
+
+            # Damage Reduction %
+            dr_m = re.findall(
+                r"(?:damage reduction (?:rate|of)?|damage received by(?:\s+up to)?|reduces damage(?: received)? by(?:\s+up to)?(?:\s+an additional)?|damage received\s*-\s*)\s*(\d+)%",
+                line,
+            )
+            for d in dr_m:
+                val = int(d)
+                if line_is_on_hit:
+                    has_on_hit_dr = True
+                if line_is_once_only:
+                    is_once_only_dr = True
+                if line_is_enemy_conditional:
+                    has_enemy_conditional_defense = True
+                    if val > enemy_conditional_dr:
+                        enemy_conditional_dr = val
+                    for c in line_req_cats:
+                        if c not in enemy_conditional_categories:
+                            enemy_conditional_categories.append(c)
+                    for cl in line_req_classes:
+                        if cl not in enemy_conditional_classes:
+                            enemy_conditional_classes.append(cl)
+                else:
+                    if val > unconditional_dr_base:
+                        unconditional_dr_base = val
+                    if (
+                        (is_basic or not is_conditional_header)
+                        and not line_is_on_hit
+                        and not line_is_once_only
+                        and not line_is_slot_2_3
+                        and not line_is_ally_conditional
+                        and val > pre_hit_dr
+                    ):
+                        pre_hit_dr = val
+
+            # Guard
+            if (
+                "guard" in line
+                and "chance of guarding" not in line
+                and "disables enemy" not in line
+                and any(
+                    k in line
+                    for k in (
+                        "guards all attacks",
+                        "guards against all attacks",
+                        "all attacks guarded",
+                        "guaranteed to guard",
+                    )
+                )
+            ):
+                if line_is_on_hit:
+                    has_on_hit_guard = True
+                if line_is_enemy_conditional:
+                    has_enemy_conditional_defense = True
+                    enemy_conditional_guard = True
+                    for c in line_req_cats:
+                        if c not in enemy_conditional_categories:
+                            enemy_conditional_categories.append(c)
+                    for cl in line_req_classes:
+                        if cl not in enemy_conditional_classes:
+                            enemy_conditional_classes.append(cl)
+                else:
+                    has_guard = True
+                    if (
+                        (is_basic or not is_conditional_header)
+                        and not line_is_on_hit
+                        and not line_is_once_only
+                        and not line_is_ally_conditional
+                        and not line_is_slot_2_3
+                    ):
+                        pre_hit_guard = True
+
+            # Dodge %
+            if any(k in line for k in ("evad", "evasion", "dodge")):
+                line_dodge = 0
+                if any(
+                    g in line
+                    for g in ("guaranteed to evade", "guaranteed to dodge", "guaranteed evasion")
+                ):
+                    line_dodge = 100
+                elif "great chance" in line:
+                    line_dodge = 70
+                elif "high chance" in line:
+                    line_dodge = 50
+                elif "medium chance" in line or "med chance" in line:
+                    line_dodge = 30
+                elif "rare chance" in line:
+                    line_dodge = 20
+                elif re.search(
+                    r"(?<!chance of )(?<!chance to )(?<!great )(?<!high )(?<!medium )(?<!rare )(?<!med )(?<!guaranteed to )evades?\s+enemy(?:'s)?\s+attacks?",
+                    line,
+                ):
+                    line_dodge = 100
+                for m in re.finditer(r"(\d+)%\s*chance of evading", line):
+                    line_dodge = max(line_dodge, int(m.group(1)))
+                for m in re.finditer(
+                    r"(?:chance of evading|chance to evade|chance of dodging|chance to dodge|evasion rate)\s*(?:enemy(?:'s)?\s+attacks?)?\s*(?:\([^)]*\))?\s*(?:rate\s*)?\+?\s*(\d+)%",
+                    line,
+                ):
+                    line_dodge = max(line_dodge, int(m.group(1)))
+                for m in re.finditer(
+                    r"(?:evad\w*|dodge\w*)[^.\n\*\-]{0,60}\(up to (\d+)%\)",
+                    line,
+                ):
+                    line_dodge = max(line_dodge, int(m.group(1)))
+
+                if line_dodge > 0:
+                    if line_is_enemy_conditional:
+                        has_enemy_conditional_defense = True
+                        if line_dodge > enemy_conditional_dodge:
+                            enemy_conditional_dodge = line_dodge
+                        for c in line_req_cats:
+                            if c not in enemy_conditional_categories:
+                                enemy_conditional_categories.append(c)
+                        for cl in line_req_classes:
+                            if cl not in enemy_conditional_classes:
+                                enemy_conditional_classes.append(cl)
+                    elif (
+                        (is_basic or not is_conditional_header)
+                        and not line_is_on_hit
+                        and line_dodge > dodge_chance
+                    ):
+                        dodge_chance = line_dodge
+
+    # Global text fallbacks for unconditional Guard / Dodge / Support
     if (
-        bool(re.search(r"guard(?:s|ing)?\s+(?:against\s+)?all", text))
-        or "all attacks guarded" in text
-        or "guaranteed to guard" in text
+        not has_guard
+        and not has_enemy_conditional_defense
+        and (
+            bool(re.search(r"guard(?:s|ing)?\s+(?:against\s+)?all", text))
+            or "all attacks guarded" in text
+            or "guaranteed to guard" in text
+        )
+        and "chance of guarding" not in text
+        and "disables enemy" not in text
     ):
         has_guard = True
-
-    # Invalidate if RNG chance or enemy guard disabling
-    if re.search(r"chance\s+of\s+guarding", text):
-        has_guard = False
-    if (
-        "disables enemy" in text
-        and "guard" in text
-        and not (
-            "guards all attacks" in text
-            or "guards against all attacks" in text
-            or "all attacks guarded" in text
-        )
-    ):
-        has_guard = False
-
-    # 2. Damage Reduction %
-    dr_base = 0
-    dr_matches = re.findall(
-        r"(?:damage reduction (?:rate|of)?|damage received by(?:\s+up to)?|reduces damage(?: received)? by(?:\s+up to)?(?:\s+an additional)?|damage received\s*-\s*)\s*(\d+)%",
-        text,
-    )
-    if dr_matches:
-        with contextlib.suppress(ValueError):
-            dr_base = max(int(m) for m in dr_matches)
-
-    # 3. Dodge Chance %
-    dodge_chance = 0
-    t_clean = " ".join(text.split())
-    if any(k in t_clean for k in ("evad", "evasion", "dodge")):
-        named = 0
-        if (
-            "guaranteed to evade" in t_clean
-            or "guaranteed to dodge" in t_clean
-            or "guaranteed evasion" in t_clean
-        ):
-            named = 100
-        elif "great chance" in t_clean:
-            named = 70
-        elif "high chance" in t_clean:
-            named = 50
-        elif "medium chance" in t_clean or "med chance" in t_clean:
-            named = 30
-        elif "rare chance" in t_clean:
-            named = 20
-        elif re.search(
-            r"(?<!chance of )(?<!chance to )(?<!great )(?<!high )(?<!medium )(?<!rare )(?<!med )(?<!guaranteed to )evades?\s+enemy(?:'s)?\s+attacks?",
-            t_clean,
-        ):
-            named = 100
-
-        explicit_vals: list[int] = []
-        for m in re.finditer(r"(\d+)%\s*chance of evading", t_clean):
-            explicit_vals.append(int(m.group(1)))
-        for m in re.finditer(
-            r"(?:chance of evading|chance to evade|chance of dodging|chance to dodge|evasion rate)\s*(?:enemy(?:'s)?\s+attacks?)?\s*(?:\([^)]*\))?\s*(?:rate\s*)?\+?\s*(\d+)%",
-            t_clean,
-        ):
-            explicit_vals.append(int(m.group(1)))
-        for m in re.finditer(r"\(up to (\d+)%\)", t_clean):
-            explicit_vals.append(int(m.group(1)))
-
-        valid_explicit = [v for v in explicit_vals if v <= 100]
-        if valid_explicit:
-            dodge_chance = max(named, max(valid_explicit))
-        else:
-            dodge_chance = named if named > 0 else 30
+        if not has_on_hit_guard and not any(p in text for p in ALLY_CONDITIONAL_PATTERNS):
+            pre_hit_guard = True
 
     # 4. Revive, Taunt, Support, Mechanics
     has_revive = "revive" in text or "revival" in text
@@ -138,25 +369,57 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
         or "rainbow ki sphere" in text
     )
 
-    # 5. Slot 1 Viability
+    has_on_hit_defense = bool(
+        has_on_hit_guard
+        or has_on_hit_dr
+        or (has_on_hit_def and pre_hit_dr < 50 and not pre_hit_guard)
+        or (is_once_only_dr and pre_hit_dr < 50)
+    )
+
     slot1_exclusive = (
-        "1st attacker in a turn" in text
-        or "in the 1st slot" in text
-        or "as the 1st attacker" in text
-    ) and ("guard" in text or "damage reduction" in text or "reduces damage" in text)
+        (
+            "1st attacker in a turn" in text
+            or "in the 1st slot" in text
+            or "as the 1st attacker" in text
+        )
+        and not is_once_only_dr
+        and not has_on_hit_dr
+        and not has_on_hit_guard
+        and ("guard" in text or "damage reduction" in text or "reduces damage" in text)
+    )
+
+    # slot1_viable requires genuine unconditional defense in base form
     slot1_viable = False
     if (
-        has_guard
-        or dr_base >= 50
+        pre_hit_dr >= 50
         or dodge_chance >= 70
+        or pre_hit_guard
+        and not has_on_hit_defense
         or slot1_exclusive
-        and (dr_base >= 30 or has_guard)
+        and (pre_hit_dr >= 30 or pre_hit_guard)
     ):
         slot1_viable = True
 
+    has_slot_2_3_buff = has_slot_2_3_buff or any(p in text for p in SLOT_2_3_PATTERNS)
+
     return PassiveTags(
         slot1_viable=slot1_viable,
-        dr_base_percent=dr_base,
+        dr_base_percent=unconditional_dr_base,
+        permanent_dr_percent=pre_hit_dr,
+        pre_hit_dr_percent=pre_hit_dr,
+        pre_hit_guard=pre_hit_guard,
+        has_on_hit_defense=has_on_hit_defense,
+        has_on_hit_guard=has_on_hit_guard,
+        has_on_hit_dr=has_on_hit_dr,
+        has_on_hit_def=has_on_hit_def,
+        is_once_only_dr=is_once_only_dr,
+        has_slot_2_3_buff=has_slot_2_3_buff,
+        has_enemy_conditional_defense=has_enemy_conditional_defense,
+        enemy_conditional_categories=enemy_conditional_categories,
+        enemy_conditional_classes=enemy_conditional_classes,
+        enemy_conditional_dr=enemy_conditional_dr,
+        enemy_conditional_guard=enemy_conditional_guard,
+        enemy_conditional_dodge=enemy_conditional_dodge,
         dodge_chance_percent=dodge_chance,
         has_guard=has_guard,
         has_revive=has_revive,
