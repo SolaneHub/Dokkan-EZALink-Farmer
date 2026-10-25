@@ -9,7 +9,7 @@ Provides:
 
 from __future__ import annotations
 
-from dokkan_eza_link_farmer.ai.endgame import endgame_runner, runner, telemetry
+from dokkan_eza_link_farmer.ai.endgame import runner, telemetry
 from dokkan_eza_link_farmer.ai.endgame.runner import (
     BattleSimulatorFn,
     EndgameResult,
@@ -54,7 +54,6 @@ __all__ = [
     "apply_team_in_game",
     "attribute_culprit",
     "create_failure_report",
-    "endgame_runner",
     "is_debug_telemetry_enabled",
     "runner",
     "set_debug_telemetry",

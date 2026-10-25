@@ -30,6 +30,7 @@ from dokkan_eza_link_farmer.ai.models import (
     BossPhase,
     BossStage,
     DokkanCard,
+    FailureReport,
 )
 from dokkan_eza_link_farmer.ai.solver import (
     DokkanConstraintSolver,
@@ -130,30 +131,6 @@ class CulpritAttribution:
             "is_friend_leader": self.is_friend_leader,
             "is_ambiguous": self.is_ambiguous,
             "vulnerability_shares": {str(k): v for k, v in self.vulnerability_shares.items()},
-            "reason": self.reason,
-        }
-
-
-@dataclass
-class FailureReport:
-    """Structured report of combat defeat for AI telemetry and Advisor."""
-
-    defeat_turn: int
-    phase_index: int
-    boss_element: int
-    boss_hp_percent: float
-    culprit_card_id: int | None
-    classification: str
-    reason: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "defeat_turn": self.defeat_turn,
-            "phase_index": self.phase_index,
-            "boss_element": self.boss_element,
-            "boss_hp_percent": self.boss_hp_percent,
-            "culprit_card_id": self.culprit_card_id,
-            "classification": self.classification,
             "reason": self.reason,
         }
 

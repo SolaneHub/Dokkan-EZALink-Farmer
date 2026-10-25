@@ -26,6 +26,7 @@ from dokkan_eza_link_farmer.ai.models import (
     BossStage,
     CardForm,
     DokkanCard,
+    FailureReport,
     LeaderSkillSpec,
     PassiveTags,
     RotationPair,
@@ -54,8 +55,6 @@ BoxScanner = BoxScannerTask
 
 if TYPE_CHECKING:
     import dokkan_eza_link_farmer.ai.endgame as endgame
-    import dokkan_eza_link_farmer.ai.endgame_runner as endgame_runner
-    import dokkan_eza_link_farmer.ai.telemetry as telemetry
     from dokkan_eza_link_farmer.ai.endgame import (
         DEFAULT_MEMORY_CACHE_PATH,
         BattleSimulatorFn,
@@ -69,7 +68,6 @@ if TYPE_CHECKING:
         EndgameStageOutcome,
         EpisodicMemory,
         EpisodicMemoryManager,
-        FailureReport,
         PostDefeatDecision,
         TurnSnapshot,
         apply_team_in_game,
@@ -94,17 +92,14 @@ _LAZY_ENDGAME_EXPORTS = {
     "EndgameStageOutcome",
     "EpisodicMemory",
     "EpisodicMemoryManager",
-    "FailureReport",
     "PostDefeatDecision",
     "TurnSnapshot",
     "apply_team_in_game",
     "attribute_culprit",
     "create_failure_report",
     "endgame",
-    "endgame_runner",
     "is_debug_telemetry_enabled",
     "set_debug_telemetry",
-    "telemetry",
 }
 
 
@@ -117,14 +112,6 @@ def __getattr__(name: str) -> Any:
 
             if name == "endgame":
                 mod = importlib.import_module("dokkan_eza_link_farmer.ai.endgame")
-                globals()[name] = mod
-                return mod
-            if name == "telemetry":
-                mod = importlib.import_module("dokkan_eza_link_farmer.ai.telemetry")
-                globals()[name] = mod
-                return mod
-            if name == "endgame_runner":
-                mod = importlib.import_module("dokkan_eza_link_farmer.ai.endgame_runner")
                 globals()[name] = mod
                 return mod
 
@@ -187,7 +174,6 @@ __all__ = [
     "attribute_culprit",
     "create_failure_report",
     "endgame",
-    "endgame_runner",
     "get_boss_catalog_path",
     "get_boss_stage",
     "is_debug_telemetry_enabled",
@@ -197,5 +183,4 @@ __all__ = [
     "parse_passive_tags",
     "parse_sa_tags",
     "set_debug_telemetry",
-    "telemetry",
 ]

@@ -28,13 +28,13 @@ from dokkan_eza_link_farmer.ai.models import (
     BossStage,
     CardForm,
     DokkanCard,
+    FailureReport,
     LeaderSkillSpec,
     PassiveTags,
     SATags,
 )
 from dokkan_eza_link_farmer.ai.team_builder import (
     CandidateEvaluation,
-    FailureReport,
     TeamBuilder,
 )
 

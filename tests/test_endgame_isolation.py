@@ -3,8 +3,8 @@
 Verifies:
 1. BotEngine() startup does not eagerly load or allocate AI telemetry / episodic memory.
 2. EZAFarmTask, StageFarmTask, and LinkLevelFarmTask have zero import dependencies on
-   ai.telemetry or ai.endgame_runner.
-3. Endgame combat & telemetry components export cleanly via lazy interfaces and backward-compatible shims.
+   ai.endgame.telemetry or ai.endgame.runner.
+3. Endgame combat & telemetry components export cleanly via lazy interfaces and canonical modules.
 4. start_ai_endgame_run() correctly loads and initializes EndgameRunner on demand.
 """
 
@@ -90,9 +90,7 @@ class TestSubsystemIsolation:
         apply_fn = ai.apply_team_in_game
         assert callable(apply_fn)
 
-        # Submodules exposed lazily
-        assert ai.telemetry is not None
-        assert ai.endgame_runner is not None
+        # Submodule exposed lazily
         assert ai.endgame is not None
 
         # Verify all lazy exports resolve cleanly and are present in dir(ai)
@@ -116,8 +114,7 @@ class TestSubsystemIsolation:
         symbols = [
             "EndgameRunner",
             "CombatRingBuffer",
-            "telemetry",
-            "endgame_runner",
+            "endgame",
             "apply_team_in_game",
         ]
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
@@ -126,20 +123,18 @@ class TestSubsystemIsolation:
                 res = f.result()
                 assert res is not None
 
-    def test_backward_compatible_shims(self):
-        """Verifies that legacy import paths and subpackage alias modules remain operational."""
+    def test_canonical_endgame_modules(self):
+        """Verifies that endgame package and its canonical modules remain operational."""
         import dokkan_eza_link_farmer.ai.endgame as endgame
-        from dokkan_eza_link_farmer.ai.endgame.endgame_runner import (
-            EndgameRunner as SubpkgAliasRunner,
+        from dokkan_eza_link_farmer.ai.endgame.runner import EndgameRunner as CanonicalRunner
+        from dokkan_eza_link_farmer.ai.endgame.telemetry import (
+            CombatRingBuffer as CanonicalRingBuffer,
         )
-        from dokkan_eza_link_farmer.ai.endgame_runner import EndgameRunner as LegacyRunner
-        from dokkan_eza_link_farmer.ai.telemetry import CombatRingBuffer as LegacyRingBuffer
 
-        assert LegacyRunner is EndgameRunner
-        assert LegacyRingBuffer is CombatRingBuffer
-        assert SubpkgAliasRunner is EndgameRunner
-        assert endgame.endgame_runner.EndgameRunner is EndgameRunner
-        assert "endgame_runner" in endgame.__all__
+        assert CanonicalRunner is EndgameRunner
+        assert CanonicalRingBuffer is CombatRingBuffer
+        assert endgame.runner.EndgameRunner is EndgameRunner
+        assert endgame.telemetry.CombatRingBuffer is CombatRingBuffer
         assert "runner" in endgame.__all__
         assert "telemetry" in endgame.__all__
 
@@ -236,25 +231,20 @@ class TestSubsystemIsolationSubprocess:
         assert result.returncode == 0, f"Subprocess failed:\n{result.stderr}\n{result.stdout}"
         assert "SUCCESS" in result.stdout
 
-    def test_legacy_backward_compatibility_across_clean_process(self):
-        """Verifies that legacy shims in a clean process resolve to identical types as new endgame package."""
+    def test_canonical_endgame_across_clean_process(self):
+        """Verifies that canonical endgame imports in a clean process resolve correctly."""
         check_code = (
-            "import dokkan_eza_link_farmer.ai.endgame_runner as er\n"
-            "import dokkan_eza_link_farmer.ai.telemetry as tel\n"
             "import dokkan_eza_link_farmer.ai.endgame.runner as reg\n"
             "import dokkan_eza_link_farmer.ai.endgame.telemetry as teg\n"
-            "import dokkan_eza_link_farmer.ai.endgame.endgame_runner as eger\n"
             "import dokkan_eza_link_farmer.ai.endgame as eg\n"
-            "assert er.EndgameRunner is reg.EndgameRunner\n"
-            "assert er.apply_team_in_game is reg.apply_team_in_game\n"
-            "assert tel.CombatRingBuffer is teg.CombatRingBuffer\n"
-            "assert tel.EpisodicMemory is teg.EpisodicMemory\n"
-            "assert tel.DEFAULT_MEMORY_CACHE_PATH == teg.DEFAULT_MEMORY_CACHE_PATH\n"
-            "assert eger.EndgameRunner is reg.EndgameRunner\n"
-            "assert eg.endgame_runner.EndgameRunner is reg.EndgameRunner\n"
             "assert eg.runner.EndgameRunner is reg.EndgameRunner\n"
             "assert eg.telemetry.CombatRingBuffer is teg.CombatRingBuffer\n"
-            "assert 'endgame_runner' in eg.__all__\n"
+            "assert eg.apply_team_in_game is reg.apply_team_in_game\n"
+            "assert teg.CombatRingBuffer is eg.CombatRingBuffer\n"
+            "assert teg.EpisodicMemory is eg.EpisodicMemory\n"
+            "assert teg.DEFAULT_MEMORY_CACHE_PATH == eg.DEFAULT_MEMORY_CACHE_PATH\n"
+            "assert 'runner' in eg.__all__\n"
+            "assert 'telemetry' in eg.__all__\n"
             "print('SUCCESS')\n"
         )
         result = subprocess.run(

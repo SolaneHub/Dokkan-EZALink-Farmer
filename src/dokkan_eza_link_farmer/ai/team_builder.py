@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import re
-from dataclasses import dataclass
 from typing import Any
 
 import requests
@@ -15,6 +14,7 @@ from dokkan_eza_link_farmer.ai.client import DokkanAIClient
 from dokkan_eza_link_farmer.ai.models import (
     BossStage,
     DokkanCard,
+    FailureReport,
     RotationPair,
     TeamRecommendation,
 )
@@ -51,19 +51,6 @@ TOP_TIER_STAT_LINKS = {
     "Majin",
     "Power Bestowed by God",
 }
-
-
-@dataclass
-class FailureReport:
-    """Combat failure context passed from telemetry after defeat."""
-
-    defeat_turn: int = 1
-    phase_index: int = 1
-    boss_element: int = 0
-    boss_hp_percent: float = 100.0
-    culprit_card_id: int | None = None
-    classification: str = ""
-    reason: str = ""
 
 
 class TeamBuilder:

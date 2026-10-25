@@ -1470,6 +1470,26 @@ class RotationPair:
     shared_ki_links: list[str]
     synergy_score: float
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serializes RotationPair into a dictionary for JSON persistence."""
+        return {
+            "slot1": self.slot1.to_dict(),
+            "slot2": self.slot2.to_dict(),
+            "shared_links": list(self.shared_links),
+            "shared_ki_links": list(self.shared_ki_links),
+            "synergy_score": self.synergy_score,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> RotationPair:
+        return cls(
+            slot1=DokkanCard.from_dict(data["slot1"]),
+            slot2=DokkanCard.from_dict(data["slot2"]),
+            shared_links=list(data.get("shared_links", [])),
+            shared_ki_links=list(data.get("shared_ki_links", [])),
+            synergy_score=float(data.get("synergy_score", 0.0)),
+        )
+
 
 @dataclass
 class TeamRecommendation:
@@ -1488,6 +1508,50 @@ class TeamRecommendation:
     target_missions: list[Any] = field(default_factory=list)
     mission_summary: str | None = None
     boss_stage: Any = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializes TeamRecommendation into a dictionary for JSON persistence."""
+        return {
+            "leader": self.leader.to_dict(),
+            "friend_leader": self.friend_leader.to_dict(),
+            "rotation_a": self.rotation_a.to_dict(),
+            "rotation_b": self.rotation_b.to_dict(),
+            "floaters": [c.to_dict() for c in self.floaters],
+            "all_cards": [c.to_dict() for c in self.all_cards],
+            "tactical_analysis": self.tactical_analysis,
+            "recommended_items": list(self.recommended_items),
+            "turn_plan": list(self.turn_plan),
+            "ai_reasoning": self.ai_reasoning,
+            "target_missions": self.target_missions,
+            "mission_summary": self.mission_summary,
+            "boss_stage": self.boss_stage.to_dict()
+            if hasattr(self.boss_stage, "to_dict")
+            else self.boss_stage,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TeamRecommendation:
+        boss_data = data.get("boss_stage")
+        boss_stage = (
+            BossStage.from_dict(boss_data)
+            if isinstance(boss_data, dict) and "stage_id" in boss_data
+            else boss_data
+        )
+        return cls(
+            leader=DokkanCard.from_dict(data["leader"]),
+            friend_leader=DokkanCard.from_dict(data["friend_leader"]),
+            rotation_a=RotationPair.from_dict(data["rotation_a"]),
+            rotation_b=RotationPair.from_dict(data["rotation_b"]),
+            floaters=[DokkanCard.from_dict(c) for c in data.get("floaters", [])],
+            all_cards=[DokkanCard.from_dict(c) for c in data.get("all_cards", [])],
+            tactical_analysis=str(data.get("tactical_analysis", "")),
+            recommended_items=list(data.get("recommended_items", [])),
+            turn_plan=list(data.get("turn_plan", [])),
+            ai_reasoning=data.get("ai_reasoning"),
+            target_missions=list(data.get("target_missions", [])),
+            mission_summary=data.get("mission_summary"),
+            boss_stage=boss_stage,
+        )
 
 
 @dataclass
@@ -1881,3 +1945,27 @@ class ChallengeStageInfo:
     stage_name: str
     difficulty: int = 1
     phases: list[BossPhase] = field(default_factory=list)
+
+
+@dataclass
+class FailureReport:
+    """Structured report of combat defeat for AI telemetry and Advisor."""
+
+    defeat_turn: int = 1
+    phase_index: int = 1
+    boss_element: int = 0
+    boss_hp_percent: float = 100.0
+    culprit_card_id: int | None = None
+    classification: str = ""
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "defeat_turn": self.defeat_turn,
+            "phase_index": self.phase_index,
+            "boss_element": self.boss_element,
+            "boss_hp_percent": self.boss_hp_percent,
+            "culprit_card_id": self.culprit_card_id,
+            "classification": self.classification,
+            "reason": self.reason,
+        }
