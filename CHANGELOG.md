@@ -1,5 +1,18 @@
 # Changelog
 
+## [v1.9.0] - 2026-10-25
+
+### Added
+- **On-Hit Defense & Pre-Attack Mitigation Engine (`ai.synergy`, `ai.syncer`)**: Native detection of passive mechanics activating upon hit. Disqualifies glass cannons from Slot 1, routing them to Slot 2/3 where Super Attacks safely raise DEF before impact.
+- **AI Domain Model Decoupling (`ai.boss_models`, `ai.card_models`)**: Decomposed monolithic 1850-line `models.py` into dedicated high-cohesion modules while maintaining full backwards compatibility via facade re-exports.
+- **Isolated Stage Farm Integration Harness (`tests/test_stage_farm_integration.py`)**: Extracted slow synthetic ADB loop verification into dual-granularity slow tier, keeping unit test suite strictly under 3 seconds.
+- **Declarative Headless CLI Task Orchestration (`__main__`, `ui.cli`)**: Seamless execution of automated tasks (`--eza`, `--link`, `--stage`, `--scan-box`, `--challenge`) with non-blocking lifecycle monitoring.
+
+### Changed
+- **Unified Canonical Test Runner (`scripts/test_runner.py`)**: Consolidated test execution into a single entry-point supporting both rapid developer feedback (`fast`) and full pre-release test matrix verification (`full`), eliminating redundant runner scripts (`fast_test.py`, `run_fast.py`).
+- **DokkanDB Boss Category & Class Enrichment**: Enemy data parser now populates boss category names and Super/Extreme typing for exact conditional passive evaluations.
+- **PyInstaller Modular Subsystem Bundling**: Configured standalone distribution script with complete AI subpackage hidden imports.
+
 ## [v1.8.0] - 2026-10-25
 
 ### Added
@@ -8,7 +21,7 @@
 - **Modular UI Component Architecture (`ui.panels`, `ui.briefing`, `ui.wizards`)**: Decomposed monolithic terminal CLI into dedicated presentation panels and interactive wizards, shrinking `TerminalCLI` to under 500 lines.
 - **Modular AI Subsystems (`ai.synergy`, `ai.llm_advisor`, `ai.formatters`)**: Isolated rotation synergy heuristics, tactical LLM advisor prompting, and team presentation logic into dedicated single-responsibility packages.
 - **Continuous Memory & Latency Vision Benchmarks (`tests/test_vision_performance.py`)**: Added a 200-cycle ADB screencap and template matching regression benchmark verifying sub-10ms ROI execution and zero unbounded heap growth.
-- **Standalone Developer Fast Test Runner (`scripts/fast_test.py`)**: Instant in-process test runner optimizing active development feedback loops.
+- **Unified Canonical Test Runner (`scripts/test_runner.py`)**: Consolidated test execution into a single entry-point supporting both rapid developer feedback (`fast`) and full pre-release test matrix verification (`full`), eliminating redundant runner scripts (`fast_test.py`, `run_fast.py`).
 
 ### Changed
 - **Thread-Safe Screencap Buffer Allocation**: Synchronized frame buffer reuse in `ADBClient` with thread lock protection.
