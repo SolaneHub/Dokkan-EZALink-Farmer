@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.harness.fake_clock import VirtualClock
 from tests.harness.fake_dokkandb import FakeDokkanDBClient, fake_dokkandb_requests_get
 
 SLOW_MODULE_NAMES = {
@@ -62,6 +63,14 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 def fake_dokkandb() -> FakeDokkanDBClient:
     """Provides a fresh in-memory FakeDokkanDBClient instance."""
     return FakeDokkanDBClient()
+
+
+@pytest.fixture
+def virtual_clock() -> Generator[VirtualClock, None, None]:
+    """Provides a running VirtualClock fixture for time simulation."""
+    clock = VirtualClock()
+    with clock:
+        yield clock
 
 
 @pytest.fixture

@@ -9,11 +9,11 @@ Validating only final state, run counters, and completion callbacks.
 from __future__ import annotations
 
 import time
-from unittest.mock import patch
 
 from dokkan_eza_link_farmer.automation.tasks.link_level_farm import LinkLevelFarmTask
 from dokkan_eza_link_farmer.automation.vision import Vision
 from tests.harness.fake_adb import FakeADBClient
+from tests.harness.fake_clock import VirtualClock
 from tests.harness.fake_vision_frames import (
     create_synthetic_battle_frame,
     create_synthetic_difficulty_frame,
@@ -133,15 +133,15 @@ def test_link_level_farm_blackbox_two_runs_with_deck_rebuild() -> None:
     # Ensure filter initialized to test deck change path smoothly without dialog scroll overhead
     task.box_filter_initialized = True
 
-    start_time = time.time()
-    with patch("time.sleep", return_value=None):
+    start_time = time.perf_counter()
+    with VirtualClock():
         task.run()
 
-    duration = time.time() - start_time
+    duration = time.perf_counter() - start_time
 
-    # 1. Performance check: completed within reasonable time without infinite hanging
-    assert duration < 180.0, (
-        f"Link Leveling integration test exceeded 180.0s threshold (took {duration:.2f}s)"
+    # 1. Performance check: completed within reasonable time without hanging
+    assert duration < 60.0, (
+        f"Link Leveling integration test exceeded 60.0s threshold (took {duration:.2f}s)"
     )
 
     # 2. Black-box state verification:
