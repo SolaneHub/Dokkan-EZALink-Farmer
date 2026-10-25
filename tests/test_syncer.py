@@ -153,7 +153,7 @@ class TestDokkanSyncer:
                 cards = syncer.sync_user_box_details(user_box_file=box_file, concurrency=2)
 
             assert len(cards) == 2
-            assert fetched_codes == [1001, 1002]
+            assert sorted(fetched_codes) == [1001, 1002]
 
             card1001 = next(c for c in cards if c.id == 1001)
             assert card1001.is_rainbow is True
