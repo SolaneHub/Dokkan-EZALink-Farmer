@@ -225,7 +225,7 @@ def parse_leader_spec(
     Parses a Leader Skill description into a structured LeaderSkillSpec object,
     extracting main categories (170/200%), extra bonus categories (+30%), and sub-elements.
     """
-    if not leader_text:
+    if not leader_text or not isinstance(leader_text, str):
         return LeaderSkillSpec()
 
     lead_clean = leader_text.replace("\n", " ").strip()
@@ -291,15 +291,20 @@ def parse_leader_spec(
     )
 
     # Map category names to IDs if catalog is available
-    if categories_catalog:
+    if categories_catalog and isinstance(categories_catalog, list):
         for cat in categories_catalog:
+            if not isinstance(cat, dict):
+                continue
             c_name = cat.get("name")
             c_id = cat.get("id")
-            if not c_name or c_id is None:
+            if not c_name or not isinstance(c_name, str) or c_id is None:
                 continue
 
             c_name_lower = c_name.lower().strip()
-            cid_int = int(c_id)
+            try:
+                cid_int = int(c_id)
+            except (ValueError, TypeError):
+                continue
 
             # Check base part: quoted match first, then word-boundary fallback
             if (

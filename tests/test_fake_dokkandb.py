@@ -81,3 +81,12 @@ class TestFakeDokkanDBHarness(unittest.TestCase):
         self.assertEqual(parsed["base_boost_pct"], 170.0)
         self.assertEqual(parsed["ki"], 3)
         self.assertTrue(parsed["is_main_leader"])
+
+    def test_offline_dokkandb_resilience_fuzz_50_iterations(self):
+        """Fast Test Loop: verifies 50 offline fuzz stress iterations for DokkanDB resilience."""
+        from tools.fuzz_dokkandb_offline import run_dokkandb_fuzzer
+
+        passed, failed, elapsed = run_dokkandb_fuzzer(num_runs=50, seed=1337, verbose=False)
+        self.assertEqual(failed, 0, f"Offline fuzzer detected {failed} failures")
+        self.assertEqual(passed, 50)
+        self.assertLess(elapsed, 10.0, f"Fuzzing took too long: {elapsed:.2f}s")
