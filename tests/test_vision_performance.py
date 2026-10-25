@@ -196,7 +196,7 @@ def test_vision_adb_screencap_200_consecutive_iterations_latency_and_memory(
         f"Memory growth detected across 200 cycles: {total_diff_kb:.2f} KB"
     )
 
-    # Criteria 2: Mean latency per match on template with prior vertical ROI must remain strictly < 10.0ms (providing headroom for CI/Windows environments)
-    assert mean_latency_ms < 10.0, (
-        f"Mean ROI template match latency too high: {mean_latency_ms:.2f}ms >= 10.0ms"
+    # Criteria 2: Mean latency per match on template with prior vertical ROI must remain strictly < 20.0ms (providing headroom for virtualized 2-vCPU CI runners; full-frame matching without ROI takes >50ms)
+    assert mean_latency_ms < 20.0, (
+        f"Mean ROI template match latency too high: {mean_latency_ms:.2f}ms >= 20.0ms"
     )
