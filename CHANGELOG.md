@@ -1,5 +1,20 @@
 # Changelog
 
+## [v1.8.0] - 2026-10-25
+
+### Added
+- **Bespoke DokkanDB Offline Fuzzer (`tools/fuzz_dokkandb_offline.py`)**: Lightweight, self-contained fault-injection testing engine validating network drop resilience, malformed JSON structures, and defensive parsing without heavy external frameworks.
+- **ScanSessionContext Decoupling (`automation.scanner.session_context`)**: Encapsulated scan state, catalog cache, and screen positions into an immutable session context, completely isolating card registration from task instances.
+- **Modular UI Component Architecture (`ui.panels`, `ui.briefing`, `ui.wizards`)**: Decomposed monolithic terminal CLI into dedicated presentation panels and interactive wizards, shrinking `TerminalCLI` to under 500 lines.
+- **Modular AI Subsystems (`ai.synergy`, `ai.llm_advisor`, `ai.formatters`)**: Isolated rotation synergy heuristics, tactical LLM advisor prompting, and team presentation logic into dedicated single-responsibility packages.
+- **Continuous Memory & Latency Vision Benchmarks (`tests/test_vision_performance.py`)**: Added a 200-cycle ADB screencap and template matching regression benchmark verifying sub-10ms ROI execution and zero unbounded heap growth.
+- **Standalone Developer Fast Test Runner (`scripts/fast_test.py`)**: Instant in-process test runner optimizing active development feedback loops.
+
+### Changed
+- **Thread-Safe Screencap Buffer Allocation**: Synchronized frame buffer reuse in `ADBClient` with thread lock protection.
+- **Leader Parsing Defensiveness**: Hardened `parse_leader_spec` in `ai.syncer` against non-string headers and malformed category schemas.
+- **Dual-Granularity Test Suite Marking**: Explicitly designated all heavy integration tests with `@pytest.mark.slow`, preserving strict sub-3s targets for fast feedback runs.
+
 ## [v1.7.0] - 2026-10-25
 ### Added
 - **In-Memory Virtual Clock Test Harness (`tests/harness/fake_clock.py`)**: Intercepts `time.sleep`, `time.time`, and `time.monotonic` in integration tests, executing long asynchronous farm loops instantly without real-time CPU idle delays.
