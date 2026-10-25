@@ -1,5 +1,20 @@
 # Changelog
 
+## [v1.7.0] - 2026-10-25
+### Added
+- **In-Memory Virtual Clock Test Harness (`tests/harness/fake_clock.py`)**: Intercepts `time.sleep`, `time.time`, and `time.monotonic` in integration tests, executing long asynchronous farm loops instantly without real-time CPU idle delays.
+- **Generative Solver Fuzzing Tooling (`tools/fuzz_team_solver.py` & `tests/test_solver_fuzz.py`)**: Procedural fuzzing engine stressing `DokkanConstraintSolver` across randomized candidate pools and mission criteria to guarantee mathematical invariants (zero crashes, 6 distinct cards, full constraint satisfaction).
+- **Canonical Telemetry Data Models & Serialization (`ai.models`)**: Centralized `FailureReport` dataclass and added full dictionary serialization (`to_dict` / `from_dict`) on `TeamRecommendation`.
+- **End-to-End Black-Box TeamBuilder Verification (`tests/test_team_builder_blackbox.py`)**: Validates complete box-to-recommendation pipeline in isolation from internal scoring heuristics.
+
+### Changed
+- **Strict Rainbow (5-Typing) Solver Filtering**: Constraint solver now preemptively verifies that leader candidates cover all 5 elemental types when evaluating rainbow missions, immediately rejecting incomplete candidate pools.
+- **Solver Degradation Contract**: Enforced explicit `ValueError` raising when candidate pools cannot satisfy hard mission constraints under a chosen leader.
+
+### Removed
+- **Legacy Grid Scanner & Obsolete Matching (`legacy_grid.py`)**: Dropped legacy grid mode, preloaded thumbnail matching, and coordinate shifting in favor of streamlined detail swipe scanning (`scan_detail_screen`).
+- **Deprecated AI Backward-Compatibility Shims**: Purged top-level alias shims (`ai/telemetry.py`, `ai/endgame_runner.py`, `ai/endgame/endgame_runner.py`) in favor of canonical `dokkan_eza_link_farmer.ai.endgame`.
+
 ## [v1.6.0] - 2026-10-25
 ### Added
 - **Full-Stage Multi-Phase Survivability Heuristics**: Constraint solver now evaluates elemental matchups across all constituent phases and battles, preventing teams that fold in Phase 1 before building defensive stacks.
