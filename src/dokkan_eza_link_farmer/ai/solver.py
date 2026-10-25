@@ -1068,6 +1068,12 @@ class DokkanConstraintSolver:
                 if len(eligible) < 5:
                     continue
 
+                # Se la missione richiede un team Rainbow (5 tipi), il leader + i suoi sub coperti devono poter coprire tutti i 5 tipi
+                if mission_batch is not None and getattr(mission_batch, "requires_rainbow", False):
+                    covered_types = {c.element % 10} | {o.element % 10 for o in eligible}
+                    if len(covered_types) < 5:
+                        continue
+
                 max_boost = float(c.leader_spec.base_boost_pct + c.leader_spec.extra_boost_pct)
                 leader_candidates.append((c, max_boost, eligible))
 
@@ -1327,6 +1333,10 @@ class DokkanConstraintSolver:
             passed, reasons = mission_batch.matches_team(team_cards)
             for r in reasons:
                 logs.append(f"Mission Check: {r}")
+            if not passed:
+                raise ValueError(
+                    f"Candidate pool cannot satisfy mission constraints under leader {leader.full_name}: {'; '.join(reasons)}"
+                )
 
         # 5. Top-5 Shortlist Generation strictly from covered candidates
         team_ids = {c.id for c in team_cards}
