@@ -181,7 +181,7 @@ def run_scanner(serial: str = "RZCTB0ETG9L", total_cards: int = 30) -> dict[str,
 
         # Register in scanner inventory
         scanner_module.register_card(
-            scanner,
+            scanner.session_ctx,
             cand,
             score=score,
             crop=None,

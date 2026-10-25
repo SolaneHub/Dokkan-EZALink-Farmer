@@ -39,6 +39,7 @@ from dokkan_eza_link_farmer.automation.scanner.detail_evaluator import (
 from dokkan_eza_link_farmer.automation.scanner.filter_manager import (
     verify_and_enforce_filters,
 )
+from dokkan_eza_link_farmer.automation.scanner.session_context import ScanSessionContext
 from dokkan_eza_link_farmer.automation.scanner.swipe_controller import (
     advance_to_next_card,
     compute_screen_diff,
@@ -55,6 +56,7 @@ __all__ = [
     "BannerExtractor",
     "CatalogMatcher",
     "DetailEvaluator",
+    "ScanSessionContext",
     "advance_to_next_card",
     "compute_screen_diff",
     "detect_rainbow_star",

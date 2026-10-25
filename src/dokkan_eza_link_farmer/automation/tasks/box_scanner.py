@@ -13,6 +13,7 @@ from dokkan_eza_link_farmer.automation.scanner import (
     CACHE_BOX_PATH,
     CANONICAL_BOX_PATH,
     DEFAULT_USER_BOX_PATH,
+    ScanSessionContext,
     advance_to_next_card,
     compute_screen_diff,
     detect_rainbow_star,
@@ -110,21 +111,53 @@ class BoxScannerTask(BaseTask):
         self.log_file = log_file if log_file is not None else DEFAULT_BOX_SCAN_LOG_PATH
         self._file_handler: logging.Handler | None = None
         self._setup_file_logger()
-        self._last_registered_card_id: int | None = None
-        self._session_seen_ids: set[int] = set()
-        self._recently_scanned_positions: dict[int, tuple[float, float]] = {}
 
         self._ocr = get_shared_ocr()
 
         self._catalog: list[dict[str, Any]] = []
         self._subname_index: dict[str, Any] = {}
-        self._id_index: dict[int, dict[str, Any]] = {}
-        self._loaded_thumbs: list[dict[str, Any]] = []
-        self._lr_thumbs: list[dict[str, Any]] = []
-        self._special_thumbs: list[dict[str, Any]] = []
-
-        self.scanned_cards: dict[int, dict[str, Any]] = {}
+        self.session_ctx = ScanSessionContext()
         self._load_existing_box()
+
+    @property
+    def _id_index(self) -> dict[int, dict[str, Any]]:
+        return self.session_ctx.catalog_index
+
+    @_id_index.setter
+    def _id_index(self, val: dict[int, dict[str, Any]]) -> None:
+        self.session_ctx.catalog_index = val if val is not None else {}
+
+    @property
+    def scanned_cards(self) -> dict[int, dict[str, Any]]:
+        return self.session_ctx.scanned_cards
+
+    @scanned_cards.setter
+    def scanned_cards(self, val: dict[int, dict[str, Any]]) -> None:
+        self.session_ctx.scanned_cards = val if val is not None else {}
+
+    @property
+    def _session_seen_ids(self) -> set[int]:
+        return self.session_ctx.seen_ids
+
+    @_session_seen_ids.setter
+    def _session_seen_ids(self, val: set[int]) -> None:
+        self.session_ctx.seen_ids = val if val is not None else set()
+
+    @property
+    def _recently_scanned_positions(self) -> dict[int, tuple[float, float]]:
+        return self.session_ctx.recently_scanned_positions
+
+    @_recently_scanned_positions.setter
+    def _recently_scanned_positions(self, val: dict[int, tuple[float, float]]) -> None:
+        self.session_ctx.recently_scanned_positions = val if val is not None else {}
+
+    @property
+    def _last_registered_card_id(self) -> int | None:
+        return self.session_ctx.last_registered_card_id
+
+    @_last_registered_card_id.setter
+    def _last_registered_card_id(self, val: int | None) -> None:
+        self.session_ctx.last_registered_card_id = val
 
     def _setup_file_logger(self) -> None:
         """Sets up a debug file handler saving all box scanner events to log_file."""
@@ -200,6 +233,7 @@ class BoxScannerTask(BaseTask):
         self.log(f"Indexed {len(self._catalog)} cards from DokkanDB catalog.")
         matcher = CatalogMatcher(self._catalog)
         self._id_index = matcher._id_index
+        self.session_ctx.catalog_index = self._id_index
         for norm, cands in matcher._subname_index.items():
             if cands:
                 self._subname_index[norm] = cands[0]
@@ -291,7 +325,7 @@ class BoxScannerTask(BaseTask):
         potential_percent: int | None = None,
     ) -> bool:
         return register_card(
-            self,
+            self.session_ctx,
             cand,
             score,
             crop=crop,
@@ -302,6 +336,7 @@ class BoxScannerTask(BaseTask):
             is_rainbow=is_rainbow,
             is_eza=is_eza,
             potential_percent=potential_percent,
+            log_fn=self.log,
         )
 
     def run(self) -> None:
@@ -347,10 +382,10 @@ class BoxScannerTask(BaseTask):
             else:
                 current_screen = initial_screen
 
-            if not hasattr(self, "scanned_cards") or self.scanned_cards is None:
-                self.scanned_cards = {}
-            self._recently_scanned_positions = {}
-            self._last_registered_card_id = None
+            if self.session_ctx.scanned_cards is None:
+                self.session_ctx.scanned_cards = {}
+            self.session_ctx.recently_scanned_positions.clear()
+            self.session_ctx.last_registered_card_id = None
 
             total_detected = read_counter_total_cards(current_screen, ocr=self._ocr)
             if total_detected:

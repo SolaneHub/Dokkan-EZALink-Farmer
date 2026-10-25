@@ -25,6 +25,8 @@ from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 from tests.harness.fake_adb import FakeADBClient
 from tests.harness.fake_vision_frames import create_synthetic_card_detail_frame
 
+pytestmark = pytest.mark.slow
+
 
 class FastSyntheticOCR:
     """Ultra-fast deterministic OCR engine matching synthetic frame metadata without ONNX latency."""
@@ -245,7 +247,7 @@ def test_box_scanner_synthetic_integration_end_to_end() -> None:
                     scanner, curr_screen
                 )
                 scanner_module.register_card(
-                    scanner,
+                    scanner.session_ctx,
                     cand,
                     score=score,
                     crop=None,

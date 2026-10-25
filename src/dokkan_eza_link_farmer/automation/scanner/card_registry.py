@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
 import numpy as np
 
+from dokkan_eza_link_farmer.automation.scanner.detail_evaluator import detect_rainbow_star
+from dokkan_eza_link_farmer.automation.scanner.session_context import ScanSessionContext
+
+logger = logging.getLogger(__name__)
+
 
 def register_card(
-    task: Any,
+    ctx: ScanSessionContext,
     cand: dict[str, Any] | None,
     score: float,
     crop: np.ndarray | None = None,
@@ -20,35 +27,31 @@ def register_card(
     is_rainbow: bool | None = None,
     is_eza: bool | None = None,
     potential_percent: int | None = None,
+    log_fn: Callable[[str], None] | None = None,
 ) -> bool:
-    """Registers a recognized card into task.scanned_cards with duplicate and adjacency protection."""
+    """Registers a recognized card into ctx.scanned_cards with duplicate and adjacency protection."""
+    log = log_fn if log_fn is not None else logger.info
+
     if not cand or score < 0.65:
         if cand and score >= 0.50:
-            task.log(
+            log(
                 f"  [LOW_CONF] Candidate [{cand.get('id') or cand.get('card_id')}] {cand.get('name')} score {score:.2f} < 0.65"
             )
         return False
 
     cid = int(cand.get("card_id") or cand.get("id") or 0)
     if cid == 0:
-        task.log(f"  [INVALID_CARD] Candidate has invalid id {cid}, skipping registration.")
+        log(f"  [INVALID_CARD] Candidate has invalid id {cid}, skipping registration.")
         return False
 
-    if not hasattr(task, "_session_seen_ids") or task._session_seen_ids is None:
-        task._session_seen_ids = set()
-    if not hasattr(task, "_recently_scanned_positions") or task._recently_scanned_positions is None:
-        task._recently_scanned_positions = {}
-    if not hasattr(task, "scanned_cards") or task.scanned_cards is None:
-        task.scanned_cards = {}
-
-    cat_card = task._id_index.get(cid, {}) if hasattr(task, "_id_index") and task._id_index else {}
+    cat_card = ctx.catalog_index.get(cid, {})
     cname = cat_card.get("name") or cand.get("name", "Unknown")
     csub = cat_card.get("subname") or cand.get("subname", "")
     rarity = cat_card.get("rarity") or cand.get("rarity", 4)
     elem = cat_card.get("element") or cand.get("element")
 
     if is_rainbow is None:
-        is_rainbow = task._detect_rainbow_star(crop) if crop is not None else False
+        is_rainbow = detect_rainbow_star(crop) if crop is not None else False
     if potential_percent is None:
         potential_percent = 100 if is_rainbow else 0
     elif potential_percent == 100:
@@ -74,7 +77,7 @@ def register_card(
     else:
         is_seza = bool(cand.get("has_seza") or cat_card.get("eza_leader_skill_set_id_pre"))
 
-    prev_pos = task._recently_scanned_positions.get(cid)
+    prev_pos = ctx.recently_scanned_positions.get(cid)
     if prev_pos is not None:
         if isinstance(prev_pos, (tuple, list)):
             if len(prev_pos) >= 2:
@@ -88,11 +91,11 @@ def register_card(
         else:
             p_cy, p_cx = 0.0, float(cx)
         if abs(p_cx - cx) < 60.0 and abs(p_cy - cy) < 180.0 and (cx != 0 or cy != 0):
-            task._recently_scanned_positions[cid] = (cy, cx)
+            ctx.recently_scanned_positions[cid] = (cy, cx)
             return True
 
-    if cid not in task.scanned_cards:
-        existing = task.scanned_cards.get(cid, {})
+    if cid not in ctx.scanned_cards:
+        existing = ctx.scanned_cards.get(cid, {})
         card_record = dict(existing)
         card_record.update(
             {
@@ -131,33 +134,33 @@ def register_card(
                 card_record[k] = cat_card[k]
             elif k in cand:
                 card_record[k] = cand[k]
-        task.scanned_cards[cid] = card_record
-        task._session_seen_ids.add(cid)
-        task._last_registered_card_id = cid
-        task._recently_scanned_positions[cid] = (cy, cx)
+        ctx.scanned_cards[cid] = card_record
+        ctx.seen_ids.add(cid)
+        ctx.last_registered_card_id = cid
+        ctx.recently_scanned_positions[cid] = (cy, cx)
         r_str = "LR" if rarity == 5 else ("UR" if rarity == 4 else "SSR")
         star_str = "★ Rainbow" if is_rainbow else "★"
-        task.log(
-            f"  [NEW] [{score:.2f}] #{len(task.scanned_cards)}: "
+        log(
+            f"  [NEW] [{score:.2f}] #{len(ctx.scanned_cards)}: "
             f"[{cid}] {cname} - '{csub}' ({r_str} {star_str}) [p:{swipe_page}, s:{grid_slot}]"
         )
     else:
         from_ocr = bool(cand.get("from_ocr"))
         if (
             not from_ocr
-            and task._last_registered_card_id is not None
-            and task._last_registered_card_id != cid
+            and ctx.last_registered_card_id is not None
+            and ctx.last_registered_card_id != cid
         ):
-            task.log(
+            log(
                 f"  [ANTI-COLLISION] Skipping non-adjacent DUPE registration for [{cid}] "
-                f"(last registered: {task._last_registered_card_id})."
+                f"(last registered: {ctx.last_registered_card_id})."
             )
             return False
-        task.scanned_cards[cid]["copies"] = task.scanned_cards[cid].get("copies", 1) + 1
-        task._last_registered_card_id = cid
-        task._recently_scanned_positions[cid] = (cy, cx)
-        task.log(
-            f"  [DUPE] [{score:.2f}] Card [{cid}] {cname}: copy #{task.scanned_cards[cid]['copies']}"
+        ctx.scanned_cards[cid]["copies"] = ctx.scanned_cards[cid].get("copies", 1) + 1
+        ctx.last_registered_card_id = cid
+        ctx.recently_scanned_positions[cid] = (cy, cx)
+        log(
+            f"  [DUPE] [{score:.2f}] Card [{cid}] {cname}: copy #{ctx.scanned_cards[cid]['copies']}"
         )
     return True
 
