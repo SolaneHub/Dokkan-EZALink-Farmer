@@ -430,6 +430,31 @@ class TestSynergyAndAdvisorAdversarialHardening:
         assert res_msg is not None
         assert res_msg[0] == 102
 
+        # 4. Complex nested JSON with best_candidate_id, list of dicts, and recommendation string
+        complex_nested = (
+            "{\n"
+            '  "best_candidate_id": 102,\n'
+            '  "card_name": "Optimal Card",\n'
+            '  "explanation": {\n'
+            '    "matchup_analysis": "Crucial tank for Phase 3",\n'
+            '    "conditions": [{"cond": "guard", "value": "active"}]\n'
+            "  },\n"
+            '  "recommendation": "Place Card ID 102 in Slot 1"\n'
+            "}"
+        )
+        res_complex = parse_advisor_response(complex_nested, None, cands)
+        assert res_complex is not None
+        assert res_complex[0] == 102
+        assert "Crucial tank for Phase 3" in res_complex[1]
+
+        # 5. Empty content, reasoning contains JSON
+        res_from_reasoning = parse_advisor_response(
+            "", '{"best_candidate_id": 102, "reasoning": "Extracted from reasoning"}', cands
+        )
+        assert res_from_reasoning is not None
+        assert res_from_reasoning[0] == 102
+        assert "Extracted from reasoning" in res_from_reasoning[1]
+
     def test_evaluate_rotation_pair_symmetric_tiebreaking_between_lrs(self) -> None:
         # Two LRs with identical defense priority (0.0), but different kit power
         lr_low_kit = DokkanCard(id=501, name="LR Low", rarity=5, element=0)

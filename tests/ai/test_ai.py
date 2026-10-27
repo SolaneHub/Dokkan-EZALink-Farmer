@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from dokkan_eza_link_farmer.ai.client import DokkanAIClient
+from dokkan_eza_link_farmer.ai.llm_advisor import (
+    build_advisor_messages,
+    build_advisor_payload,
+    load_cards_tactical_matrix,
+    load_damage_simulation_benchmarks,
+)
 from dokkan_eza_link_farmer.ai.mission_solver import (
     MissionBatch,
     MissionBundler,
@@ -11,12 +18,15 @@ from dokkan_eza_link_farmer.ai.mission_solver import (
 from dokkan_eza_link_farmer.ai.models import (
     AIConfig,
     AIModelFamily,
+    BossPhase,
+    BossStage,
     CardForm,
     DokkanCard,
     LeaderSkillSpec,
     PassiveTags,
     SupportedAIModel,
 )
+from dokkan_eza_link_farmer.ai.solver import CandidateEvaluation, DokkanConstraintSolver
 from dokkan_eza_link_farmer.ai.support_catalog import (
     get_recommended_support_items,
     get_recommended_support_memory,
@@ -1012,6 +1022,8 @@ class TestDokkanAI:
             stage_num=3,
             stage_id=7950035,
             stage_name="Vs. Gohan & Piccolo",
+            preferred_difficulty="super3",
+            difficulty=5,
         )
 
     def test_cli_ai_interactive_challenge_event_selection(self):
@@ -1165,3 +1177,293 @@ class TestDokkanAI:
         tactical_panel = next((p for p in panels if "⚔️" in str(p.title)), None)
         assert tactical_panel is not None
         assert isinstance(tactical_panel.renderable, Markdown)
+
+    def test_llm_advisor_payload_slot1_constraints_and_benchmarks(self) -> None:
+        """Verifies candidate serialization from build_advisor_payload with Post-10th Anniversary tactical matrix & damage benchmarks."""
+        # 1. Verify cached loaders functionality
+        matrix = load_cards_tactical_matrix()
+        assert isinstance(matrix, dict)
+        assert "cards_by_id" in matrix or "cards" in matrix
+
+        benchmarks = load_damage_simulation_benchmarks()
+        assert isinstance(benchmarks, dict)
+        assert "benchmarks" in benchmarks
+
+        # 2. Setup stage and candidates
+        stage = BossStage(
+            stage_id=999,
+            event_id=99,
+            event_name="Supreme Battle Spectacle",
+            stage_name="Stage 10 (Goku & Frieza)",
+            difficulty=3,
+            phases=[
+                BossPhase(
+                    phase_index=1, element=1, element_name="AGL", estimated_sa_damage=2_500_000
+                ),
+                BossPhase(
+                    phase_index=2, element=2, element_name="TEQ", estimated_sa_damage=3_500_000
+                ),
+                BossPhase(
+                    phase_index=3, element=3, element_name="INT", estimated_sa_damage=4_200_000
+                ),
+            ],
+        )
+
+        leader = DokkanCard(
+            id=4034771,
+            name="Super Vegito",
+            element=12,
+            category_ids=[1, 2],
+            leader_spec=LeaderSkillSpec(main_category_ids=[1, 2], base_boost_pct=170.0),
+        )
+
+        # LR Gogeta (1030481) - Slot 2/3 restricted guard
+        card_gogeta = DokkanCard(
+            id=1030481,
+            name="Super Saiyan Vegeta (Angel) & Super Saiyan Goku (Angel)",
+            element=10,
+            category_ids=[1, 2],
+            passive_skill=(
+                "*Basic effect(s)*\n"
+                "- Ki +5 and ATK & DEF 200%\n"
+                "*For 3 turns from the character's entry turn*\n"
+                "- DEF 300%\n"
+                "- Guards all attacks\n"
+                "*As the 2nd or 3rd attacker in a turn*\n"
+                "- Guards all attacks\n"
+            ),
+        )
+
+        # Supreme Kai (1015201) - Slot 1 only naked guard
+        card_kai = DokkanCard(
+            id=1015201,
+            name="Supreme Kai",
+            element=11,
+            category_ids=[1, 2],
+            passive_skill="Guards all attacks as the 1st attacker in a turn",
+        )
+
+        # True Slot 1 God Tank candidate (Super Vegito)
+        card_vegito = DokkanCard(
+            id=4034771,
+            name="Super Vegito",
+            element=12,
+            category_ids=[1, 2],
+            passive_skill="Guards all attacks; reduces damage received by 65%",
+        )
+
+        solver = DokkanConstraintSolver()
+        ev_gogeta = solver.evaluate_card(card_gogeta, leader, boss_stage=stage)
+        ev_kai = solver.evaluate_card(card_kai, leader, boss_stage=stage)
+        ev_vegito = solver.evaluate_card(card_vegito, leader, boss_stage=stage)
+
+        payload = build_advisor_payload(
+            boss_stage=stage,
+            current_team=[leader],
+            top_candidates=[ev_gogeta, ev_kai, ev_vegito],
+        )
+
+        candidates = payload.get("top_5_candidates", [])
+        assert len(candidates) == 3
+
+        # 3. Assert all required keys are serialized and preserved
+        required_keys = {
+            "rank",
+            "card_id",
+            "name",
+            "element",
+            "leader_coverage_pct",
+            "base_slot1_viable",
+            "solver_score",
+            "passive_skill",
+            "super_attack",
+            "counter_points",
+            "penalty_points",
+            "guard_type",
+            "tactical_guard_type",
+            "defensive_tier",
+            "estimated_sa_damage_taken",
+            "dr_percent",
+            "has_slot_1_only_guard",
+            "has_slot_2_3_guard",
+            "intro_turns",
+            "slot_1_penalty",
+            "slot1_score",
+            "slot2_score",
+            "slot3_score",
+            "has_intro_cliff",
+            "cliff_turn",
+            "slot1_status",
+            "damage_simulations",
+        }
+
+        for cand in candidates:
+            assert required_keys.issubset(cand.keys()), (
+                f"Missing keys in candidate: {required_keys - set(cand.keys())}"
+            )
+            assert isinstance(cand["slot1_score"], (int, float))
+            assert isinstance(cand["slot2_score"], (int, float))
+            assert isinstance(cand["slot3_score"], (int, float))
+            assert isinstance(cand["has_intro_cliff"], bool)
+            assert cand["cliff_turn"] is None or isinstance(cand["cliff_turn"], int)
+            assert cand["slot1_status"] in ("LETHAL", "SURVIVED", "VIABLE")
+            assert isinstance(cand["damage_simulations"], dict)
+            for threshold in ("2.5M", "3.5M", "4.2M"):
+                assert threshold in cand["damage_simulations"]
+                sim = cand["damage_simulations"][threshold]
+                assert "damage_taken" in sim
+                assert "status" in sim
+
+        # 4. Strictly assert LR Gogeta (1030481) constraints
+        gogeta_payload = next(c for c in candidates if c["card_id"] == 1030481)
+        assert gogeta_payload["slot1_score"] == 0.0
+        assert gogeta_payload["slot1_status"] == "LETHAL"
+        assert gogeta_payload["slot_1_penalty"] is not None
+        assert (
+            "-45.0" in gogeta_payload["slot_1_penalty"]
+            or "-50.0" in gogeta_payload["slot_1_penalty"]
+        )
+        assert gogeta_payload["has_intro_cliff"] is True
+        assert gogeta_payload["cliff_turn"] == 3
+        assert gogeta_payload["damage_simulations"]["2.5M"]["status"] == "LETHAL"
+        assert gogeta_payload["damage_simulations"]["3.5M"]["status"] == "LETHAL"
+        assert gogeta_payload["damage_simulations"]["4.2M"]["status"] == "LETHAL"
+
+        # 5. Strictly assert Supreme Kai (1015201) constraints
+        kai_payload = next(c for c in candidates if c["card_id"] == 1015201)
+        assert kai_payload["slot1_score"] == 0.0
+        assert kai_payload["slot1_status"] == "LETHAL"
+        assert kai_payload["slot_1_penalty"] is not None
+        assert "-45.0" in kai_payload["slot_1_penalty"] or "-50.0" in kai_payload["slot_1_penalty"]
+        assert kai_payload["damage_simulations"]["2.5M"]["status"] == "LETHAL"
+        assert kai_payload["damage_simulations"]["3.5M"]["status"] == "LETHAL"
+        assert kai_payload["damage_simulations"]["4.2M"]["status"] == "LETHAL"
+
+        # 6. Verify viable unit properties
+        vegito_payload = next(c for c in candidates if c["card_id"] == 4034771)
+        assert vegito_payload["slot1_score"] > 0.0
+        assert vegito_payload["slot1_status"] == "VIABLE"
+
+    def test_llm_advisor_messages_incorporates_tactical_benchmarks(self) -> None:
+        """Verifies that build_advisor_messages includes the post-10th anniversary tactical matrix & damage benchmarks rules."""
+        stage = BossStage(
+            stage_id=1,
+            event_id=1,
+            event_name="Red Zone",
+            stage_name="Stage 1",
+            difficulty=3,
+            phases=[BossPhase(phase_index=1, element=0, element_name="AGL")],
+        )
+        card = DokkanCard(id=4034771, name="Super Vegito", element=12)
+        payload: dict[str, Any] = {
+            "top_5_candidates": [
+                {
+                    "rank": 1,
+                    "card_id": 1030481,
+                    "name": "Super Saiyan Vegeta (Angel) & Super Saiyan Goku (Angel)",
+                    "slot1_score": 0.0,
+                    "slot1_status": "LETHAL",
+                    "damage_simulations": {
+                        "2.5M": {"damage_taken": 2575000, "status": "LETHAL"},
+                        "3.5M": {"damage_taken": 3724999, "status": "LETHAL"},
+                        "4.2M": {"damage_taken": 4530000, "status": "LETHAL"},
+                    },
+                }
+            ]
+        }
+
+        messages = build_advisor_messages(boss_stage=stage, current_team=[card], payload=payload)
+        assert len(messages) == 2
+        system_content = messages[0]["content"]
+
+        # Verify key rule texts in the system prompt
+        assert (
+            "CRITICAL POST-10TH ANNIVERSARY TACTICAL MATRIX & DAMAGE BENCHMARKS" in system_content
+        )
+        assert "2.5M" in system_content
+        assert "3.5M" in system_content
+        assert "4.2M" in system_content
+        assert "1030481" in system_content
+        assert "1015201" in system_content
+        assert "slot1_score == 0.0" in system_content
+        assert "LETHAL" in system_content
+        assert "MUST NEVER be selected or advised for Slot 1" in system_content
+
+    def test_card_multi_state_transformations_and_advisor_timeline(self) -> None:
+        """Verifies that DokkanCard distinguishes base card from transformations (e.g. 1030431 -> 4030441 -> 4030451)
+
+        and exposes the complete tactical timeline to Qwen/LLM advisor.
+        """
+        raw_dokkandb_data = {
+            "id": 1030431,
+            "name": "Super Saiyan Goku + Super Saiyan Vegeta (Angel)",
+            "rarity": 5,
+            "element": 14,
+            "leader_skill": "Earth-Protecting Heroes or Potara Ki +3 and HP, ATK & DEF +170%",
+            "passive_skill_description": "*Basic effect(s)*\n- ATK & DEF 200%\n*For 3 turns from the character's entry turn*\n- Damage reduction rate 50%",
+            "special_descriptions": [
+                "Causes colossal damage to enemy and raises ATK & DEF for 1 turn"
+            ],
+            "active_skill_name": "Special Fusion",
+            "active_skill_effect": "Performs a Potara Fusion that lasts for 4 turns",
+            "active_skill_condition": "Can be activated starting from the 5th turn from the start of battle",
+            "transformation_ids": [4030441, 4030451],
+            "transformation_names": [
+                "Super Saiyan Vegeta (Angel) + Super Saiyan Goku",
+                "Super Vegito",
+            ],
+            "transformation_elements": [14, 14],
+        }
+
+        card = DokkanCard.from_dokkandb(raw_dokkandb_data)
+
+        # 1. Base card identity & skills
+        assert card.id == 1030431
+        assert "Goku" in card.name and "Vegeta" in card.name
+        assert card.active_skill_name == "Special Fusion"
+        assert "Potara Fusion" in card.active_skill_effect
+
+        # 2. Transformed states (3 states of existence)
+        assert len(card.transformations) == 2
+        exchange_form = card.transformations[0]
+        assert exchange_form.form_id == 4030441
+        assert "Vegeta (Angel) + Super Saiyan Goku" in exchange_form.form_name
+
+        vegito_form = card.transformations[1]
+        assert vegito_form.form_id == 4030451
+        assert "Super Vegito" in vegito_form.form_name
+
+        # 3. Tactical timeline
+        timeline = card.get_tactical_form_timeline()
+        assert len(timeline) >= 2
+        timeline_types = [t["type"] for t in timeline]
+        assert any("Fusione" in tt or "Active" in tt for tt in timeline_types)
+        assert any("Trasformazione" in tt for tt in timeline_types)
+
+        # 4. LLM Advisor payload exposure
+        stage = BossStage(
+            stage_id=1,
+            event_id=1,
+            event_name="Red Zone",
+            stage_name="Stage 1",
+            difficulty=3,
+            phases=[],
+        )
+        eval_cand = CandidateEvaluation(
+            card=card,
+            score=85.0,
+            lead_boost_pct=200.0,
+            base_slot1_viable=True,
+            guard_type="turn_limited_3T",
+        )
+        payload = build_advisor_payload(
+            boss_stage=stage, current_team=[card], top_candidates=[eval_cand]
+        )
+        cand_payload = payload["top_5_candidates"][0]
+
+        assert "tactical_timeline" in cand_payload
+        assert len(cand_payload["tactical_timeline"]) >= 2
+        assert "transformations" in cand_payload
+        assert len(cand_payload["transformations"]) == 2
+        assert cand_payload["transformations"][1]["form_name"] == "Super Vegito"
+        assert cand_payload["active_skill"]["name"] == "Special Fusion"

@@ -148,3 +148,52 @@ class TestDokkanSyncerInMemory:
                 assert cards[0].id == 1001
                 assert cards[0].is_rainbow is True
                 assert cards[0].is_eza is True
+
+    def test_syncer_429_retry_and_backoff(self) -> None:
+        """Validates that HTTP 429 rate-limiting triggers exponential backoff and retries."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            syncer = DokkanSyncer(cache_dir=tmpdir)
+            call_count = 0
+
+            def mock_get(_url: str, **_kwargs):
+                nonlocal call_count
+                call_count += 1
+                mock_resp = MagicMock()
+                if call_count < 3:
+                    mock_resp.status_code = 429
+                    mock_resp.headers = {"Retry-After": "0"}
+                    return mock_resp
+                else:
+                    mock_resp.status_code = 200
+                    mock_resp.json.return_value = [
+                        {"id": 5001, "name": "Recovered Goku", "element": 1}
+                    ]
+                    return mock_resp
+
+            with patch("requests.get", side_effect=mock_get), patch("time.sleep") as mock_sleep:
+                card = syncer.fetch_card_detail_sync(5001, force=True)
+                assert card is not None
+                assert card["id"] == 5001
+                assert call_count == 3
+                assert mock_sleep.call_count >= 2
+
+    def test_syncer_429_exhausted_falls_back_to_cache(self) -> None:
+        """Validates that if retries are exhausted on 429, it gracefully falls back to existing cache."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            syncer = DokkanSyncer(cache_dir=tmpdir)
+            cache_file = os.path.join(syncer.cards_dir, "card_5002_glb.json")
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump({"id": 5002, "name": "Cached Vegeta", "element": 2}, f)
+
+            def mock_get_429(_url: str, **_kwargs):
+                mock_resp = MagicMock()
+                mock_resp.status_code = 429
+                mock_resp.headers = {"Retry-After": "0"}
+                return mock_resp
+
+            with patch("requests.get", side_effect=mock_get_429), patch("time.sleep"):
+                # force=True would normally try network, but should smoothly fallback to cache on 429
+                card = syncer.fetch_card_detail_sync(5002, force=True)
+                assert card is not None
+                assert card["id"] == 5002
+                assert card["name"] == "Cached Vegeta"

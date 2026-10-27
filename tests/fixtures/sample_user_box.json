@@ -1,0 +1,678 @@
+{
+  "cards": [
+    {
+      "id": 10001,
+      "name": "Super Saiyan God Goku",
+      "subname": "Divine Awakening",
+      "rarity": 5,
+      "element": 10,
+      "element_name": "Super AGL",
+      "card_class": "Super",
+      "leader_skill": "\"Pure Saiyans\" or \"Super Saiyans\" Category Ki +3 and HP, ATK & DEF +170%, plus an additional HP, ATK & DEF +30% for \"Realm of Gods\"",
+      "leader_spec": {
+        "main_category_ids": [17, 18],
+        "extra_category_ids": [10],
+        "base_boost_pct": 170.0,
+        "extra_boost_pct": 30.0
+      },
+      "passive_skill": "Guards all attacks; reduces damage received by 60% for 5 turns; ATK & DEF +200%",
+      "super_attack": "Raises ATK & DEF and causes colossal damage",
+      "categories": ["Pure Saiyans", "Super Saiyans", "Realm of Gods", "Movie Heroes", "Super Heroes"],
+      "category_ids": [17, 18, 10, 14, 65],
+      "links": ["Super Saiyan", "Prepared for Battle", "Warrior Gods", "Fierce Battle", "Legendary Power"],
+      "link_ids": [1, 2, 3, 5, 6],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10001,
+        "form_name": "SSG Goku",
+        "element": 10,
+        "passive_tags": {
+          "slot1_viable": true,
+          "has_guard": true,
+          "is_guard_permanent": true,
+          "is_guard_unconditional": true,
+          "dr_base_percent": 60
+        },
+        "sa_tags": {
+          "stacks_def": true
+        }
+      }
+    },
+    {
+      "id": 10002,
+      "name": "Super Saiyan Vegeta",
+      "subname": "Unbreakable Pride",
+      "rarity": 5,
+      "element": 11,
+      "element_name": "Super TEQ",
+      "card_class": "Super",
+      "leader_skill": "\"Pure Saiyans\" Category Ki +3 and HP, ATK & DEF +170%",
+      "leader_spec": {
+        "main_category_ids": [17],
+        "extra_category_ids": [],
+        "base_boost_pct": 170.0,
+        "extra_boost_pct": 0.0
+      },
+      "passive_skill": "Guards all attacks unconditionally; reduces damage received by 50%",
+      "super_attack": "Greatly raises DEF and causes immense damage",
+      "categories": ["Pure Saiyans", "Super Saiyans", "Movie Heroes", "Super Heroes"],
+      "category_ids": [17, 18, 14, 65],
+      "links": ["Super Saiyan", "Prepared for Battle", "Royal Lineage", "Fierce Battle", "Legendary Power"],
+      "link_ids": [1, 2, 7, 5, 6],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10002,
+        "form_name": "SS Vegeta",
+        "element": 11,
+        "passive_tags": {
+          "slot1_viable": true,
+          "has_guard": true,
+          "is_guard_permanent": true,
+          "is_guard_unconditional": true,
+          "dr_base_percent": 50
+        },
+        "sa_tags": {
+          "stacks_def": true
+        }
+      }
+    },
+    {
+      "id": 10003,
+      "name": "Super Saiyan Broly",
+      "subname": "Wrathful Power",
+      "rarity": 5,
+      "element": 10,
+      "element_name": "Super AGL",
+      "card_class": "Super",
+      "leader_skill": "\"Pure Saiyans\" or \"Movie Bosses\" Ki +3, Stats +150%",
+      "leader_spec": {
+        "main_category_ids": [17, 25],
+        "extra_category_ids": [],
+        "base_boost_pct": 150.0,
+        "extra_boost_pct": 0.0
+      },
+      "passive_skill": "Guards all attacks; damage received -70%",
+      "super_attack": "Causes colossal damage and raises DEF",
+      "categories": ["Pure Saiyans", "Super Saiyans", "Movie Bosses"],
+      "category_ids": [17, 18, 25],
+      "links": ["Super Saiyan", "Prepared for Battle", "Saiyan Roar", "Fierce Battle", "Legendary Power"],
+      "link_ids": [1, 2, 8, 5, 6],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10003,
+        "form_name": "Broly",
+        "element": 10,
+        "passive_tags": {
+          "slot1_viable": true,
+          "has_guard": true,
+          "is_guard_permanent": true,
+          "is_guard_unconditional": true,
+          "dr_base_percent": 70
+        },
+        "sa_tags": {
+          "stacks_def": true
+        }
+      }
+    },
+    {
+      "id": 10004,
+      "name": "Super Saiyan 2 Goku",
+      "subname": "Sparking Aura",
+      "rarity": 4,
+      "element": 13,
+      "element_name": "Super STR",
+      "card_class": "Super",
+      "leader_skill": "Super STR Ki +3, Stats +100%",
+      "passive_skill": "ATK +180% and DEF +150% when performing a Super Attack; launches additional attack",
+      "super_attack": "Raises ATK & DEF for 1 turn and causes supreme damage",
+      "categories": ["Pure Saiyans", "Super Saiyans"],
+      "category_ids": [17, 18],
+      "links": ["Super Saiyan", "Prepared for Battle", "Over in a Flash", "Fierce Battle"],
+      "link_ids": [1, 2, 9, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10004,
+        "form_name": "SS2 Goku",
+        "element": 13,
+        "passive_tags": {
+          "slot1_viable": false,
+          "dr_base_percent": 0
+        },
+        "sa_tags": {
+          "raise_def_turns": 1
+        }
+      }
+    },
+    {
+      "id": 10005,
+      "name": "Super Saiyan 3 Goku",
+      "subname": "Limitless Radiance",
+      "rarity": 4,
+      "element": 10,
+      "element_name": "Super AGL",
+      "card_class": "Super",
+      "leader_skill": "\"Super Saiyans\" Ki +3, Stats +130%",
+      "passive_skill": "ATK +200% and DEF +200%; high chance of evading enemy attacks",
+      "super_attack": "Greatly raises ATK and causes supreme damage",
+      "categories": ["Pure Saiyans", "Super Saiyans", "Movie Heroes"],
+      "category_ids": [17, 18, 14],
+      "links": ["Super Saiyan", "Prepared for Battle", "Over in a Flash", "Fierce Battle"],
+      "link_ids": [1, 2, 9, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10005,
+        "form_name": "SS3 Goku",
+        "element": 10,
+        "passive_tags": {
+          "slot1_viable": false,
+          "dodge_chance_percent": 50,
+          "dr_base_percent": 0
+        },
+        "sa_tags": {
+          "raise_def_turns": 1
+        }
+      }
+    },
+    {
+      "id": 10006,
+      "name": "Super Saiyan Bardock",
+      "subname": "Lone Warrior",
+      "rarity": 4,
+      "element": 14,
+      "element_name": "Super PHY",
+      "card_class": "Super",
+      "leader_skill": "PHY Type Ki +3, Stats +90%",
+      "passive_skill": "Pure Saiyans allies Ki +3 and ATK & DEF +40%; seals attacked enemy's Super Attack",
+      "super_attack": "Causes supreme damage and raises DEF for 1 turn",
+      "categories": ["Pure Saiyans", "Super Saiyans"],
+      "category_ids": [17, 18],
+      "links": ["Super Saiyan", "Prepared for Battle", "Saiyan Roar", "Fierce Battle"],
+      "link_ids": [1, 2, 8, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10006,
+        "form_name": "Bardock",
+        "element": 14,
+        "passive_tags": {
+          "slot1_viable": false,
+          "has_support": true
+        },
+        "sa_tags": {
+          "raise_def_turns": 1
+        }
+      }
+    },
+    {
+      "id": 10007,
+      "name": "Super Saiyan Trunks",
+      "subname": "Future Hope",
+      "rarity": 4,
+      "element": 11,
+      "element_name": "Super TEQ",
+      "card_class": "Super",
+      "leader_skill": "Super TEQ Ki +3, Stats +90%",
+      "passive_skill": "ATK & DEF +120%; changes Ki spheres to TEQ Ki spheres",
+      "super_attack": "Causes supreme damage and raises DEF",
+      "categories": ["Super Saiyans", "Hybrid Saiyans", "Movie Heroes"],
+      "category_ids": [18, 15, 14],
+      "links": ["Super Saiyan", "Prepared for Battle", "Royal Lineage", "Fierce Battle"],
+      "link_ids": [1, 2, 7, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10007,
+        "form_name": "Trunks",
+        "element": 11,
+        "passive_tags": {
+          "slot1_viable": false,
+          "has_orb_changing": true
+        },
+        "sa_tags": {
+          "stacks_def": true
+        }
+      }
+    },
+    {
+      "id": 10008,
+      "name": "Majin Vegeta",
+      "subname": "Dark Awakening",
+      "rarity": 4,
+      "element": 12,
+      "element_name": "Super INT",
+      "card_class": "Super",
+      "leader_skill": "INT Type Ki +3, Stats +100%",
+      "passive_skill": "Reduces damage received by 50% when HP is 50% or more",
+      "super_attack": "Causes supreme damage and raises DEF for 1 turn",
+      "categories": ["Pure Saiyans"],
+      "category_ids": [17],
+      "links": ["Super Saiyan", "Prepared for Battle", "Royal Lineage", "Over in a Flash"],
+      "link_ids": [1, 2, 7, 9],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10008,
+        "form_name": "Majin Vegeta",
+        "element": 12,
+        "passive_tags": {
+          "slot1_viable": false,
+          "dr_base_percent": 50
+        },
+        "sa_tags": {
+          "raise_def_turns": 1
+        }
+      }
+    },
+    {
+      "id": 10009,
+      "name": "Beast Gohan",
+      "subname": "Awakened Super Hero",
+      "rarity": 5,
+      "element": 13,
+      "element_name": "Super STR",
+      "card_class": "Super",
+      "leader_skill": "\"Super Heroes\" Category Ki +3 and HP, ATK & DEF +170%, plus an additional HP, ATK & DEF +30% for \"Movie Heroes\"",
+      "leader_spec": {
+        "main_category_ids": [65],
+        "extra_category_ids": [14],
+        "base_boost_pct": 170.0,
+        "extra_boost_pct": 30.0
+      },
+      "passive_skill": "Guards all attacks; reduces damage received by 80%; Ki +3 and ATK & DEF +250%",
+      "super_attack": "Greatly raises DEF and causes mega-colossal damage",
+      "categories": ["Super Heroes", "Hybrid Saiyans", "Movie Heroes"],
+      "category_ids": [65, 15, 14],
+      "links": ["All in the Family", "Shocking Speed", "Prepared for Battle", "Fierce Battle", "Legendary Power"],
+      "link_ids": [10, 11, 2, 5, 6],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10009,
+        "form_name": "Beast Gohan",
+        "element": 13,
+        "passive_tags": {
+          "slot1_viable": true,
+          "has_guard": true,
+          "is_guard_permanent": true,
+          "is_guard_unconditional": true,
+          "dr_base_percent": 80
+        },
+        "sa_tags": {
+          "stacks_def": true
+        }
+      }
+    },
+    {
+      "id": 10010,
+      "name": "Gamma 1",
+      "subname": "Hero of Justice",
+      "rarity": 4,
+      "element": 13,
+      "element_name": "Super STR",
+      "card_class": "Super",
+      "leader_skill": "\"Super Heroes\" Category Ki +3, Stats +150%",
+      "leader_spec": {
+        "main_category_ids": [65],
+        "extra_category_ids": [],
+        "base_boost_pct": 150.0,
+        "extra_boost_pct": 0.0
+      },
+      "passive_skill": "Guards all attacks for 4 turns; reduces damage received by 50%; ATK & DEF +200%",
+      "super_attack": "Causes immense damage and raises DEF",
+      "categories": ["Super Heroes", "Androids", "Movie Heroes", "Artificial Life Forms"],
+      "category_ids": [65, 31, 14, 35],
+      "links": ["Android Assault", "Shocking Speed", "Hero of Justice", "Fierce Battle"],
+      "link_ids": [12, 11, 13, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10010,
+        "form_name": "Gamma 1",
+        "element": 13,
+        "passive_tags": {
+          "slot1_viable": true,
+          "has_guard": true,
+          "is_guard_permanent": true,
+          "is_guard_unconditional": true,
+          "dr_base_percent": 50
+        },
+        "sa_tags": {
+          "stacks_def": true
+        }
+      }
+    },
+    {
+      "id": 10011,
+      "name": "Gamma 2",
+      "subname": "Courageous Android",
+      "rarity": 4,
+      "element": 10,
+      "element_name": "Super AGL",
+      "card_class": "Super",
+      "leader_skill": "\"Super Heroes\" Category Ki +3, Stats +150%",
+      "passive_skill": "ATK & DEF +200%; medium chance of evading enemy attacks; high chance of critical hit",
+      "super_attack": "Causes immense damage and raises ATK & DEF for 1 turn",
+      "categories": ["Super Heroes", "Androids", "Movie Heroes", "Artificial Life Forms"],
+      "category_ids": [65, 31, 14, 35],
+      "links": ["Android Assault", "Shocking Speed", "Hero of Justice", "Fierce Battle"],
+      "link_ids": [12, 11, 13, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10011,
+        "form_name": "Gamma 2",
+        "element": 10,
+        "passive_tags": {
+          "slot1_viable": false,
+          "dodge_chance_percent": 50,
+          "dr_base_percent": 0
+        },
+        "sa_tags": {
+          "raise_def_turns": 1
+        }
+      }
+    },
+    {
+      "id": 10012,
+      "name": "Orange Piccolo",
+      "subname": "Namekian Might",
+      "rarity": 5,
+      "element": 11,
+      "element_name": "Super TEQ",
+      "card_class": "Super",
+      "leader_skill": "\"Super Heroes\" or \"Movie Heroes\" Ki +3 and HP, ATK & DEF +170%, plus an additional HP, ATK & DEF +30% for \"Super Heroes\"",
+      "leader_spec": {
+        "main_category_ids": [65, 14],
+        "extra_category_ids": [65],
+        "base_boost_pct": 170.0,
+        "extra_boost_pct": 30.0
+      },
+      "passive_skill": "Reduces damage received by 50%; guards all attacks; recovers HP",
+      "super_attack": "Greatly raises DEF and causes colossal damage",
+      "categories": ["Super Heroes", "Movie Heroes"],
+      "category_ids": [65, 14],
+      "links": ["Namekians", "Shocking Speed", "Prepared for Battle", "Fierce Battle", "Legendary Power"],
+      "link_ids": [14, 11, 2, 5, 6],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10012,
+        "form_name": "Orange Piccolo",
+        "element": 11,
+        "passive_tags": {
+          "slot1_viable": true,
+          "has_guard": true,
+          "is_guard_permanent": true,
+          "is_guard_unconditional": true,
+          "dr_base_percent": 50
+        },
+        "sa_tags": {
+          "stacks_def": true
+        }
+      }
+    },
+    {
+      "id": 10013,
+      "name": "Ultimate Gohan",
+      "subname": "Latent Power",
+      "rarity": 4,
+      "element": 14,
+      "element_name": "Super PHY",
+      "card_class": "Super",
+      "leader_skill": "\"Hybrid Saiyans\" Ki +3, Stats +130%",
+      "passive_skill": "ATK & DEF +180%; nullifies Ki Blast Super Attacks at high chance",
+      "super_attack": "Causes supreme damage and raises DEF for 1 turn",
+      "categories": ["Super Heroes", "Hybrid Saiyans", "Movie Heroes"],
+      "category_ids": [65, 15, 14],
+      "links": ["All in the Family", "Shocking Speed", "Prepared for Battle", "Fierce Battle"],
+      "link_ids": [10, 11, 2, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10013,
+        "form_name": "Ultimate Gohan",
+        "element": 14,
+        "passive_tags": {
+          "slot1_viable": false,
+          "dr_base_percent": 0
+        },
+        "sa_tags": {
+          "raise_def_turns": 1
+        }
+      }
+    },
+    {
+      "id": 10014,
+      "name": "Gotenks",
+      "subname": "Fusion Prodigy",
+      "rarity": 4,
+      "element": 12,
+      "element_name": "Super INT",
+      "card_class": "Super",
+      "leader_skill": "\"Special Pose\" Ki +3, Stats +130%",
+      "passive_skill": "Great chance of evading enemy's attack; ATK & DEF +150%",
+      "super_attack": "Causes supreme damage and raises ATK & DEF",
+      "categories": ["Super Heroes", "Hybrid Saiyans"],
+      "category_ids": [65, 15],
+      "links": ["Shocking Speed", "Prepared for Battle", "Fused Fighter", "Fierce Battle"],
+      "link_ids": [11, 2, 15, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10014,
+        "form_name": "Gotenks",
+        "element": 12,
+        "passive_tags": {
+          "slot1_viable": false,
+          "dodge_chance_percent": 70
+        },
+        "sa_tags": {
+          "stacks_def": true
+        }
+      }
+    },
+    {
+      "id": 10015,
+      "name": "Cell Max",
+      "subname": "Uncontrollable Terror",
+      "rarity": 5,
+      "element": 23,
+      "element_name": "Extreme STR",
+      "card_class": "Extreme",
+      "leader_skill": "\"Movie Bosses\" or \"Artificial Life Forms\" Category Ki +3 and HP, ATK & DEF +170%, plus an additional HP, ATK & DEF +30% for \"Movie Bosses\"",
+      "leader_spec": {
+        "main_category_ids": [25, 35],
+        "extra_category_ids": [25],
+        "base_boost_pct": 170.0,
+        "extra_boost_pct": 30.0
+      },
+      "passive_skill": "Guards all attacks; reduces damage received by 70%; ATK & DEF +220%",
+      "super_attack": "Greatly raises DEF and causes colossal damage",
+      "categories": ["Movie Bosses", "Artificial Life Forms"],
+      "category_ids": [25, 35],
+      "links": ["Big Bad Bosses", "Shocking Speed", "Nightmare", "Fierce Battle", "Legendary Power"],
+      "link_ids": [16, 11, 17, 5, 6],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10015,
+        "form_name": "Cell Max",
+        "element": 23,
+        "passive_tags": {
+          "slot1_viable": true,
+          "has_guard": true,
+          "is_guard_permanent": true,
+          "is_guard_unconditional": true,
+          "dr_base_percent": 70
+        },
+        "sa_tags": {
+          "stacks_def": true
+        }
+      }
+    },
+    {
+      "id": 10016,
+      "name": "Hirudegarn",
+      "subname": "Phantom Demon",
+      "rarity": 4,
+      "element": 22,
+      "element_name": "Extreme INT",
+      "card_class": "Extreme",
+      "leader_skill": "\"Movie Bosses\" Ki +3, Stats +130%",
+      "passive_skill": "Great chance of evading enemy attacks; ATK & DEF +200%",
+      "super_attack": "Causes immense damage and raises DEF",
+      "categories": ["Movie Bosses"],
+      "category_ids": [25],
+      "links": ["Big Bad Bosses", "Nightmare", "Revival", "Fierce Battle"],
+      "link_ids": [16, 17, 18, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10016,
+        "form_name": "Hirudegarn",
+        "element": 22,
+        "passive_tags": {
+          "slot1_viable": false,
+          "dodge_chance_percent": 70
+        },
+        "sa_tags": {
+          "stacks_def": true
+        }
+      }
+    },
+    {
+      "id": 10017,
+      "name": "Cooler (Final Form)",
+      "subname": "Crushing Superiority",
+      "rarity": 5,
+      "element": 23,
+      "element_name": "Extreme STR",
+      "card_class": "Extreme",
+      "leader_skill": "\"Movie Bosses\" or \"Wicked Bloodline\" Category Ki +3 and HP, ATK & DEF +170%, plus an additional HP, ATK & DEF +30% for \"Terrifying Conquerors\"",
+      "leader_spec": {
+        "main_category_ids": [25, 21],
+        "extra_category_ids": [26],
+        "base_boost_pct": 170.0,
+        "extra_boost_pct": 30.0
+      },
+      "passive_skill": "ATK & DEF +200%; launches up to 3 additional attacks; high chance to critical hit",
+      "super_attack": "Raises ATK & DEF for 1 turn and causes mega-colossal damage",
+      "categories": ["Movie Bosses", "Wicked Bloodline", "Terrifying Conquerors"],
+      "category_ids": [25, 21, 26],
+      "links": ["Big Bad Bosses", "Strongest Clan in Space", "Universe's Most Malevolent", "Fierce Battle", "Legendary Power"],
+      "link_ids": [16, 19, 20, 5, 6],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10017,
+        "form_name": "Cooler",
+        "element": 23,
+        "passive_tags": {
+          "slot1_viable": false,
+          "dr_base_percent": 0
+        },
+        "sa_tags": {
+          "raise_def_turns": 1
+        }
+      }
+    },
+    {
+      "id": 10018,
+      "name": "Golden Frieza",
+      "subname": "Brilliant Revenge",
+      "rarity": 4,
+      "element": 20,
+      "element_name": "Extreme AGL",
+      "card_class": "Extreme",
+      "leader_skill": "Extreme AGL Ki +3, Stats +90%",
+      "passive_skill": "Reduces damage received by 90% when HP is 40% or above",
+      "super_attack": "Causes immense damage and lowers enemy ATK & DEF",
+      "categories": ["Movie Bosses", "Wicked Bloodline"],
+      "category_ids": [25, 21],
+      "links": ["Strongest Clan in Space", "Universe's Most Malevolent", "Shocking Speed", "Fierce Battle"],
+      "link_ids": [19, 20, 11, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10018,
+        "form_name": "Golden Frieza",
+        "element": 20,
+        "passive_tags": {
+          "slot1_viable": true,
+          "has_guard": true,
+          "is_guard_permanent": true,
+          "is_guard_unconditional": true,
+          "dr_base_percent": 90
+        },
+        "sa_tags": {
+          "raise_def_turns": 0
+        }
+      }
+    },
+    {
+      "id": 10019,
+      "name": "Metal Cooler",
+      "subname": "Immortal Army",
+      "rarity": 4,
+      "element": 24,
+      "element_name": "Extreme PHY",
+      "card_class": "Extreme",
+      "leader_skill": "Extreme PHY Ki +3, Stats +90%",
+      "passive_skill": "Extreme Class allies Ki +3 and ATK & DEF +40%; recovers 10% HP at start of turn",
+      "super_attack": "Causes supreme damage and raises DEF for 1 turn",
+      "categories": ["Movie Bosses", "Wicked Bloodline", "Artificial Life Forms"],
+      "category_ids": [25, 21, 35],
+      "links": ["Big Bad Bosses", "Strongest Clan in Space", "Auto Regeneration", "Fierce Battle"],
+      "link_ids": [16, 19, 21, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10019,
+        "form_name": "Metal Cooler",
+        "element": 24,
+        "passive_tags": {
+          "slot1_viable": false,
+          "has_support": true
+        },
+        "sa_tags": {
+          "raise_def_turns": 1
+        }
+      }
+    },
+    {
+      "id": 10020,
+      "name": "Turles",
+      "subname": "Cosmic Destroyer",
+      "rarity": 4,
+      "element": 20,
+      "element_name": "Extreme AGL",
+      "card_class": "Extreme",
+      "leader_skill": "\"Movie Bosses\" Ki +3, Stats +120%",
+      "passive_skill": "\"Movie Bosses\" allies Ki +3 and ATK +40%; high chance of stunning the attacked enemy",
+      "super_attack": "Causes supreme damage and raises DEF",
+      "categories": ["Movie Bosses", "Pure Saiyans", "Terrifying Conquerors"],
+      "category_ids": [25, 17, 26],
+      "links": ["Big Bad Bosses", "Prepared for Battle", "Thirst for Conquest", "Fierce Battle"],
+      "link_ids": [16, 2, 22, 5],
+      "is_rainbow": true,
+      "potential_percent": 100,
+      "base_form": {
+        "form_id": 10020,
+        "form_name": "Turles",
+        "element": 20,
+        "passive_tags": {
+          "slot1_viable": false,
+          "has_support": true
+        },
+        "sa_tags": {
+          "stacks_def": true
+        }
+      }
+    }
+  ]
+}
