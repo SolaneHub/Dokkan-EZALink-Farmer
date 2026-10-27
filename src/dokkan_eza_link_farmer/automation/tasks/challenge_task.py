@@ -47,6 +47,8 @@ class ChallengeTask(BaseTask):
         on_status: Callable[[str], None] | None = None,
         on_run_complete: Callable[[int, int], None] | None = None,
         max_retries_per_batch: int = 5,
+        preferred_difficulty: str | None = None,
+        difficulty: int | None = None,
     ):
         super().__init__(adb, vision, config, on_status, on_run_complete)
         self.dokkandb = dokkandb
@@ -56,6 +58,8 @@ class ChallengeTask(BaseTask):
         self.stage_id = stage_id
         self.stage_name = stage_name
         self.max_retries_per_batch = max_retries_per_batch
+        self.preferred_difficulty = preferred_difficulty
+        self.difficulty = difficulty
         self.team_builder = TeamBuilder(dokkandb=self.dokkandb, ai_client=self.ai_client)
 
         self.missions: list[ChallengeMission] = []
@@ -342,9 +346,30 @@ class ChallengeTask(BaseTask):
             elif state == GameState.STAGE_SELECT:
                 if victory_seen:
                     return True
+
+                pref_diff = (self.preferred_difficulty or "").lower()
+                if not pref_diff and self.difficulty is not None:
+                    from dokkan_eza_link_farmer.ai.boss_models import DIFFICULTY_NAMES
+
+                    pref_diff = DIFFICULTY_NAMES.get(self.difficulty, "").lower().replace("-", "_")
+
+                if pref_diff:
+                    pref_key = f"diff_{pref_diff}"
+                    template_match = self.vision.find_template(screen, pref_key)
+                    if template_match:
+                        self.adb.tap(template_match[0], template_match[1], delay_after=1.5)
+                        continue
+
+                # Fallback to diff_super2 / diff_super / diff_z_hard
+                diff_super2 = self.vision.find_template(screen, "diff_super2")
                 diff_super = self.vision.find_template(screen, "diff_super")
-                if diff_super:
+                diff_z_hard = self.vision.find_template(screen, "diff_z_hard")
+                if diff_super2 and pref_diff in ("super2", "super3"):
+                    self.adb.tap(diff_super2[0], diff_super2[1], delay_after=1.5)
+                elif diff_super:
                     self.adb.tap(diff_super[0], diff_super[1], delay_after=1.5)
+                elif diff_z_hard:
+                    self.adb.tap(diff_z_hard[0], diff_z_hard[1], delay_after=1.5)
                 else:
                     self.adb.tap(int(w * 0.50), int(h * 0.35), delay_after=1.5)
 

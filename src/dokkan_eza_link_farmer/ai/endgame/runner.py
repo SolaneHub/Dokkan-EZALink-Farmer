@@ -18,7 +18,6 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -37,6 +36,7 @@ from dokkan_eza_link_farmer.ai.endgame.telemetry import (
     PostDefeatDecision,
     TurnSnapshot,
 )
+from dokkan_eza_link_farmer.ai.mission_solver import MissionBatch
 from dokkan_eza_link_farmer.ai.models import (
     BossPhase,
     BossStage,
@@ -47,8 +47,9 @@ from dokkan_eza_link_farmer.ai.team_builder import (
     TeamBuilder,
     format_team_summary_table,
 )
-from dokkan_eza_link_farmer.automation.game_state import GameState, StateDetector
+from dokkan_eza_link_farmer.automation.game_state import StateDetector
 from dokkan_eza_link_farmer.automation.tasks.box_scanner import DEFAULT_USER_BOX_PATH
+from dokkan_eza_link_farmer.automation.tasks.challenge_task import ChallengeTask
 from dokkan_eza_link_farmer.automation.team_formation import apply_team_in_game
 from dokkan_eza_link_farmer.automation.vision import Vision
 from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
@@ -421,144 +422,75 @@ class EndgameRunner:
 
     def _run_live_combat_loop(
         self,
-        _attempt_num: int,
+        attempt_num: int,
         stage: BossStage,
     ) -> tuple[EndgameStageOutcome, TurnSnapshot | None, list[CombatFrame]]:
-        """Executes the live combat observation loop on device screen."""
+        """Executes the combat attempt delegating live navigation and battle loop to ChallengeTask."""
         assert self.adb is not None
         assert self.vision is not None
         assert self.detector is not None
 
-        turn_count = 0
-        phase_idx = 1
-        last_snapshot: TurnSnapshot | None = None
-        consecutive_unknowns = 0
+        # Build synthetic target event and challenge task for execution
+        target_event = {
+            "id": stage.event_id,
+            "name": stage.event_name or "Endgame Challenge",
+        }
 
-        self.telemetry_tracker.ring_buffer.clear()
-
-        while not self.is_stopped():
-            screen = self.adb.screencap()
-            state, meta = self.detector.detect(screen)
-            w = meta.get("screen_width", 1080)
-            h = meta.get("screen_height", 1920)
-
-            # Step C-1: Friend Selection Screen
-            if state == GameState.FRIEND_SELECT:
-                self.log("[Step C] Screen: FRIEND_SELECT. Selecting optimal Friend Leader...")
-                refresh_match = self.vision.find_template(screen, "button_friend_refresh")
-                if refresh_match:
-                    logger.debug("Friend refresh button visible at %s", refresh_match)
-                # Tap top friend candidate
-                self.adb.tap(int(w * 0.50), int(h * 0.38), delay_after=2.0)
-
-            # Step C-2: Team Confirm Screen
-            elif state == GameState.TEAM_CONFIRM:
-                self.log("[Step C] Screen: TEAM_CONFIRM. Tapping button_start...")
-                start_btn = meta.get("start_button") or self.vision.find_template(
-                    screen, "button_start"
-                )
-                if start_btn:
-                    self.adb.tap(start_btn[0], start_btn[1], delay_after=3.0)
-                else:
-                    self.adb.tap(int(w * 0.88), int(h * 0.88), delay_after=3.0)
-
-            # Step C-3: Map Screen
-            elif state == GameState.MAP_SCREEN:
-                self.log("[Step C] Screen: MAP_SCREEN. Advancing on board...")
-                self.adb.tap(int(w * 0.50), int(h * 0.80), delay_after=1.5)
-
-            # Step C-4: Battle Screen (Turn Telemetry & Auto-Battle check)
-            elif state == GameState.BATTLE_SCREEN:
-                turn_count += 1
-                self.current_state = EndgameRunnerState.STEP_C_OBSERVE
-                self.log(f"[Step C] Screen: BATTLE_SCREEN (Turn {turn_count})...")
-
-                # Ensure Auto-Battle is active
-                auto_on = self.vision.find_template(screen, "btn_auto_battle_on")
-                if not auto_on:
-                    auto_off = self.vision.find_template(screen, "btn_auto_battle_off")
-                    if auto_off:
-                        self.log("[Step C] Auto-Battle is OFF. Tapping to toggle ON...")
-                        self.adb.tap(auto_off[0], auto_off[1], delay_after=0.8)
-                else:
-                    self.log("[Step C] Auto-Battle is ON (btn_auto_battle_on confirmed).")
-
-                # Ki spheres snapshot & telemetry observation
-                orb_y = int(h * 0.53)
-                self.log(
-                    f"[Step C] Capturing Ki sphere board snapshot (y~{orb_y}) & updating telemetry..."
-                )
-
-                # Capture Turn Snapshot
-                active_rot = self.current_team[:3]
-                cur_phase = (
-                    stage.phases[min(phase_idx - 1, len(stage.phases) - 1)]
-                    if stage.phases
-                    else BossPhase()
-                )
-                last_snapshot = self.telemetry_tracker.start_turn(
-                    turn_number=turn_count,
-                    boss_phase_index=phase_idx,
-                    boss_element=cur_phase.element,
-                    boss_element_name=cur_phase.element_name,
-                    boss_hp_percent=100.0,
-                    player_hp_percent=100.0,
-                    active_rotation=active_rot,
-                )
-
-                # Record combat frame into ring buffer
-                self.telemetry_tracker.record_action(
-                    active_slot=1,
-                    target_card_id=active_rot[0].id if active_rot else None,
-                    incoming_damage=0,
-                    player_hp_after=100.0,
-                    is_lethal=False,
-                )
-
-                # Collect Ki Spheres or let Auto-Battle play
-                time.sleep(2.0)
-
-            # Step D: Victory Check (Results / OK Button)
-            elif state in (
-                GameState.RESULTS_SCREEN,
-                GameState.KO_SCREEN,
-            ) or self.vision.find_template(screen, "button_ok"):
-                ok_btn = self.vision.find_template(screen, "button_ok")
-                if ok_btn:
-                    self.adb.tap(ok_btn[0], ok_btn[1], delay_after=1.5)
-                return (
-                    EndgameStageOutcome.VICTORY,
-                    last_snapshot,
-                    self.telemetry_tracker.ring_buffer.get_pre_ko_frames(),
-                )
-
-            # Step D: Game Over Check (Attempt Again Button)
-            elif state == GameState.GAME_OVER or self.vision.find_template(
-                screen, "button_attempt_again"
-            ):
-                self.log("[Step D] Game Over screen detected!")
-                again_btn = self.vision.find_template(screen, "button_attempt_again")
-                if again_btn:
-                    self.adb.tap(again_btn[0], again_btn[1], delay_after=1.5)
-                return (
-                    EndgameStageOutcome.DEFEAT,
-                    last_snapshot,
-                    self.telemetry_tracker.ring_buffer.get_pre_ko_frames(),
-                )
-
-            elif state == GameState.UNKNOWN:
-                consecutive_unknowns += 1
-                if consecutive_unknowns >= 6:
-                    self.adb.tap(int(w * 0.50), int(h * 0.50), delay_after=1.0)
-                    consecutive_unknowns = 0
-
-            time.sleep(1.0)
-
-        return (
-            EndgameStageOutcome.ABORTED,
-            last_snapshot,
-            self.telemetry_tracker.ring_buffer.get_pre_ko_frames(),
+        challenge = ChallengeTask(
+            adb=self.adb,
+            vision=self.vision,
+            config={},
+            dokkandb=self.dokkandb,
+            ai_client=self.ai_client,
+            target_event=target_event,
+            stage_num=1,
+            stage_id=stage.stage_id,
+            stage_name=stage.stage_name,
+            max_retries_per_batch=1,
+            on_status=self.on_status,
         )
+
+        batch = self.mission_batch or MissionBatch(missions=[])
+        team_rec = None
+        if self.current_team:
+            from dokkan_eza_link_farmer.ai.models import RotationPair, TeamRecommendation
+
+            rot_a = (
+                RotationPair(slot1=self.current_team[0], slot2=self.current_team[1])
+                if len(self.current_team) >= 2
+                else RotationPair(slot1=self.current_team[0], slot2=self.current_team[0])
+            )
+            rot_b = (
+                RotationPair(slot1=self.current_team[2], slot2=self.current_team[3])
+                if len(self.current_team) >= 4
+                else rot_a
+            )
+            floaters = self.current_team[4:6] if len(self.current_team) >= 6 else []
+            team_rec = TeamRecommendation(
+                leader=self.current_team[0],
+                sub_lead=floaters[0] if floaters else self.current_team[0],
+                rotation_a=rot_a,
+                rotation_b=rot_b,
+                floaters=floaters,
+                full_team=self.current_team,
+            )
+
+        self.current_state = EndgameRunnerState.STEP_C_OBSERVE
+        success = challenge._run_stage_attempt(batch, team_rec, attempt_num=attempt_num)
+
+        last_phase = stage.phases[-1] if stage.phases else BossPhase()
+        snapshot = self.telemetry_tracker.start_turn(
+            turn_number=1,
+            boss_phase_index=len(stage.phases) or 1,
+            boss_element=last_phase.element,
+            boss_element_name=last_phase.element_name,
+            boss_hp_percent=0.0 if success else 50.0,
+            player_hp_percent=100.0 if success else 0.0,
+            active_rotation=self.current_team[:3],
+        )
+
+        outcome = EndgameStageOutcome.VICTORY if success else EndgameStageOutcome.DEFEAT
+        return outcome, snapshot, self.telemetry_tracker.ring_buffer.get_pre_ko_frames()
 
     # =========================================================================
     # STEP D: OUTCOME EVALUATION & ADAPTIVE DECISION TREE

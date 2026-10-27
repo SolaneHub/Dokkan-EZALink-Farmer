@@ -244,6 +244,8 @@ class BotEngine:
         stage_id: int | None = None,
         stage_name: str | None = None,
         max_retries_per_batch: int = 5,
+        preferred_difficulty: str | None = None,
+        difficulty: int | None = None,
     ) -> bool:
         """Starts autonomous Challenge & Mission solver task."""
         if self.is_task_running():
@@ -261,6 +263,8 @@ class BotEngine:
             stage_id=stage_id,
             stage_name=stage_name,
             max_retries_per_batch=max_retries_per_batch,
+            preferred_difficulty=preferred_difficulty,
+            difficulty=difficulty,
             on_status=self.emit_log,
             on_run_complete=self.emit_run,
         )
