@@ -52,6 +52,15 @@ def _make_card(
     )
 
 
+def _make_synthetic_pattern(h: int, w: int, base_val: int = 150) -> np.ndarray:
+    """Creates a non-zero-variance patterned synthetic template for cross-platform template matching."""
+    pat = np.full((h, w, 3), base_val, dtype=np.uint8)
+    pat[max(1, h // 4) : max(2, 3 * h // 4), max(1, w // 4) : max(2, 3 * w // 4)] = (
+        base_val + 50
+    ) % 255
+    return pat
+
+
 class TestStateDetectorTransitions:
     """Tests StateDetector recognition using clean synthetic patterns without disk loading."""
 
@@ -61,8 +70,8 @@ class TestStateDetectorTransitions:
         detector = StateDetector(vision)
         canvas = np.zeros((2400, 1080, 3), dtype=np.uint8)
 
-        vision._template_cache["diff_super"] = np.ones((50, 100, 3), dtype=np.uint8) * 200
-        vision._template_cache["diff_z_hard"] = np.ones((50, 100, 3), dtype=np.uint8) * 200
+        vision._template_cache["diff_super"] = _make_synthetic_pattern(50, 100, 200)
+        vision._template_cache["diff_z_hard"] = _make_synthetic_pattern(50, 100, 150)
         canvas[800:850, 490:590] = vision._template_cache["diff_super"]
         canvas[1000:1050, 490:590] = vision._template_cache["diff_z_hard"]
 
@@ -77,10 +86,8 @@ class TestStateDetectorTransitions:
         detector = StateDetector(vision)
         canvas = np.zeros((2400, 1080, 3), dtype=np.uint8)
 
-        vision._template_cache["button_start"] = np.ones((60, 120, 3), dtype=np.uint8) * 220
-        vision._template_cache["button_team_formation"] = (
-            np.ones((50, 100, 3), dtype=np.uint8) * 220
-        )
+        vision._template_cache["button_start"] = _make_synthetic_pattern(60, 120, 220)
+        vision._template_cache["button_team_formation"] = _make_synthetic_pattern(50, 100, 170)
         canvas[1900:1960, 750:870] = vision._template_cache["button_start"]
         canvas[1150:1200, 750:850] = vision._template_cache["button_team_formation"]
 
@@ -95,8 +102,8 @@ class TestStateDetectorTransitions:
         detector = StateDetector(vision)
         canvas = np.zeros((2400, 1080, 3), dtype=np.uint8)
 
-        vision._template_cache["header_restore_sta"] = np.ones((60, 200, 3), dtype=np.uint8) * 180
-        vision._template_cache["button_cancel"] = np.ones((40, 100, 3), dtype=np.uint8) * 180
+        vision._template_cache["header_restore_sta"] = _make_synthetic_pattern(60, 200, 180)
+        vision._template_cache["button_cancel"] = _make_synthetic_pattern(40, 100, 130)
         canvas[350:410, 440:640] = vision._template_cache["header_restore_sta"]
         canvas[1480:1520, 490:590] = vision._template_cache["button_cancel"]
 
@@ -110,7 +117,7 @@ class TestStateDetectorTransitions:
         detector = StateDetector(vision)
         canvas = np.zeros((2400, 1080, 3), dtype=np.uint8)
 
-        vision._template_cache["button_remove_all"] = np.ones((50, 150, 3), dtype=np.uint8) * 150
+        vision._template_cache["button_remove_all"] = _make_synthetic_pattern(50, 150, 150)
         canvas[1575:1625, 465:615] = vision._template_cache["button_remove_all"]
 
         state, _ = detector.detect(canvas)
