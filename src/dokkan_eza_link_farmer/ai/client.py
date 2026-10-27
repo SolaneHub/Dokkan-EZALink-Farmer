@@ -157,7 +157,8 @@ class DokkanAIClient:
         except requests.HTTPError as e:
             err_body = ""
             with contextlib.suppress(Exception):
-                err_body = e.response.text[:500]
+                if e.response is not None:
+                    err_body = e.response.text[:500]
             logger.error(
                 f"HTTP error communicating with AI model ({self.config.model_name}): {e}. Server response: {err_body}"
             )

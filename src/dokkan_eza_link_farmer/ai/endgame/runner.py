@@ -436,12 +436,13 @@ class EndgameRunner:
             "name": stage.event_name or "Endgame Challenge",
         }
 
+        ai_client = self.ai_client or DokkanAIClient()
         challenge = ChallengeTask(
             adb=self.adb,
             vision=self.vision,
             config={},
             dokkandb=self.dokkandb,
-            ai_client=self.ai_client,
+            ai_client=ai_client,
             target_event=target_event,
             stage_num=1,
             stage_id=stage.stage_id,
@@ -456,23 +457,43 @@ class EndgameRunner:
             from dokkan_eza_link_farmer.ai.models import RotationPair, TeamRecommendation
 
             rot_a = (
-                RotationPair(slot1=self.current_team[0], slot2=self.current_team[1])
+                RotationPair(
+                    slot1=self.current_team[0],
+                    slot2=self.current_team[1],
+                    shared_links=[],
+                    shared_ki_links=[],
+                    synergy_score=0.0,
+                )
                 if len(self.current_team) >= 2
-                else RotationPair(slot1=self.current_team[0], slot2=self.current_team[0])
+                else RotationPair(
+                    slot1=self.current_team[0],
+                    slot2=self.current_team[0],
+                    shared_links=[],
+                    shared_ki_links=[],
+                    synergy_score=0.0,
+                )
             )
             rot_b = (
-                RotationPair(slot1=self.current_team[2], slot2=self.current_team[3])
+                RotationPair(
+                    slot1=self.current_team[2],
+                    slot2=self.current_team[3],
+                    shared_links=[],
+                    shared_ki_links=[],
+                    synergy_score=0.0,
+                )
                 if len(self.current_team) >= 4
                 else rot_a
             )
             floaters = self.current_team[4:6] if len(self.current_team) >= 6 else []
+            friend_lead = floaters[0] if floaters else self.current_team[0]
             team_rec = TeamRecommendation(
                 leader=self.current_team[0],
-                sub_lead=floaters[0] if floaters else self.current_team[0],
+                friend_leader=friend_lead,
                 rotation_a=rot_a,
                 rotation_b=rot_b,
                 floaters=floaters,
-                full_team=self.current_team,
+                all_cards=list(self.current_team),
+                tactical_analysis="Live endgame attempt",
             )
 
         self.current_state = EndgameRunnerState.STEP_C_OBSERVE

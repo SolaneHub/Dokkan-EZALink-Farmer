@@ -468,6 +468,7 @@ class DokkanCard:
     category_ids: list[int] = field(default_factory=list)
     links: list[str] = field(default_factory=list)
     link_ids: list[int] = field(default_factory=list)
+    defense: int = 0
     thumb_url: str = ""
     has_eza: bool = False
     is_eza: bool = False

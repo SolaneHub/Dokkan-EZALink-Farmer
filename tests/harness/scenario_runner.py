@@ -6,6 +6,7 @@ FakeADBClient, VirtualClock, and synthetic frame sequences without emulators or 
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
@@ -205,7 +206,7 @@ class AutomatedScenarioRunner:
         """Allows overriding or registering custom synthetic frames."""
         self._state_frames[state] = frame  # type: ignore[assignment]
 
-    def register_state_sequence(self, sequence: list[GameState | str]) -> None:
+    def register_state_sequence(self, sequence: Sequence[GameState | str]) -> None:
         """Registers an ordered sequence of screen states for the task to consume."""
         frames = [self.get_frame_for_state(st) for st in sequence]
         self.adb.queue_frames(frames)

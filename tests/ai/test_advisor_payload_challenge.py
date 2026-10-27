@@ -545,8 +545,8 @@ class TestExtremeAdversarialInputsAndGracefulDegradation:
             name="Minimal Card",
             element=10,
         )
-        card.passive_skill = None
-        card.super_attack = None
+        card.passive_skill = ""
+        card.super_attack = ""
         cand_eval = CandidateEvaluation(
             card=card,
             score=50.0,

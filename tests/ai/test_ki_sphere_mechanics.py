@@ -184,7 +184,6 @@ class TestKiSphereSlotAllocationAndSynergy:
         ]
 
         rot_a, rot_b, floaters = optimize_rotations_for_team(team)
-        [rot_a.slot1, rot_a.slot2, rot_b.slot1, rot_b.slot2] + floaters
 
         # Orb hungry unit must be in Slot 2 or Slot 3, NEVER Slot 1 of rotation A if unconditional tank is present
         assert rot_a.slot1.id != orb_hungry_tank.id
