@@ -90,6 +90,7 @@ def get_boss_stage(
     stage_identifier: int | str | BossStage,
     file_path: str | Path | None = None,
     dokkandb: Any = None,
+    difficulty: int | str | None = None,
 ) -> BossStage:
     """Retrieves a BossStage by BossStage instance, stage_id integer or string slug/id.
 
@@ -97,6 +98,8 @@ def get_boss_stage(
     """
     if isinstance(stage_identifier, BossStage):
         return stage_identifier
+
+    from dokkan_eza_link_farmer.ai.boss_models import parse_difficulty_code
 
     catalog = load_boss_catalog(file_path)
     key = str(stage_identifier).strip().lower()
@@ -148,9 +151,30 @@ def get_boss_stage(
                 # 2. If st_num matches an event id directly (typically 3-4 digits)
                 det = dokkandb.get_event_details(st_num)
                 if det and det.get("quests"):
-                    stages_arr = det["quests"][0].get("stages", [])
+                    first_q = det["quests"][0]
+                    stages_arr = first_q.get("stages", [])
                     if stages_arr:
-                        st_id = stages_arr[0].get("stage_id")
+                        diff_code = (
+                            parse_difficulty_code(difficulty) if difficulty is not None else None
+                        )
+                        chosen_s = None
+                        if diff_code is not None:
+                            chosen_s = next(
+                                (
+                                    s
+                                    for s in stages_arr
+                                    if int(s.get("difficulty") or 0) == diff_code
+                                ),
+                                None,
+                            )
+                        if not chosen_s:
+                            sorted_stages = sorted(
+                                stages_arr,
+                                key=lambda s: int(s.get("difficulty") or 0),
+                                reverse=True,
+                            )
+                            chosen_s = sorted_stages[0]
+                        st_id = chosen_s.get("stage_id")
                         if st_id:
                             boss_info = dokkandb.get_stage_boss_info(st_num, st_id)
                             if boss_info and boss_info.get("phases"):
@@ -158,9 +182,9 @@ def get_boss_stage(
                             return BossStage(
                                 stage_id=st_id,
                                 event_id=st_num,
-                                stage_name=det["quests"][0].get("quest_name") or "Stage 1",
+                                stage_name=first_q.get("quest_name") or "Stage 1",
                                 event_name=det.get("name") or f"Event {st_num}",
-                                difficulty=4,
+                                difficulty=chosen_s.get("difficulty", 4),
                                 phases=[],
                             )
             except Exception as e:
@@ -183,9 +207,32 @@ def get_boss_stage(
                 if key in ev_name or key == str(ev_id):
                     det = dokkandb.get_event_details(ev_id)
                     if det and det.get("quests"):
-                        stages_arr = det["quests"][0].get("stages", [])
+                        first_q = det["quests"][0]
+                        stages_arr = first_q.get("stages", [])
                         if stages_arr:
-                            st_id = stages_arr[0].get("stage_id")
+                            diff_code = (
+                                parse_difficulty_code(difficulty)
+                                if difficulty is not None
+                                else None
+                            )
+                            chosen_s = None
+                            if diff_code is not None:
+                                chosen_s = next(
+                                    (
+                                        s
+                                        for s in stages_arr
+                                        if int(s.get("difficulty") or 0) == diff_code
+                                    ),
+                                    None,
+                                )
+                            if not chosen_s:
+                                sorted_stages = sorted(
+                                    stages_arr,
+                                    key=lambda s: int(s.get("difficulty") or 0),
+                                    reverse=True,
+                                )
+                                chosen_s = sorted_stages[0]
+                            st_id = chosen_s.get("stage_id")
                             if st_id:
                                 boss_info = dokkandb.get_stage_boss_info(ev_id, st_id)
                                 if boss_info and boss_info.get("phases"):
@@ -193,9 +240,9 @@ def get_boss_stage(
                                 return BossStage(
                                     stage_id=st_id,
                                     event_id=ev_id,
-                                    stage_name=det["quests"][0].get("quest_name") or "Stage 1",
+                                    stage_name=first_q.get("quest_name") or "Stage 1",
                                     event_name=ev.get("name") or f"Event {ev_id}",
-                                    difficulty=4,
+                                    difficulty=chosen_s.get("difficulty", 4),
                                     phases=[],
                                 )
         except Exception as e:

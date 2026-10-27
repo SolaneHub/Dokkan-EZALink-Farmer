@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dokkan_eza_link_farmer.ai.boss_models import (
+    DIFFICULTY_CODES,
+    DIFFICULTY_NAMES,
     BossEnemy,
     BossMechanic,
     BossPhase,
     BossStage,
     ChallengeStageInfo,
     infer_boss_categories_from_name,
+    parse_difficulty_code,
 )
 from dokkan_eza_link_farmer.ai.card_models import (
     TYPE_NAMES,
@@ -18,6 +21,7 @@ from dokkan_eza_link_farmer.ai.card_models import (
     PassiveTags,
     RotationPair,
     SATags,
+    TeamConditionalBuff,
     TeamRecommendation,
     parse_dodge_percentage_from_text,
 )
@@ -33,6 +37,7 @@ __all__ = [
     "SupportedAIModel",
     "AIConfig",
     "PassiveTags",
+    "TeamConditionalBuff",
     "SATags",
     "LeaderSkillSpec",
     "CardForm",
@@ -44,6 +49,9 @@ __all__ = [
     "BossPhase",
     "BossStage",
     "ChallengeStageInfo",
+    "DIFFICULTY_CODES",
+    "DIFFICULTY_NAMES",
+    "parse_difficulty_code",
     "FailureReport",
     "TYPE_NAMES",
     "parse_dodge_percentage_from_text",

@@ -587,6 +587,52 @@ class BossPhase:
         )
 
 
+DIFFICULTY_NAMES: dict[int, str] = {
+    0: "Normal",
+    1: "Hard",
+    2: "Z-Hard",
+    3: "Super",
+    4: "Super2",
+    5: "Super3",
+}
+
+DIFFICULTY_CODES: dict[str, int] = {
+    "normal": 0,
+    "hard": 1,
+    "z-hard": 2,
+    "zhard": 2,
+    "super": 3,
+    "super1": 3,
+    "super2": 4,
+    "super3": 5,
+}
+
+
+def parse_difficulty_code(val: Any) -> int | None:
+    """Parses difficulty string, flag, or integer into standard Dokkan difficulty code (0-5)."""
+    if val is None:
+        return None
+    if isinstance(val, int):
+        return val if val in DIFFICULTY_NAMES else None
+    s = str(val).strip().lower().lstrip("-")
+    if s.isdigit():
+        code = int(s)
+        return code if code in DIFFICULTY_NAMES else None
+    return DIFFICULTY_CODES.get(s)
+
+
+def infer_difficulty_from_stage_id(stage_id: Any) -> int | None:
+    """Infers difficulty code (0-5) from standard 8-digit Dokkan stage_id (last digit)."""
+    if not stage_id:
+        return None
+    s = str(stage_id).strip()
+    if s and s[-1].isdigit():
+        digit = int(s[-1])
+        if digit in DIFFICULTY_NAMES:
+            return digit
+    return None
+
+
 @dataclass
 class BossStage:
     """Complete challenge stage telemetry with full BossPhase sequences."""
@@ -598,6 +644,10 @@ class BossStage:
     difficulty: int = 1
     phases: list[BossPhase] = field(default_factory=list)
     total_battles: int = 1
+
+    @property
+    def difficulty_name(self) -> str:
+        return DIFFICULTY_NAMES.get(self.difficulty, f"Difficulty {self.difficulty}")
 
     @property
     def is_multi_battle(self) -> bool:
@@ -645,12 +695,18 @@ class BossStage:
             total_battles = max((p.battle_index for p in phases), default=1)
         if not total_battles:
             total_battles = 1
+        raw_diff = stage_data.get("difficulty")
+        if raw_diff is not None:
+            diff = _safe_int(raw_diff, 1)
+        else:
+            inferred = infer_difficulty_from_stage_id(stage_data.get("stage_id"))
+            diff = inferred if inferred is not None else 1
         return cls(
             stage_id=_safe_int(stage_data.get("stage_id"), 0),
             event_id=_safe_int(stage_data.get("event_id"), 0),
             stage_name=_safe_str(stage_data.get("stage_name"), ""),
             event_name=_safe_str(stage_data.get("event_name"), ""),
-            difficulty=_safe_int(stage_data.get("difficulty"), 1),
+            difficulty=diff,
             total_battles=total_battles,
             phases=phases,
         )
@@ -667,6 +723,10 @@ class ChallengeStageInfo:
     difficulty: int = 1
     phases: list[BossPhase] = field(default_factory=list)
 
+    @property
+    def difficulty_name(self) -> str:
+        return DIFFICULTY_NAMES.get(self.difficulty, f"Difficulty {self.difficulty}")
+
 
 __all__ = [
     "BossEnemy",
@@ -674,6 +734,10 @@ __all__ = [
     "BossPhase",
     "BossStage",
     "ChallengeStageInfo",
+    "DIFFICULTY_CODES",
+    "DIFFICULTY_NAMES",
     "TYPE_NAMES",
     "infer_boss_categories_from_name",
+    "infer_difficulty_from_stage_id",
+    "parse_difficulty_code",
 ]
