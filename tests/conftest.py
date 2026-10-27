@@ -7,6 +7,12 @@ and 'fast' (purely logical in-memory tests).
 from __future__ import annotations
 
 import os
+import sys
+import types
+
+# Provide stub for audioop to prevent stdlib deprecation in Python 3.11/3.12 and removal in 3.13
+if "audioop" not in sys.modules:
+    sys.modules["audioop"] = types.ModuleType("audioop")
 
 # Prevent OpenMP and threadpool contention during C++ teardown across runtimes
 os.environ.setdefault("OMP_NUM_THREADS", "1")

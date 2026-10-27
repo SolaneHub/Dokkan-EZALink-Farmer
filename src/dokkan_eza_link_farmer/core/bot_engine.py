@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import os
 import sys
@@ -22,6 +24,25 @@ from dokkan_eza_link_farmer.core.i18n import set_language, t
 from dokkan_eza_link_farmer.core.system_tools import ToolLocator, get_config_path
 from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
 from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
+
+
+class EndgameRunnerTask(BaseTask):
+    """Automation task wrapper executing an EndgameRunner instance in background."""
+
+    def __init__(self, runner: Any, engine: BotEngine):
+        super().__init__(engine.adb, engine.vision, engine.config, engine.emit_log, engine.emit_run)
+        self.runner = runner
+
+    def run(self) -> None:
+        self.is_running = True
+        try:
+            self.runner.run()
+        finally:
+            self.is_running = False
+
+    def stop(self) -> None:
+        self.runner.stop()
+        super().stop()
 
 
 class BotEngine:
@@ -350,22 +371,6 @@ class BotEngine:
             on_status=self.emit_log,
             on_run_complete=self.emit_run,
         )
-
-        class EndgameRunnerTask(BaseTask):
-            def __init__(self, r: EndgameRunner, eng: BotEngine):
-                super().__init__(eng.adb, eng.vision, eng.config, eng.emit_log, eng.emit_run)
-                self.runner = r
-
-            def run(self):
-                self.is_running = True
-                try:
-                    self.runner.run()
-                finally:
-                    self.is_running = False
-
-            def stop(self):
-                self.runner.stop()
-                super().stop()
 
         self.current_task = EndgameRunnerTask(runner, self)
         self._start_task_thread()

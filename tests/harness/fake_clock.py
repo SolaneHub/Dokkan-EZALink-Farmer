@@ -19,7 +19,7 @@ class VirtualClock:
     calls return the advanced simulated time without sleeping real CPU cycles.
     """
 
-    def __init__(self, initial_time: float = 1_000_000.0) -> None:
+    def __init__(self, initial_time: float = 1_770_000_000.0) -> None:
         self._current_time: float = float(initial_time)
         self._lock = threading.Lock()
         self._sleep_history: list[float] = []

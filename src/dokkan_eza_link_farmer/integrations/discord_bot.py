@@ -3,7 +3,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import io
+import sys
+import types
 from typing import TYPE_CHECKING, Any
+
+# Ensure audioop stub is present for Python 3.11-3.13 compatibility without voice dependency
+if "audioop" not in sys.modules:
+    sys.modules["audioop"] = types.ModuleType("audioop")
 
 import cv2
 import discord

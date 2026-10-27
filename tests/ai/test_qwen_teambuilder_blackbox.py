@@ -997,6 +997,7 @@ class TestQwenTeamBuilderBlackBox:
                 use_ai_advisor=False,
             )
 
+    @pytest.mark.slow
     def test_qwen_teambuilder_live_inference_if_available(
         self,
         sample_user_box_cards: list[DokkanCard],
