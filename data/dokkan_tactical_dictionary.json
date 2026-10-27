@@ -1,0 +1,245 @@
+{
+  "metadata": {
+    "title": "Dokkan Battle Modern Meta Tactical Dictionary (Post-10th Anniversary)",
+    "cards_analyzed": 353,
+    "generated_from": "DokkanDB (>= 2025-01-28)",
+    "description": "Comprehensive tactical keyword ontology, slot viability rules, and incremental effect tracking for Qwen team generation."
+  },
+  "order_of_operations_damage_formula": {
+    "formula": "{[(Enemy_ATK x Variance x Type_Modifier) x (1 - Damage_Reduction)] - Ally_DEF} x Guard_Reduction",
+    "mechanics_explanation": {
+      "damage_reduction": "Applied FIRST to Enemy ATK. Multiplicative scaling makes DR mathematically superior at higher boss attack stats.",
+      "defense_stat": "Subtracted SECOND after DR has reduced the incoming ATK. A unit with 500k DEF facing 3M ATK with 50% DR takes (1.5M - 500k) = 1M before guard.",
+      "guard_reduction": "Applied LAST as a 0.5x multiplier on the remaining post-DEF value. Also locks Type Modifier to 0.8x if passive guard.",
+      "critical_takeaway": "Naked guard (0% DR) is INSUFFICIENT for Slot 1 against 2.5M+ Boss Super Attacks. Slot 1 requires either Guard + DR (>= 40-50%) or massive raw DEF (> 1M) or high evasion (>= 70%)."
+    }
+  },
+  "slot_positioning_matrix": {
+    "slot_1_tank": {
+      "role": "Absorbs pre-attack Super Attacks before the rotation has attacked.",
+      "prerequisites": [
+        "Must have pre-attack Guard (Unconditional or active at turn start)",
+        "Damage Reduction >= 50% prior to attacking",
+        "Or pre-attack Evasion >= 70% with fallback defense"
+      ],
+      "fatal_traps": [
+        "Card whose guard only triggers 'As the 2nd or 3rd attacker in a turn' (e.g. LR Gogeta post-turn 3, Supreme Kai)",
+        "Card whose defense multiplies only 'When attacking' or 'When performing a Super Attack'",
+        "Card relying purely on on-hit or on-super stacking before building up",
+        "Expired intro shield (e.g. Turn 5 onwards for a 3-turn intro unit)"
+      ],
+      "verified_viable_card_ids": [
+        4034041,
+        4033981,
+        1034381,
+        1034341,
+        1033941,
+        1034481,
+        4032781,
+        1034221,
+        4033771,
+        1033761,
+        1034391,
+        1033061,
+        4032931,
+        1032881,
+        1032551,
+        4032371,
+        4032341,
+        1032361,
+        1032121,
+        4031971,
+        1031961,
+        1031921,
+        1031721,
+        1031501,
+        1031471,
+        4031441,
+        4031231,
+        1031021,
+        4030981,
+        1030681,
+        1031061,
+        4030811,
+        4030541,
+        4030501,
+        4030491,
+        1030481,
+        1030391,
+        4030451,
+        4030441,
+        4030351,
+        1030341,
+        4027011,
+        1026771,
+        4025741,
+        1024551,
+        1024801,
+        1023521,
+        1024141,
+        4024301,
+        1021291,
+        1005051
+      ]
+    },
+    "slot_2_anchor": {
+      "role": "Main damage dealer and linker. Shielded from pre-attack slot 1 supers; benefits from post-attack DEF boosts and builds attack/defense stacks safely.",
+      "prerequisites": [
+        "High post-attack DEF multiplier ('When attacking', 'When performing a Super Attack')",
+        "Multiple Super Attacks ('Launches an additional Super Attack')",
+        "Critical hit chance and Type Effectiveness"
+      ]
+    },
+    "slot_3_floater": {
+      "role": "Rotates every 3 turns. Brings teamwide support, scouter intelligence, or high dodge without hogging Ki or requiring high link synergy.",
+      "prerequisites": [
+        "Support passive: Allies' Ki +1..3 and DEF +30..50%",
+        "High evasion (>= 70%) or 3rd slot evasion buff",
+        "Scouter: Foresees enemy Super Attack"
+      ]
+    }
+  },
+  "incremental_mechanics_catalog": {
+    "permanent_stacking": {
+      "definition": "Stat buffs that persist for 99 turns (infinite stacking). Crucial for long battles (Red Zone / Supreme Magnificent Battle 4+ phases).",
+      "types": [
+        {
+          "type": "Super Attack DEF Stack",
+          "value": "+20% to +30% to SA multiplier per Super Attack"
+        },
+        {
+          "type": "Super Attack Greatly Raises DEF",
+          "value": "+50% to SA multiplier per Super Attack"
+        },
+        {
+          "type": "Passive Stacking",
+          "value": "+10% to +30% ATK & DEF per attack performed/received up to cap"
+        },
+        {
+          "type": "Passive DR Stacking",
+          "value": "+5% to +10% DR per attack received/performed up to cap"
+        }
+      ],
+      "cards_with_stacking_count": 95
+    },
+    "intro_cliff_effect": {
+      "definition": "Temporary buffs active 'For X turns from character's entry turn'. Once expired, the card experiences a sharp defensive drop.",
+      "cliff_timing": "Turn 1 (Active) -> Turn 3 (Active) -> Turn 5 (EXPIRED!).",
+      "cards_with_intro_cliff_count": 43,
+      "tactical_rule": "On Turn 5, if the fight is not over, rotate the unit out to Slot 2 or Slot 3 unless it has permanent stacks or transformed!"
+    },
+    "slot_2_3_conditional_lock": {
+      "definition": "Skills explicitly requiring the unit to be 2nd or 3rd attacker in a turn to receive Guard or DR.",
+      "cards_count": 6,
+      "locked_card_sample": [
+        {
+          "id": 1034271,
+          "name": "Gohan (Youth)",
+          "has_slot23_guard": false,
+          "has_slot23_dr": true,
+          "intro_turns": 0,
+          "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1!"
+        },
+        {
+          "id": 1034481,
+          "name": "Super Saiyan 3 Goku (Angel)",
+          "has_slot23_guard": true,
+          "has_slot23_dr": false,
+          "intro_turns": 0,
+          "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1!"
+        },
+        {
+          "id": 1032331,
+          "name": "Gamma 2 + Piccolo (Power Awakening)",
+          "has_slot23_guard": false,
+          "has_slot23_dr": true,
+          "intro_turns": 5,
+          "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1 once intro (5 turns) expires!"
+        },
+        {
+          "id": 1030971,
+          "name": "Paikuhan",
+          "has_slot23_guard": true,
+          "has_slot23_dr": false,
+          "intro_turns": 0,
+          "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1!"
+        },
+        {
+          "id": 1030481,
+          "name": "Super Saiyan Vegeta (Angel) + Super Saiyan Goku (Angel)",
+          "has_slot23_guard": true,
+          "has_slot23_dr": false,
+          "intro_turns": 3,
+          "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1 once intro (3 turns) expires!"
+        },
+        {
+          "id": 1030431,
+          "name": "Super Saiyan Goku + Super Saiyan Vegeta (Angel)",
+          "has_slot23_guard": false,
+          "has_slot23_dr": true,
+          "intro_turns": 3,
+          "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1 once intro (3 turns) expires!"
+        }
+      ]
+    },
+    "utility_skills": {
+      "scouter_count": 24,
+      "taunt_target_count": 5,
+      "domain_count": 4,
+      "standby_count": 7,
+      "revival_count": 8,
+      "action_break_count": 0,
+      "counter_count": 12
+    }
+  },
+  "slot_2_3_restricted_cards": [
+    {
+      "id": 1034271,
+      "name": "Gohan (Youth)",
+      "has_slot23_guard": false,
+      "has_slot23_dr": true,
+      "intro_turns": 0,
+      "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1!"
+    },
+    {
+      "id": 1034481,
+      "name": "Super Saiyan 3 Goku (Angel)",
+      "has_slot23_guard": true,
+      "has_slot23_dr": false,
+      "intro_turns": 0,
+      "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1!"
+    },
+    {
+      "id": 1032331,
+      "name": "Gamma 2 + Piccolo (Power Awakening)",
+      "has_slot23_guard": false,
+      "has_slot23_dr": true,
+      "intro_turns": 5,
+      "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1 once intro (5 turns) expires!"
+    },
+    {
+      "id": 1030971,
+      "name": "Paikuhan",
+      "has_slot23_guard": true,
+      "has_slot23_dr": false,
+      "intro_turns": 0,
+      "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1!"
+    },
+    {
+      "id": 1030481,
+      "name": "Super Saiyan Vegeta (Angel) + Super Saiyan Goku (Angel)",
+      "has_slot23_guard": true,
+      "has_slot23_dr": false,
+      "intro_turns": 3,
+      "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1 once intro (3 turns) expires!"
+    },
+    {
+      "id": 1030431,
+      "name": "Super Saiyan Goku + Super Saiyan Vegeta (Angel)",
+      "has_slot23_guard": false,
+      "has_slot23_dr": true,
+      "intro_turns": 3,
+      "warning": "Guard/DR is restricted to 2nd or 3rd attacker in a turn. DO NOT PLACE IN SLOT 1 once intro (3 turns) expires!"
+    }
+  ]
+}
