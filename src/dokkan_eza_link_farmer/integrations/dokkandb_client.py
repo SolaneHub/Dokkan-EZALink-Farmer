@@ -1129,8 +1129,19 @@ class DokkanDBClient:
             try:
                 resp = requests.get(url, headers=self.DEFAULT_HEADERS, timeout=10)
                 if resp.status_code == 429:
-                    time.sleep(1.0 * (attempt + 1))
-                    continue
+                    retry_after_str = resp.headers.get("Retry-After")
+                    if retry_after_str and retry_after_str.strip().isdigit():
+                        backoff = float(retry_after_str.strip())
+                    else:
+                        backoff = 1.5 * (attempt + 1)
+                    if attempt < 3:
+                        time.sleep(backoff)
+                        continue
+                    elif os.path.exists(cache_file):
+                        with open(cache_file, encoding="utf-8") as f:
+                            return json.load(f)
+                    else:
+                        break
                 resp.raise_for_status()
                 data = resp.json()
                 card_info = (

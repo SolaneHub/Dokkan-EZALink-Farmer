@@ -48,50 +48,83 @@ def _safe_bool(val: Any, default: bool = False) -> bool:
 
 def parse_dodge_percentage_from_text(text: str) -> int:
     """Extracts dodge / evasion percentage from passive skill or SA description."""
-    clean_text = " ".join(text.lower().split())
-    if not any(k in clean_text for k in ("evad", "evasion", "dodge")):
-        return 0
+    from dokkan_eza_link_farmer.ai.passive_parser import (
+        parse_dodge_percentage_from_text as _parse_dodge,
+    )
 
-    named = 0
-    if (
-        "guaranteed to evade" in clean_text
-        or "guaranteed to dodge" in clean_text
-        or "guaranteed evasion" in clean_text
-    ):
-        named = 100
-    elif "great chance" in clean_text:
-        named = 70
-    elif "high chance" in clean_text:
-        named = 50
-    elif "medium chance" in clean_text or "med chance" in clean_text:
-        named = 30
-    elif "rare chance" in clean_text:
-        named = 20
-    elif re.search(
-        r"(?<!chance of )(?<!chance to )(?<!great )(?<!high )(?<!medium )(?<!rare )(?<!med )(?<!guaranteed to )evades?\s+enemy(?:'s)?\s+attacks?",
-        clean_text,
-    ):
-        named = 100
+    return _parse_dodge(text)
 
-    explicit_vals: list[int] = []
-    for m in re.finditer(r"(\d+)%\s*chance of evading", clean_text):
-        explicit_vals.append(int(m.group(1)))
-    for m in re.finditer(
-        r"(?:chance of evading|chance to evade|chance of dodging|chance to dodge|evasion rate)\s*(?:enemy(?:'s)?\s+attacks?)?\s*(?:\([^)]*\))?\s*(?:rate\s*)?\+?\s*(\d+)%",
-        clean_text,
-    ):
-        explicit_vals.append(int(m.group(1)))
-    for m in re.finditer(
-        r"(?:evad\w*|dodge\w*)[^.\n\*\-]{0,60}\(up to (\d+)%\)",
-        clean_text,
-    ):
-        explicit_vals.append(int(m.group(1)))
 
-    valid_explicit = [v for v in explicit_vals if v <= 100]
-    if valid_explicit:
-        return max(named, max(valid_explicit))
+@dataclass
+class TeamConditionalBuff:
+    """Defensive buff conditionally activated by team composition or turn allies."""
 
-    return named if named > 0 else 30
+    condition_type: str = "class_count"  # "class_count", "dual_orb_class", "turn_allies", "all_class", "category_count", "another_category", "per_name", "per_category"
+    req_class: str | None = None  # "Extreme" or "Super"
+    req_categories: list[str] = field(default_factory=list)
+    name_substr: str | None = None
+    min_allies: int = 1
+    all_allies: bool = False
+    same_turn: bool = False
+    has_orb_alternative: bool = False
+    orb_count: int = 0
+
+    # Defensive values granted
+    dr_percent: int = 0
+    has_guard: bool = False
+    dodge_percent: int = 0
+    per_ally_dr: int = 0
+    per_ally_dodge: int = 0
+    max_dr: int = 0
+    max_dodge: int = 0
+    is_pre_attack: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "condition_type": self.condition_type,
+            "req_class": self.req_class,
+            "req_categories": list(self.req_categories),
+            "name_substr": self.name_substr,
+            "min_allies": self.min_allies,
+            "all_allies": self.all_allies,
+            "same_turn": self.same_turn,
+            "has_orb_alternative": self.has_orb_alternative,
+            "orb_count": self.orb_count,
+            "dr_percent": self.dr_percent,
+            "has_guard": self.has_guard,
+            "dodge_percent": self.dodge_percent,
+            "per_ally_dr": self.per_ally_dr,
+            "per_ally_dodge": self.per_ally_dodge,
+            "max_dr": self.max_dr,
+            "max_dodge": self.max_dodge,
+            "is_pre_attack": self.is_pre_attack,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | Any) -> TeamConditionalBuff:
+        if isinstance(data, cls):
+            return data
+        if not isinstance(data, dict):
+            return cls()
+        return cls(
+            condition_type=_safe_str(data.get("condition_type"), "class_count"),
+            req_class=data.get("req_class"),
+            req_categories=list(data.get("req_categories") or []),
+            name_substr=data.get("name_substr"),
+            min_allies=_safe_int(data.get("min_allies"), 1),
+            all_allies=_safe_bool(data.get("all_allies"), False),
+            same_turn=_safe_bool(data.get("same_turn"), False),
+            has_orb_alternative=_safe_bool(data.get("has_orb_alternative"), False),
+            orb_count=_safe_int(data.get("orb_count"), 0),
+            dr_percent=_safe_int(data.get("dr_percent"), 0),
+            has_guard=_safe_bool(data.get("has_guard"), False),
+            dodge_percent=_safe_int(data.get("dodge_percent"), 0),
+            per_ally_dr=_safe_int(data.get("per_ally_dr"), 0),
+            per_ally_dodge=_safe_int(data.get("per_ally_dodge"), 0),
+            max_dr=_safe_int(data.get("max_dr"), 0),
+            max_dodge=_safe_int(data.get("max_dodge"), 0),
+            is_pre_attack=_safe_bool(data.get("is_pre_attack"), True),
+        )
 
 
 @dataclass
@@ -116,20 +149,41 @@ class PassiveTags:
     has_standby: bool = False
     has_domain: bool = False
     has_orb_changing: bool = False
+    has_rainbow_orb_changing: bool = False
+    has_orb_conditional_dr: bool = False
+    has_orb_conditional_dodge: bool = False
+    has_orb_conditional_guard: bool = False
+    is_orb_hungry: bool = False
     has_on_hit_defense: bool = False
     has_on_hit_guard: bool = False
     has_on_hit_dr: bool = False
     has_on_hit_def: bool = False
     is_once_only_dr: bool = False
+    has_pre_attack_only_dr: bool = False
+    pre_attack_dr_percent: int = 0
+    pre_attack_dr_ki_req: int | None = None
+    has_pre_attack_only_guard: bool = False
     pre_hit_guard: bool = False
     pre_hit_dr_percent: int = 0
     has_slot_2_3_buff: bool = False
+    has_slot_2_3_guard: bool = False
+    has_slot_1_only_guard: bool = False
+    has_slot_1_only_dr: bool = False
+    has_slot_1_buff: bool = False
+    has_slot_2_buff: bool = False
+    has_slot_3_buff: bool = False
+    is_slot_1_or_3_only: bool = False
+    slot_1_dr_percent: int = 0
+    slot_1_dodge_percent: int = 0
+    slot_3_dr_percent: int = 0
+    slot_3_dodge_percent: int = 0
     has_enemy_conditional_defense: bool = False
     enemy_conditional_categories: list[str] = field(default_factory=list)
     enemy_conditional_classes: list[str] = field(default_factory=list)
     enemy_conditional_dr: int = 0
     enemy_conditional_guard: bool = False
     enemy_conditional_dodge: int = 0
+    team_conditional_buffs: list[TeamConditionalBuff] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -151,20 +205,41 @@ class PassiveTags:
             "has_standby": self.has_standby,
             "has_domain": self.has_domain,
             "has_orb_changing": self.has_orb_changing,
+            "has_rainbow_orb_changing": self.has_rainbow_orb_changing,
+            "has_orb_conditional_dr": self.has_orb_conditional_dr,
+            "has_orb_conditional_dodge": self.has_orb_conditional_dodge,
+            "has_orb_conditional_guard": self.has_orb_conditional_guard,
+            "is_orb_hungry": self.is_orb_hungry,
             "has_on_hit_defense": self.has_on_hit_defense,
             "has_on_hit_guard": self.has_on_hit_guard,
             "has_on_hit_dr": self.has_on_hit_dr,
             "has_on_hit_def": self.has_on_hit_def,
             "is_once_only_dr": self.is_once_only_dr,
+            "has_pre_attack_only_dr": self.has_pre_attack_only_dr,
+            "pre_attack_dr_percent": self.pre_attack_dr_percent,
+            "pre_attack_dr_ki_req": self.pre_attack_dr_ki_req,
+            "has_pre_attack_only_guard": self.has_pre_attack_only_guard,
             "pre_hit_guard": self.pre_hit_guard,
             "pre_hit_dr_percent": self.pre_hit_dr_percent,
             "has_slot_2_3_buff": self.has_slot_2_3_buff,
+            "has_slot_2_3_guard": self.has_slot_2_3_guard,
+            "has_slot_1_only_guard": self.has_slot_1_only_guard,
+            "has_slot_1_only_dr": self.has_slot_1_only_dr,
+            "has_slot_1_buff": self.has_slot_1_buff,
+            "has_slot_2_buff": self.has_slot_2_buff,
+            "has_slot_3_buff": self.has_slot_3_buff,
+            "is_slot_1_or_3_only": self.is_slot_1_or_3_only,
+            "slot_1_dr_percent": self.slot_1_dr_percent,
+            "slot_1_dodge_percent": self.slot_1_dodge_percent,
+            "slot_3_dr_percent": self.slot_3_dr_percent,
+            "slot_3_dodge_percent": self.slot_3_dodge_percent,
             "has_enemy_conditional_defense": self.has_enemy_conditional_defense,
             "enemy_conditional_categories": list(self.enemy_conditional_categories),
             "enemy_conditional_classes": list(self.enemy_conditional_classes),
             "enemy_conditional_dr": self.enemy_conditional_dr,
             "enemy_conditional_guard": self.enemy_conditional_guard,
             "enemy_conditional_dodge": self.enemy_conditional_dodge,
+            "team_conditional_buffs": [b.to_dict() for b in self.team_conditional_buffs],
         }
 
     @classmethod
@@ -195,14 +270,36 @@ class PassiveTags:
             has_standby=_safe_bool(data.get("has_standby"), False),
             has_domain=_safe_bool(data.get("has_domain"), False),
             has_orb_changing=_safe_bool(data.get("has_orb_changing"), False),
+            has_rainbow_orb_changing=_safe_bool(data.get("has_rainbow_orb_changing"), False),
+            has_orb_conditional_dr=_safe_bool(data.get("has_orb_conditional_dr"), False),
+            has_orb_conditional_dodge=_safe_bool(data.get("has_orb_conditional_dodge"), False),
+            has_orb_conditional_guard=_safe_bool(data.get("has_orb_conditional_guard"), False),
+            is_orb_hungry=_safe_bool(data.get("is_orb_hungry"), False),
             has_on_hit_defense=_safe_bool(data.get("has_on_hit_defense"), False),
             has_on_hit_guard=_safe_bool(data.get("has_on_hit_guard"), False),
             has_on_hit_dr=_safe_bool(data.get("has_on_hit_dr"), False),
             has_on_hit_def=_safe_bool(data.get("has_on_hit_def"), False),
             is_once_only_dr=_safe_bool(data.get("is_once_only_dr"), False),
+            has_pre_attack_only_dr=_safe_bool(data.get("has_pre_attack_only_dr"), False),
+            pre_attack_dr_percent=_safe_int(data.get("pre_attack_dr_percent"), 0),
+            pre_attack_dr_ki_req=_safe_int(data.get("pre_attack_dr_ki_req"))
+            if data.get("pre_attack_dr_ki_req") is not None
+            else None,
+            has_pre_attack_only_guard=_safe_bool(data.get("has_pre_attack_only_guard"), False),
             pre_hit_guard=_safe_bool(data.get("pre_hit_guard"), False),
             pre_hit_dr_percent=_safe_int(data.get("pre_hit_dr_percent"), 0),
             has_slot_2_3_buff=_safe_bool(data.get("has_slot_2_3_buff"), False),
+            has_slot_2_3_guard=_safe_bool(data.get("has_slot_2_3_guard"), False),
+            has_slot_1_only_guard=_safe_bool(data.get("has_slot_1_only_guard"), False),
+            has_slot_1_only_dr=_safe_bool(data.get("has_slot_1_only_dr"), False),
+            has_slot_1_buff=_safe_bool(data.get("has_slot_1_buff"), False),
+            has_slot_2_buff=_safe_bool(data.get("has_slot_2_buff"), False),
+            has_slot_3_buff=_safe_bool(data.get("has_slot_3_buff"), False),
+            is_slot_1_or_3_only=_safe_bool(data.get("is_slot_1_or_3_only"), False),
+            slot_1_dr_percent=_safe_int(data.get("slot_1_dr_percent"), 0),
+            slot_1_dodge_percent=_safe_int(data.get("slot_1_dodge_percent"), 0),
+            slot_3_dr_percent=_safe_int(data.get("slot_3_dr_percent"), 0),
+            slot_3_dodge_percent=_safe_int(data.get("slot_3_dodge_percent"), 0),
             has_enemy_conditional_defense=_safe_bool(
                 data.get("has_enemy_conditional_defense"), False
             ),
@@ -211,6 +308,9 @@ class PassiveTags:
             enemy_conditional_dr=_safe_int(data.get("enemy_conditional_dr"), 0),
             enemy_conditional_guard=_safe_bool(data.get("enemy_conditional_guard"), False),
             enemy_conditional_dodge=_safe_int(data.get("enemy_conditional_dodge"), 0),
+            team_conditional_buffs=[
+                TeamConditionalBuff.from_dict(b) for b in (data.get("team_conditional_buffs") or [])
+            ],
         )
 
 
@@ -445,27 +545,25 @@ class DokkanCard:
         return f"{self.name} - {self.subname}" if self.subname else self.name
 
     @property
-    def element_color(self) -> str:
-        elem_name = (self.element_name or "").upper()
-        if "AGL" in elem_name:
-            return "bold cyan"
-        if "TEQ" in elem_name:
-            return "bold green"
-        if "INT" in elem_name:
-            return "bold magenta"
-        if "STR" in elem_name:
-            return "bold red"
-        if "PHY" in elem_name:
-            return "bold yellow"
+    def title(self) -> str:
+        """Alias for subname, preserving compatibility with user_box.json schema."""
+        return self.subname
 
-        type_colors = {
-            0: "bold cyan",  # AGL
-            1: "bold green",  # TEQ
-            2: "bold magenta",  # INT
-            3: "bold red",  # STR
-            4: "bold yellow",  # PHY
-        }
-        return type_colors.get(self.element % 10, "bold white")
+    @property
+    def rainbow(self) -> bool:
+        """Alias for is_rainbow, preserving compatibility with user_box.json schema."""
+        return self.is_rainbow
+
+    @property
+    def potential_percentage(self) -> int:
+        """Alias for potential_percent, preserving compatibility with user_box.json schema."""
+        return self.potential_percent
+
+    @property
+    def element_color(self) -> str:
+        from dokkan_eza_link_farmer.ui.formatters import element_color as get_element_color
+
+        return get_element_color(self.element, self.element_name)
 
     @property
     def type_tag(self) -> str:
@@ -477,444 +575,29 @@ class DokkanCard:
 
     @property
     def dokkan_colored_name(self) -> str:
-        type_prefix = f"[{self.element_name}] " if self.element_name else ""
-        clean_name = self.full_name.replace("[", "(").replace("]", ")")
-        color = self.element_color
-        return f"[{color}]{type_prefix}{clean_name}[/{color}]"
+        from dokkan_eza_link_farmer.ui.formatters import dokkan_colored_name as get_colored_name
+
+        return get_colored_name(self)
 
     def rich_formatted_name(self, include_type: bool = True) -> Any:
-        from rich.text import Text
+        from dokkan_eza_link_farmer.ui.formatters import rich_formatted_name as get_rich_name
 
-        prefix = f"[{self.element_name}] " if (include_type and self.element_name) else ""
-        return Text(f"{prefix}{self.full_name}", style=self.element_color)
+        return get_rich_name(self, include_type=include_type)
 
     @property
     def is_lr(self) -> bool:
-        return self.rarity >= 5
+        if isinstance(self.rarity, int):
+            return self.rarity >= 5
+        try:
+            return int(self.rarity) >= 5
+        except (ValueError, TypeError):
+            return str(self.rarity).upper() == "LR"
 
     def _parse_defense_mechanics(self) -> dict[str, Any]:
         """Parses passive skill and super attack to extract permanent vs timed defense attributes."""
-        cached = getattr(self, "_cached_defense_mechanics", None)
-        if cached is not None:
-            return cached
+        from dokkan_eza_link_farmer.ai.passive_parser import parse_defense_mechanics
 
-        passive = self.passive_skill or ""
-        sa = self.super_attack or ""
-
-        blocks = re.split(r"\*([^*]+)\*", passive)
-        sections = []
-        if len(blocks) == 1:
-            sections.append(("", blocks[0].lower()))
-        else:
-            sections.append(("", blocks[0].lower()))
-            for i in range(1, len(blocks), 2):
-                header = blocks[i].lower().strip()
-                content = blocks[i + 1].lower().strip() if i + 1 < len(blocks) else ""
-                sections.append((header, content))
-
-        ON_HIT_PATTERNS = (
-            "when receiving an attack",
-            "after receiving an attack",
-            "after receiving attack",
-            "for every attack received",
-            "for each attack received",
-            "with each attack received",
-            "per attack received",
-            "when receiving a super attack",
-            "when receiving a normal attack",
-            "starting from the turn in which the character receives an attack",
-            "starting from the turn in which the character receives a super attack",
-            "when receiving damage",
-            "after receiving damage",
-        )
-        ONCE_ONLY_PATTERNS = (
-            "{passiveimg:once}",
-            "(once only)",
-            "once only",
-        )
-        SLOT_2_3_PATTERNS = (
-            "as the 2nd or 3rd attacker",
-            "as the 2nd attacker",
-            "as the 3rd attacker",
-            "in the 2nd or 3rd slot",
-            "in the 2nd slot",
-            "in the 3rd slot",
-        )
-        ALLY_CONDITIONAL_PATTERNS = (
-            "allies attacking in the same turn",
-            "when there are",
-            "when there is another",
-            "extreme class allies",
-            "super class allies",
-            "category ally",
-            "category allies",
-        )
-
-        max_dr = 0
-        permanent_dr = 0
-        pre_hit_dr = 0
-        dr_turn_limits: list[int] = []
-
-        has_guard = False
-        is_guard_permanent = False
-        is_guard_unconditional = False
-        pre_hit_guard = False
-        guard_turn_limits: list[int] = []
-
-        has_on_hit_guard = False
-        has_on_hit_dr = False
-        has_on_hit_def = False
-        is_once_only_dr = False
-        has_slot_2_3_buff = False
-
-        has_enemy_conditional_defense = False
-        enemy_conditional_categories: list[str] = []
-        enemy_conditional_classes: list[str] = []
-        enemy_conditional_dr = 0
-        enemy_conditional_guard = False
-        enemy_conditional_dodge = 0
-
-        has_dodge = False
-        base_dodge = 0
-        is_dodge_permanent = True
-        dodge_turn_limits: list[int] = []
-
-        for header, content in sections:
-            is_timed_header = False
-            header_turns = None
-            m_ht = re.search(r"for\s+(\d+)\s+turns?", header)
-            if m_ht:
-                is_timed_header = True
-                header_turns = int(m_ht.group(1))
-            elif "for 1 turn" in header or "within the character's next attacking turn" in header:
-                is_timed_header = True
-                header_turns = 1
-
-            is_entrance = "entrance animation" in header or "upon the character's entry" in header
-
-            header_is_on_hit = any(p in header for p in ON_HIT_PATTERNS)
-            header_is_once_only = any(p in header for p in ONCE_ONLY_PATTERNS)
-            header_is_slot_2_3 = any(p in header for p in SLOT_2_3_PATTERNS)
-            header_is_ally_conditional = any(p in header for p in ALLY_CONDITIONAL_PATTERNS)
-
-            header_clean = " ".join(header.split())
-            header_is_enemy_conditional = (
-                any(
-                    p in header_clean
-                    for p in ("category enemy", "category enemies", "class enemy", "class enemies")
-                )
-                or (
-                    "when facing" in header_clean
-                    and any(k in header_clean for k in ("enemy", "enemies"))
-                )
-                or (
-                    "when there is a" in header_clean
-                    and any(k in header_clean for k in ("enemy", "enemies"))
-                )
-                or (
-                    "against" in header_clean
-                    and any(k in header_clean for k in ("enemy", "enemies"))
-                )
-            )
-            header_req_cats: list[str] = []
-            header_req_classes: list[str] = []
-            if header_is_enemy_conditional:
-                cats_found = [x.title() for x in re.findall(r'"([^"]+)"', header_clean)]
-                header_req_cats = [c for c in cats_found if "class" not in c.lower()]
-                class_m = re.search(r"(extreme|super)\s+class", header_clean, re.I)
-                if class_m:
-                    header_req_classes.append(class_m.group(1).title())
-                for c in cats_found:
-                    if "extreme" in c.lower() and "Extreme" not in header_req_classes:
-                        header_req_classes.append("Extreme")
-                    elif "super" in c.lower() and "Super" not in header_req_classes:
-                        header_req_classes.append("Super")
-
-            is_conditional_header = (
-                "ki spheres obtained" in header
-                or "collecting" in header
-                or "when hp is" in header
-                or "when attacking" in header
-                or header_is_slot_2_3
-                or header_is_on_hit
-                or header_is_ally_conditional
-                or header_is_enemy_conditional
-                or "starting from" in header
-                or "after the character's" in header
-                or is_timed_header
-                or is_entrance
-            )
-            is_basic = "basic effect" in header or header == ""
-
-            lines = [line.strip() for line in content.split("\n") if line.strip()]
-            for line in lines:
-                line_timed = is_timed_header
-                line_turns = header_turns
-
-                m_lt = re.search(r"for\s+(\d+)\s+turns?", line)
-                if m_lt:
-                    line_timed = True
-                    line_turns = int(m_lt.group(1))
-                elif (
-                    "for 1 turn" in line
-                    or "within the same turn" in line
-                    or "within the character's next attacking turn" in line
-                ):
-                    line_timed = True
-                    line_turns = 1
-                elif is_entrance and not line_timed:
-                    line_timed = True
-                    line_turns = 4
-
-                line_is_on_hit = header_is_on_hit or any(p in line for p in ON_HIT_PATTERNS)
-                line_is_once_only = header_is_once_only or any(
-                    p in line for p in ONCE_ONLY_PATTERNS
-                )
-                line_is_slot_2_3 = header_is_slot_2_3 or any(p in line for p in SLOT_2_3_PATTERNS)
-                line_is_ally_conditional = header_is_ally_conditional or any(
-                    p in line for p in ALLY_CONDITIONAL_PATTERNS
-                )
-
-                line_clean = " ".join(line.split())
-                line_is_enemy_conditional = header_is_enemy_conditional or (
-                    any(
-                        p in line_clean
-                        for p in (
-                            "category enemy",
-                            "category enemies",
-                            "class enemy",
-                            "class enemies",
-                        )
-                    )
-                    or (
-                        "when facing" in line_clean
-                        and any(k in line_clean for k in ("enemy", "enemies"))
-                    )
-                    or (
-                        "when there is a" in line_clean
-                        and any(k in line_clean for k in ("enemy", "enemies"))
-                    )
-                    or (
-                        "against" in line_clean
-                        and any(k in line_clean for k in ("enemy", "enemies"))
-                    )
-                )
-                line_req_cats = list(header_req_cats)
-                line_req_classes = list(header_req_classes)
-                if line_is_enemy_conditional and not line_req_cats and not line_req_classes:
-                    cats_found = [x.title() for x in re.findall(r'"([^"]+)"', line_clean)]
-                    line_req_cats = [c for c in cats_found if "class" not in c.lower()]
-                    class_m = re.search(r"(extreme|super)\s+class", line_clean, re.I)
-                    if class_m:
-                        line_req_classes.append(class_m.group(1).title())
-                    for c in cats_found:
-                        if "extreme" in c.lower() and "Extreme" not in line_req_classes:
-                            line_req_classes.append("Extreme")
-                        elif "super" in c.lower() and "Super" not in line_req_classes:
-                            line_req_classes.append("Super")
-
-                if line_is_slot_2_3:
-                    has_slot_2_3_buff = True
-
-                # Check on-hit DEF
-                if line_is_on_hit and re.search(r"def\s*\+?\s*(\d+)%", line):
-                    has_on_hit_def = True
-
-                # Damage Reduction
-                dr_m = re.findall(
-                    r"(?:damage reduction (?:rate|of)?|damage received by(?:\s+up to)?|reduces damage(?: received)? by(?:\s+up to)?(?:\s+an additional)?|damage received\s*-\s*)\s*(\d+)%",
-                    line,
-                )
-                for d in dr_m:
-                    val = int(d)
-                    if val > max_dr:
-                        max_dr = val
-                    if line_is_on_hit:
-                        has_on_hit_dr = True
-                    if line_is_once_only:
-                        is_once_only_dr = True
-                    if line_is_enemy_conditional:
-                        has_enemy_conditional_defense = True
-                        if val > enemy_conditional_dr:
-                            enemy_conditional_dr = val
-                        for c in line_req_cats:
-                            if c not in enemy_conditional_categories:
-                                enemy_conditional_categories.append(c)
-                        for cl in line_req_classes:
-                            if cl not in enemy_conditional_classes:
-                                enemy_conditional_classes.append(cl)
-
-                    if line_timed:
-                        if line_turns:
-                            dr_turn_limits.append(line_turns)
-                    elif (
-                        (is_basic or not is_conditional_header)
-                        and not line_is_on_hit
-                        and not line_is_once_only
-                        and not line_is_slot_2_3
-                        and not line_is_enemy_conditional
-                    ):
-                        if val > permanent_dr:
-                            permanent_dr = val
-                        if val > pre_hit_dr:
-                            pre_hit_dr = val
-
-                # Guard
-                if (
-                    "guard" in line
-                    and "chance of guarding" not in line
-                    and "disables enemy" not in line
-                    and any(
-                        k in line
-                        for k in (
-                            "guards all attacks",
-                            "guards against all attacks",
-                            "all attacks guarded",
-                            "guaranteed to guard",
-                        )
-                    )
-                ):
-                    has_guard = True
-                    if line_is_on_hit:
-                        has_on_hit_guard = True
-                    if line_is_enemy_conditional:
-                        has_enemy_conditional_defense = True
-                        enemy_conditional_guard = True
-                        for c in line_req_cats:
-                            if c not in enemy_conditional_categories:
-                                enemy_conditional_categories.append(c)
-                        for cl in line_req_classes:
-                            if cl not in enemy_conditional_classes:
-                                enemy_conditional_classes.append(cl)
-
-                    if line_timed:
-                        if line_turns:
-                            guard_turn_limits.append(line_turns)
-                    else:
-                        if not line_is_enemy_conditional:
-                            is_guard_permanent = True
-                        if (
-                            (is_basic or not is_conditional_header)
-                            and not line_is_on_hit
-                            and not line_is_once_only
-                            and not line_is_ally_conditional
-                            and not line_is_slot_2_3
-                            and not line_is_enemy_conditional
-                        ):
-                            is_guard_unconditional = True
-                            pre_hit_guard = True
-
-                # Dodge
-                if any(k in line for k in ("evad", "evasion", "dodge")):
-                    has_dodge = True
-                    line_val = parse_dodge_percentage_from_text(line)
-
-                    if line_is_enemy_conditional:
-                        has_enemy_conditional_defense = True
-                        if line_val > enemy_conditional_dodge:
-                            enemy_conditional_dodge = line_val
-                        for c in line_req_cats:
-                            if c not in enemy_conditional_categories:
-                                enemy_conditional_categories.append(c)
-                        for cl in line_req_classes:
-                            if cl not in enemy_conditional_classes:
-                                enemy_conditional_classes.append(cl)
-
-                    if line_timed:
-                        if line_turns:
-                            dodge_turn_limits.append(line_turns)
-                    elif (
-                        (is_basic or not is_conditional_header)
-                        and not line_is_enemy_conditional
-                        and line_val > base_dodge
-                    ):
-                        base_dodge = line_val
-
-        if not has_guard and re.search(r"guard(?:s|ing)?\s+(?:against\s+)?all", sa.lower()):
-            has_guard = True
-            is_guard_permanent = True
-            pre_hit_guard = False
-
-        if has_guard and not guard_turn_limits and not has_on_hit_guard:
-            is_guard_permanent = True
-        elif has_guard and (guard_turn_limits or has_on_hit_guard) and not is_guard_permanent:
-            is_guard_permanent = False
-
-        if self.base_form and self.base_form.passive_tags:
-            bt = self.base_form.passive_tags
-            if bt.has_guard:
-                has_guard = True
-            if bt.is_guard_permanent:
-                is_guard_permanent = True
-            if bt.is_guard_unconditional:
-                is_guard_unconditional = True
-            if bt.pre_hit_guard:
-                pre_hit_guard = True
-            if bt.permanent_dr_percent > permanent_dr:
-                permanent_dr = bt.permanent_dr_percent
-            if bt.pre_hit_dr_percent > pre_hit_dr:
-                pre_hit_dr = bt.pre_hit_dr_percent
-            if bt.dr_base_percent > max_dr:
-                max_dr = bt.dr_base_percent
-            if bt.has_on_hit_defense:
-                has_on_hit_def = True
-            if bt.has_on_hit_guard:
-                has_on_hit_guard = True
-            if bt.has_on_hit_dr:
-                has_on_hit_dr = True
-            if bt.has_on_hit_def:
-                has_on_hit_def = True
-            if bt.is_once_only_dr:
-                is_once_only_dr = True
-            if getattr(bt, "has_slot_2_3_buff", False):
-                has_slot_2_3_buff = True
-            if getattr(bt, "has_enemy_conditional_defense", False):
-                has_enemy_conditional_defense = True
-                for c in getattr(bt, "enemy_conditional_categories", []):
-                    if c not in enemy_conditional_categories:
-                        enemy_conditional_categories.append(c)
-                for cl in getattr(bt, "enemy_conditional_classes", []):
-                    if cl not in enemy_conditional_classes:
-                        enemy_conditional_classes.append(cl)
-                enemy_conditional_dr = max(
-                    enemy_conditional_dr, getattr(bt, "enemy_conditional_dr", 0)
-                )
-                if getattr(bt, "enemy_conditional_guard", False):
-                    enemy_conditional_guard = True
-                enemy_conditional_dodge = max(
-                    enemy_conditional_dodge, getattr(bt, "enemy_conditional_dodge", 0)
-                )
-
-        res = {
-            "max_dr": max_dr,
-            "permanent_dr": permanent_dr,
-            "pre_hit_dr": pre_hit_dr,
-            "is_dr_permanent": permanent_dr > 0,
-            "dr_turns_limit": min(dr_turn_limits) if dr_turn_limits else None,
-            "has_guard": has_guard,
-            "pre_hit_guard": pre_hit_guard,
-            "is_guard_permanent": is_guard_permanent,
-            "guard_turns_limit": min(guard_turn_limits) if guard_turn_limits else None,
-            "is_guard_unconditional": is_guard_unconditional,
-            "has_on_hit_guard": has_on_hit_guard,
-            "has_on_hit_dr": has_on_hit_dr,
-            "has_on_hit_def": has_on_hit_def,
-            "is_once_only_dr": is_once_only_dr,
-            "has_slot_2_3_buff": has_slot_2_3_buff
-            or any(p in self.passive_skill.lower() for p in SLOT_2_3_PATTERNS),
-            "has_enemy_conditional_defense": has_enemy_conditional_defense,
-            "enemy_conditional_categories": enemy_conditional_categories,
-            "enemy_conditional_classes": enemy_conditional_classes,
-            "enemy_conditional_dr": enemy_conditional_dr,
-            "enemy_conditional_guard": enemy_conditional_guard,
-            "enemy_conditional_dodge": enemy_conditional_dodge,
-            "has_dodge": has_dodge,
-            "base_dodge": base_dodge,
-            "is_dodge_permanent": is_dodge_permanent and (not dodge_turn_limits or base_dodge > 0),
-            "dodge_turns_limit": min(dodge_turn_limits) if dodge_turn_limits else None,
-        }
-        self._cached_defense_mechanics = res
-        return res
+        return parse_defense_mechanics(self)
 
     @property
     def permanent_damage_reduction_percent(self) -> int:
@@ -1000,6 +683,53 @@ class DokkanCard:
         if self.base_form and self.base_form.passive_tags.is_once_only_dr:
             return True
         return bool(self._parse_defense_mechanics().get("is_once_only_dr", False))
+
+    @property
+    def has_pre_attack_only_dr(self) -> bool:
+        if self.base_form and getattr(self.base_form.passive_tags, "has_pre_attack_only_dr", False):
+            return True
+        return bool(self._parse_defense_mechanics().get("has_pre_attack_only_dr", False))
+
+    @property
+    def pre_attack_dr_percent(self) -> int:
+        if self.base_form and getattr(self.base_form.passive_tags, "pre_attack_dr_percent", 0) > 0:
+            return self.base_form.passive_tags.pre_attack_dr_percent
+        return int(self._parse_defense_mechanics().get("pre_attack_dr", 0))
+
+    @property
+    def pre_attack_dr_ki_req(self) -> int | None:
+        if (
+            self.base_form
+            and getattr(self.base_form.passive_tags, "pre_attack_dr_ki_req", None) is not None
+        ):
+            return self.base_form.passive_tags.pre_attack_dr_ki_req
+        return self._parse_defense_mechanics().get("pre_attack_ki_req")
+
+    @property
+    def has_pre_attack_only_guard(self) -> bool:
+        if self.base_form and getattr(
+            self.base_form.passive_tags, "has_pre_attack_only_guard", False
+        ):
+            return True
+        return bool(self._parse_defense_mechanics().get("has_pre_attack_only_guard", False))
+
+    @property
+    def has_slot_2_3_guard(self) -> bool:
+        if self.base_form and getattr(self.base_form.passive_tags, "has_slot_2_3_guard", False):
+            return True
+        return bool(self._parse_defense_mechanics().get("has_slot_2_3_guard", False))
+
+    @property
+    def has_slot_1_only_guard(self) -> bool:
+        if self.base_form and getattr(self.base_form.passive_tags, "has_slot_1_only_guard", False):
+            return True
+        return bool(self._parse_defense_mechanics().get("has_slot_1_only_guard", False))
+
+    @property
+    def has_slot_1_only_dr(self) -> bool:
+        if self.base_form and getattr(self.base_form.passive_tags, "has_slot_1_only_dr", False):
+            return True
+        return bool(self._parse_defense_mechanics().get("has_slot_1_only_dr", False))
 
     @property
     def has_enemy_conditional_defense(self) -> bool:
@@ -1187,6 +917,54 @@ class DokkanCard:
         return bool(self._parse_defense_mechanics().get("has_slot_2_3_buff", False))
 
     @property
+    def has_slot_1_buff(self) -> bool:
+        if self.base_form and getattr(self.base_form.passive_tags, "has_slot_1_buff", False):
+            return True
+        return bool(self._parse_defense_mechanics().get("has_slot_1_buff", False))
+
+    @property
+    def has_slot_2_buff(self) -> bool:
+        if self.base_form and getattr(self.base_form.passive_tags, "has_slot_2_buff", False):
+            return True
+        return bool(self._parse_defense_mechanics().get("has_slot_2_buff", False))
+
+    @property
+    def has_slot_3_buff(self) -> bool:
+        if self.base_form and getattr(self.base_form.passive_tags, "has_slot_3_buff", False):
+            return True
+        return bool(self._parse_defense_mechanics().get("has_slot_3_buff", False))
+
+    @property
+    def is_slot_1_or_3_only(self) -> bool:
+        if self.base_form and getattr(self.base_form.passive_tags, "is_slot_1_or_3_only", False):
+            return True
+        return bool(self._parse_defense_mechanics().get("is_slot_1_or_3_only", False))
+
+    @property
+    def slot_1_dr_percent(self) -> int:
+        if self.base_form and getattr(self.base_form.passive_tags, "slot_1_dr_percent", 0) > 0:
+            return self.base_form.passive_tags.slot_1_dr_percent
+        return int(self._parse_defense_mechanics().get("slot_1_dr", 0))
+
+    @property
+    def slot_1_dodge_percent(self) -> int:
+        if self.base_form and getattr(self.base_form.passive_tags, "slot_1_dodge_percent", 0) > 0:
+            return self.base_form.passive_tags.slot_1_dodge_percent
+        return int(self._parse_defense_mechanics().get("slot_1_dodge", 0))
+
+    @property
+    def slot_3_dr_percent(self) -> int:
+        if self.base_form and getattr(self.base_form.passive_tags, "slot_3_dr_percent", 0) > 0:
+            return self.base_form.passive_tags.slot_3_dr_percent
+        return int(self._parse_defense_mechanics().get("slot_3_dr", 0))
+
+    @property
+    def slot_3_dodge_percent(self) -> int:
+        if self.base_form and getattr(self.base_form.passive_tags, "slot_3_dodge_percent", 0) > 0:
+            return self.base_form.passive_tags.slot_3_dodge_percent
+        return int(self._parse_defense_mechanics().get("slot_3_dodge", 0))
+
+    @property
     def has_stacking_atk(self) -> bool:
         if self.base_form and self.base_form.sa_tags.stacks_atk:
             return True
@@ -1243,7 +1021,7 @@ class DokkanCard:
     def has_support(self) -> bool:
         if self.base_form and self.base_form.passive_tags.has_support:
             return True
-        text = self.passive_skill.lower()
+        text = (self.passive_skill or "").lower()
         return (
             "allies' ki" in text
             or "allies' atk" in text
@@ -1260,16 +1038,78 @@ class DokkanCard:
         )
 
     @property
-    def has_orb_changing(self) -> bool:
-        if self.base_form and self.base_form.passive_tags.has_orb_changing:
+    def has_rainbow_orb_changing(self) -> bool:
+        if self.base_form and getattr(
+            self.base_form.passive_tags, "has_rainbow_orb_changing", False
+        ):
             return True
-        text = self.passive_skill.lower()
+        text = (self.passive_skill or "").lower()
+        return bool(
+            re.search(r"changes?\s+.*to\s+rainbow\s+ki sphere", text)
+            or re.search(r"randomly changes?\s+.*to\s+rainbow", text)
+            or re.search(
+                r"changes?\s+.*ki spheres?\s+(?:of\s+a\s+certain\s+type\s+)?to\s+rainbow", text
+            )
+        )
+
+    @property
+    def has_orb_changing(self) -> bool:
+        if self.base_form and getattr(self.base_form.passive_tags, "has_orb_changing", False):
+            return True
+        text = (self.passive_skill or "").lower()
         return (
             "changes ki spheres" in text
             or "changes spheres" in text
             or "orb changing" in text
             or "rainbow ki sphere" in text
         )
+
+    @property
+    def has_orb_conditional_defense(self) -> bool:
+        if self.base_form and self.base_form.passive_tags:
+            t = self.base_form.passive_tags
+            if (
+                t.has_orb_conditional_dr
+                or t.has_orb_conditional_dodge
+                or t.has_orb_conditional_guard
+            ):
+                return True
+        text = (self.passive_skill or "").lower()
+        has_sphere = (
+            "ki sphere" in text or "rainbow ki sphere" in text or "spheres obtained" in text
+        )
+        if not has_sphere:
+            return False
+        has_def = (
+            "damage reduction" in text
+            or "reduces damage" in text
+            or "guard" in text
+            or "evad" in text
+            or "dodge" in text
+        )
+        return has_def and (
+            "per ki sphere" in text or "spheres obtained" in text or "rainbow ki sphere" in text
+        )
+
+    @property
+    def is_extreme(self) -> bool:
+        return getattr(self, "element", 0) >= 20
+
+    @property
+    def is_super(self) -> bool:
+        return 10 <= getattr(self, "element", 0) < 20
+
+    def calculate_team_conditional_defense(self, team: list[Any] | None) -> dict[str, Any]:
+        """Calculates dynamic DR, Guard, and Dodge activated by team composition."""
+        from dokkan_eza_link_farmer.ai.passive_parser import calculate_team_conditional_defense
+
+        return calculate_team_conditional_defense(self, team)
+
+    @property
+    def is_orb_hungry(self) -> bool:
+        if self.base_form and getattr(self.base_form.passive_tags, "is_orb_hungry", False):
+            return True
+        return self.has_orb_conditional_defense
 
     @property
     def has_additionals_or_crit(self) -> bool:
@@ -1302,312 +1142,19 @@ class DokkanCard:
         return bool(re.search(debuff_pattern, text))
 
     def get_tactical_form_timeline(self) -> list[dict[str, str]]:
-        events: list[dict[str, str]] = []
+        from dokkan_eza_link_farmer.ai.card_heuristics import get_tactical_form_timeline
 
-        # 1. Standby Skill
-        if self.standby_skill_name or self.has_standby:
-            name = self.standby_skill_name or "Standby Mode"
-            cond = (self.standby_skill_condition or "").lower()
-            timing = (
-                "Turno 4 (HP <= 50%)"
-                if "4" in cond
-                else ("Turno 3+" if "3" in cond else "Turno 4+")
-            )
-            eff = self.standby_skill_effect or "Enters Standby Mode"
-            events.append(
-                {
-                    "type": "Standby Mode",
-                    "name": name,
-                    "timing": timing,
-                    "condition": self.standby_skill_condition,
-                    "effect": eff,
-                }
-            )
-
-        # 2. Active Skill (Exchange, Switch, or standard Active)
-        if self.active_skill_name or self.has_active_skill:
-            name = self.active_skill_name or "Active Skill"
-            name_lower = name.lower()
-            eff_lower = (self.active_skill_effect or "").lower()
-            cond_lower = (self.active_skill_condition or "").lower()
-
-            if "switch" in name_lower or "switch" in eff_lower:
-                events.append(
-                    {
-                        "type": "Scambio Reversibile (Switch)",
-                        "name": name,
-                        "timing": "Turno 1+ (Ogni Turno)",
-                        "condition": self.active_skill_condition,
-                        "effect": self.active_skill_effect,
-                    }
-                )
-            elif "exchange" in name_lower or "exchange" in eff_lower:
-                timing = (
-                    "Turno 3"
-                    if "3" in cond_lower
-                    else ("Turno 4+" if "4" in cond_lower else "Turno 3+")
-                )
-                events.append(
-                    {
-                        "type": "Scambio (Exchange)",
-                        "name": name,
-                        "timing": timing,
-                        "condition": self.active_skill_condition,
-                        "effect": self.active_skill_effect,
-                    }
-                )
-
-        # 3. Transformations
-        if self.transformations:
-            for form in self.transformations:
-                turn = form.min_turn if form.min_turn > 1 else 4
-                events.append(
-                    {
-                        "type": "Trasformazione",
-                        "name": form.form_name or f"Form {form.form_index}",
-                        "timing": f"Fase Finale (Turno {turn}+)",
-                        "condition": f"A partire dal Turno {turn}",
-                        "effect": form.passive_skill_text,
-                    }
-                )
-
-        return events
+        return get_tactical_form_timeline(self)
 
     def evaluate_kit_power(self) -> tuple[float, dict[str, Any]]:
-        def_score = 0.0
-        breakdown: dict[str, Any] = {}
+        from dokkan_eza_link_farmer.ai.card_heuristics import evaluate_kit_power
 
-        has_guard = self.has_guard
-        dr_pct = self.damage_reduction_percent
-        has_stack_def = self.has_stacking_def
-        dodge_chance = self.dodge_chance_percent
-        is_guaranteed_dodge = bool(dodge_chance >= 100)
-
-        # Base defensive attributes
-        if has_guard:
-            def_score += 15.0
-            breakdown["guard"] = 15.0
-
-        if dr_pct >= 50:
-            def_score += 16.0
-            breakdown["dr"] = f"{dr_pct}% (+16.0)"
-        elif dr_pct >= 30 or self.has_damage_reduction:
-            def_score += 12.0
-            breakdown["dr"] = f"{dr_pct or 'present'}% (+12.0)"
-
-        if has_stack_def:
-            def_score += 12.0
-            breakdown["stack_def"] = 12.0
-
-        if self.has_dodge or dodge_chance > 0:
-            if dodge_chance >= 100 or is_guaranteed_dodge:
-                def_score += 16.0
-                breakdown["dodge_tier"] = "100% Guaranteed (+16.0)"
-            elif dodge_chance >= 70:
-                def_score += 12.0
-                breakdown["dodge_tier"] = "70% Great Chance (+12.0)"
-            elif dodge_chance >= 50:
-                def_score += 9.0
-                breakdown["dodge_tier"] = "50% High Chance (+9.0)"
-            elif dodge_chance >= 30:
-                def_score += 6.0
-                breakdown["dodge_tier"] = "30% Medium Chance (+6.0)"
-            else:
-                def_score += 4.0
-                breakdown["dodge_tier"] = f"{dodge_chance}% Tier (+4.0)"
-
-        if self.is_slot1_tank:
-            def_score += 10.0
-            breakdown["slot1_tank"] = 10.0
-
-        # Composite Defense Survival Thresholds
-        is_true_god_tank = (
-            self.is_guard_permanent
-            and self.is_guard_unconditional
-            and (self.permanent_damage_reduction_percent >= 30 or dr_pct >= 50)
-        )
-        if is_true_god_tank:
-            def_score += 35.0
-            breakdown["composite_god_tank_guard_dr"] = 35.0
-        elif has_guard and dr_pct >= 30:
-            def_score += 18.0
-            breakdown["composite_conditional_guard_dr"] = 18.0
-
-        if self.permanent_damage_reduction_percent >= 70:
-            def_score += 30.0
-            breakdown["composite_heavy_dr_70"] = 30.0
-        elif dr_pct >= 70:
-            def_score += 20.0
-            breakdown["composite_timed_heavy_dr"] = 20.0
-
-        has_great_or_guaranteed_dodge = (self.has_dodge or dodge_chance > 0) and (
-            dodge_chance >= 70 or is_guaranteed_dodge
-        )
-        if has_great_or_guaranteed_dodge:
-            if self.is_dodge_permanent:
-                def_score += 28.0
-                breakdown["composite_great_or_guaranteed_dodge"] = 28.0
-            else:
-                def_score += 16.0
-                breakdown["composite_timed_dodge"] = 16.0
-
-        # 2. Game-Changing Mechanics (Revive, Standby, Taunt, Domain)
-        mech_score = 0.0
-        if self.has_revive:
-            mech_score += 10.0
-            breakdown["revive"] = 10.0
-        if self.has_standby:
-            mech_score += 8.0
-            breakdown["standby"] = 8.0
-        if self.has_target_taunt:
-            mech_score += 10.0
-            breakdown["taunt"] = 10.0
-        if self.has_domain:
-            mech_score += 6.0
-            breakdown["domain"] = 6.0
-
-        # 3. Utility & Team Support
-        util_score = 0.0
-        if self.has_support:
-            util_score += 8.0
-            breakdown["support"] = 8.0
-        if self.has_orb_changing:
-            util_score += 6.0
-            breakdown["orb_changing"] = 6.0
-
-        # 4. Offense & Multipliers
-        atk_score = 0.0
-        if self.has_additionals_or_crit:
-            atk_score += 6.0
-            breakdown["additionals_crit"] = 6.0
-        if self.has_stacking_atk:
-            atk_score += 4.0
-            breakdown["stack_atk"] = 4.0
-        if self.has_active_skill:
-            atk_score += 4.0
-            breakdown["active_skill"] = 4.0
-
-        # 5. Base Card Tier & Progression
-        tier_score = 0.0
-        if self.is_lr:
-            tier_score += 5.0
-            breakdown["lr"] = 5.0
-        if self.has_eza:
-            tier_score += 4.0
-            breakdown["eza"] = 4.0
-        if self.is_rainbow:
-            tier_score += 4.0
-            breakdown["rainbow"] = 4.0
-
-        total_score = def_score + mech_score + util_score + atk_score + tier_score
-        return total_score, breakdown
+        return evaluate_kit_power(self)
 
     def is_covered_by_leader(self, leader: DokkanCard) -> tuple[bool, float, str]:
-        # Fast path: check leader_spec if available
-        if leader.leader_spec and (
-            leader.leader_spec.main_category_ids
-            or leader.leader_spec.extra_category_ids
-            or leader.leader_spec.sub_elements_classes
-        ):
-            spec = leader.leader_spec
-            my_cats = set(self.category_ids)
-            has_main = bool(my_cats & set(spec.main_category_ids))
-            has_extra = bool(my_cats & set(spec.extra_category_ids))
+        from dokkan_eza_link_farmer.ai.card_heuristics import is_covered_by_leader
 
-            if has_main:
-                if has_extra and spec.extra_boost_pct > 0:
-                    total_pct = float(spec.base_boost_pct + spec.extra_boost_pct)
-                    label = "200%" if int(total_pct) == 200 else f"{int(total_pct)}%"
-                    return (
-                        True,
-                        total_pct,
-                        f"{label} ({spec.base_boost_pct}+{spec.extra_boost_pct}%) Leader Spec Match",
-                    )
-                return True, float(spec.base_boost_pct), f"{spec.base_boost_pct}% Leader Spec Match"
-
-            if spec.sub_elements_classes and (
-                self.element in spec.sub_elements_classes
-                or (self.element % 10) in spec.sub_elements_classes
-            ):
-                boost = (
-                    float(spec.sub_boost_pct)
-                    if spec.sub_boost_pct > 0
-                    else (float(spec.base_boost_pct) if not spec.main_category_ids else 90.0)
-                )
-                return True, boost, f"{int(boost)}% Sub-Element/Class Leader Spec Match"
-
-            return False, 0.0, "No matching main category or sub-element on Leader Skill"
-
-        lead_text = leader.leader_skill.strip()
-        if not lead_text:
-            return False, 0.0, "No leader skill"
-
-        lead_lower = lead_text.lower()
-
-        # Case A: Category Leader Skill
-        matched_base_cat = None
-        matched_extra_cat = None
-
-        parts = re.split(r"plus an (?:additional|extra)", lead_text, flags=re.IGNORECASE)
-        base_part = parts[0]
-        extra_part = parts[1] if len(parts) > 1 else ""
-
-        for cat in self.categories:
-            if cat.lower() in base_part.lower():
-                matched_base_cat = cat
-                break
-
-        if matched_base_cat:
-            for cat in self.categories:
-                if cat.lower() in extra_part.lower():
-                    matched_extra_cat = cat
-                    break
-
-            if "200%" in base_part:
-                return True, 200.0, f"Flat 200% on '{matched_base_cat}'"
-            elif matched_extra_cat:
-                extra_pct = 50.0 if "50%" in extra_part else 30.0
-                total_pct = 170.0 + extra_pct
-                label = f"{int(total_pct)}%"
-                return (
-                    True,
-                    total_pct,
-                    f"170%+{int(extra_pct)}% ({label}) on '{matched_base_cat}' & '{matched_extra_cat}'",
-                )
-            elif "170%" in base_part:
-                return True, 170.0, f"170% on '{matched_base_cat}'"
-            elif "150%" in base_part:
-                return True, 150.0, f"150% on '{matched_base_cat}'"
-            elif "130%" in base_part:
-                return True, 130.0, f"130% on '{matched_base_cat}'"
-            else:
-                return True, 120.0, f"Category lead on '{matched_base_cat}'"
-
-        # Case B: All Types / Super Class / Extreme Class Leader
-        is_super = 10 <= self.element < 20
-        is_extreme = self.element >= 20
-
-        if "all types" in lead_lower:
-            pct = 150.0 if "150%" in lead_lower else (130.0 if "130%" in lead_lower else 100.0)
-            return True, pct, "All Types Leader"
-
-        if ("super class" in lead_lower or "super type" in lead_lower) and is_super:
-            pct = 150.0 if "150%" in lead_lower else (130.0 if "130%" in lead_lower else 120.0)
-            return True, pct, "Super Class Leader"
-
-        if ("extreme class" in lead_lower or "extreme type" in lead_lower) and is_extreme:
-            pct = 150.0 if "150%" in lead_lower else (130.0 if "130%" in lead_lower else 120.0)
-            return True, pct, "Extreme Class Leader"
-
-        # Case C: Mono-Type Leader
-        card_type_idx = self.element % 10
-        card_type_name = TYPE_NAMES.get(card_type_idx, "").lower()
-
-        if card_type_name and f"{card_type_name} type" in lead_lower:
-            pct = 130.0 if "130%" in lead_lower else (120.0 if "120%" in lead_lower else 100.0)
-            return True, pct, f"Mono-{card_type_name.upper()} Type Leader"
-
-        return False, 0.0, "No matching category or type on Leader Skill"
+        return is_covered_by_leader(self, leader)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1679,7 +1226,7 @@ class DokkanCard:
         return cls(
             id=cid,
             name=_safe_str(data.get("name"), "Unknown") or "Unknown",
-            subname=_safe_str(data.get("subname"), ""),
+            subname=_safe_str(data.get("subname") or data.get("title"), ""),
             rarity=_safe_int(data.get("rarity"), 4),
             element=_safe_int(data.get("element"), 0),
             element_name=_safe_str(data.get("element_name"), ""),
@@ -1696,8 +1243,18 @@ class DokkanCard:
             has_eza=_safe_bool(data.get("has_eza"), False),
             is_eza=_safe_bool(data.get("is_eza"), False),
             is_seza=_safe_bool(data.get("is_seza"), False),
-            is_rainbow=_safe_bool(data.get("is_rainbow"), False),
-            potential_percent=_safe_int(data.get("potential_percent"), 0),
+            is_rainbow=_safe_bool(
+                data.get("is_rainbow")
+                if data.get("is_rainbow") is not None
+                else data.get("rainbow"),
+                False,
+            ),
+            potential_percent=_safe_int(
+                data.get("potential_percent")
+                if data.get("potential_percent") is not None
+                else data.get("potential_percentage"),
+                0,
+            ),
             swipe_page=_safe_int(data.get("swipe_page"), 0),
             grid_slot=_safe_int(data.get("grid_slot"), 0),
             is_tank_override=is_tank_override,
@@ -1720,149 +1277,14 @@ class DokkanCard:
         is_eza: bool | None = None,
         is_seza: bool | None = None,
     ) -> DokkanCard:
-        has_seza_data = bool(
-            data.get("eza_passive_skill_description_pre")
-            or data.get("passive_skills_rows_eza_pre")
-            or data.get("eza_leader_skill_set_id_pre")
-        )
-        has_eza_data = bool(
-            data.get("eza_leader_skill")
-            or data.get("passive_skills_rows_eza")
-            or data.get("eza_leader_skill_set_id")
-        )
+        from dokkan_eza_link_farmer.ai.dokkandb_parser import parse_card_from_dokkandb
 
-        if is_seza is not None:
-            card_is_seza = bool(is_seza)
-        elif is_eza is not None:
-            card_is_seza = False
-        else:
-            card_is_seza = has_seza_data
-
-        if is_eza is not None:
-            card_is_eza = bool(is_eza) or card_is_seza
-        else:
-            card_is_eza = has_eza_data or card_is_seza
-
-        if card_is_seza and has_seza_data:
-            leader = data.get("eza_leader_skill") or data.get("leader_skill") or ""
-            passive_text = (
-                data.get("eza_passive_skill_description")
-                or data.get("passive_skill_description")
-                or ""
-            )
-            special_descs = (
-                data.get("special_descriptions_eza") or data.get("special_descriptions") or []
-            )
-        elif card_is_eza and has_eza_data:
-            if has_seza_data:
-                leader = (
-                    data.get("eza_leader_skill_pre")
-                    or data.get("eza_leader_skill")
-                    or data.get("leader_skill")
-                    or ""
-                )
-                passive_text = (
-                    data.get("eza_passive_skill_description_pre")
-                    or data.get("eza_passive_skill_description")
-                    or data.get("passive_skill_description")
-                    or ""
-                )
-            else:
-                leader = data.get("eza_leader_skill") or data.get("leader_skill") or ""
-                passive_text = (
-                    data.get("eza_passive_skill_description")
-                    or data.get("passive_skill_description")
-                    or ""
-                )
-            special_descs = (
-                data.get("special_descriptions_eza") or data.get("special_descriptions") or []
-            )
-        else:
-            leader = data.get("leader_skill") or ""
-            passive_text = data.get("passive_skill_description") or ""
-            special_descs = data.get("special_descriptions") or []
-
-        if not passive_text:
-            if card_is_eza:
-                p_rows = (
-                    (
-                        data.get("passive_skills_rows_eza_pre")
-                        if (card_is_eza and not card_is_seza and has_seza_data)
-                        else data.get("passive_skills_rows_eza")
-                    )
-                    or data.get("passive_skills_rows")
-                    or []
-                )
-            else:
-                p_rows = data.get("passive_skills_rows") or []
-            p_parts = [r.get("name", "") for r in p_rows if isinstance(r, dict)]
-            passive_text = " / ".join(p for p in p_parts if p) or (
-                data.get("passive_skill_name") or ""
-            )
-
-        special_text = " | ".join(str(s) for s in special_descs if s)
-
-        categories = data.get("category_names") or []
-        cat_ids = data.get("category_ids") or []
-        links: list[str] = []
-        for i in range(1, 8):
-            link_name = data.get(f"link_skill_name_{i}")
-            if link_name:
-                links.append(str(link_name).strip())
-        link_ids = [lid for lid in (data.get("link_ids") or []) if lid is not None]
-
-        try:
-            cid = int(data.get("id") or data.get("real_id") or 0)
-        except (ValueError, TypeError):
-            cid = 0
-
-        thumb_id = str(cid)[:-1] + "0" if cid else "0"
-        thumb_url = f"https://enaskhebnjtktdfszdcb.supabase.co/storage/v1/object/public/assets/character/thumb/card_{thumb_id}_thumb_folder/card_{thumb_id}_thumb.png"
-
-        try:
-            rarity = int(data.get("rarity") or 4)
-        except (ValueError, TypeError):
-            rarity = 4
-
-        try:
-            element = int(data.get("element") or 0)
-        except (ValueError, TypeError):
-            element = 0
-
-        def _safe_int_list(raw: Any) -> list[int]:
-            if not isinstance(raw, (list, tuple, set)):
-                return []
-            res: list[int] = []
-            for item in raw:
-                try:
-                    if item is not None:
-                        res.append(int(item))
-                except (ValueError, TypeError):
-                    continue
-            return res
-
-        category_ids = _safe_int_list(cat_ids)
-        parsed_link_ids = _safe_int_list(link_ids)
-
-        return cls(
-            id=cid,
-            name=str(data.get("name") or "Unknown"),
-            subname=str(data.get("subname") or ""),
-            rarity=rarity,
-            element=element,
-            leader_skill=leader,
-            passive_skill=passive_text,
-            super_attack=special_text,
-            categories=categories if isinstance(categories, list) else [],
-            category_ids=category_ids,
-            links=links,
-            link_ids=parsed_link_ids,
-            thumb_url=thumb_url,
-            has_eza=bool(card_is_eza),
-            is_eza=bool(card_is_eza),
-            is_seza=bool(card_is_seza),
+        return parse_card_from_dokkandb(
+            cls=cls,
+            data=data,
             is_rainbow=is_rainbow,
-            potential_percent=100 if is_rainbow else 0,
+            is_eza=is_eza,
+            is_seza=is_seza,
         )
 
 
@@ -1935,6 +1357,7 @@ __all__ = [
     "PassiveTags",
     "RotationPair",
     "SATags",
+    "TeamConditionalBuff",
     "TeamRecommendation",
     "TYPE_NAMES",
     "parse_dodge_percentage_from_text",
