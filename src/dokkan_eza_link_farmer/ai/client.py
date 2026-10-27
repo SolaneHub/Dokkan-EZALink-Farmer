@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 from typing import Any
@@ -24,6 +25,20 @@ class DokkanAIClient:
 
     def is_available(self, timeout: float = 3.0) -> bool:
         """Checks if the local AI inference server (Ollama / vLLM / LM Studio) is responding."""
+        if self._is_ollama():
+            base_root = self.config.base_url.replace("/v1", "").rstrip("/")
+            try:
+                resp = requests.get(f"{base_root}/api/tags", timeout=timeout)
+                if resp.status_code == 200:
+                    return True
+            except Exception:
+                pass
+            try:
+                resp = requests.get(base_root, timeout=timeout)
+                return resp.status_code == 200
+            except Exception:
+                return False
+
         models_url = self._get_endpoint("models")
         headers = {
             "Authorization": f"Bearer {self.config.api_key}",
@@ -31,15 +46,18 @@ class DokkanAIClient:
         }
         try:
             resp = requests.get(models_url, headers=headers, timeout=timeout)
-            return resp.status_code == 200
+            if resp.status_code == 200:
+                return True
         except Exception:
-            # Fallback to ping root or health
-            try:
-                base_root = self.config.base_url.split("/v1")[0]
-                resp = requests.get(base_root, timeout=timeout)
-                return resp.status_code in (200, 404)
-            except Exception:
-                return False
+            pass
+
+        # Fallback to ping root or health
+        try:
+            base_root = self.config.base_url.split("/v1")[0].rstrip("/")
+            resp = requests.get(base_root, timeout=timeout)
+            return resp.status_code in (200, 404)
+        except Exception:
+            return False
 
     def list_available_models(self, timeout: float = 5.0) -> list[str]:
         """Lists model IDs currently registered on the server."""
@@ -115,20 +133,35 @@ class DokkanAIClient:
             resp.raise_for_status()
             res_json = resp.json()
 
+            reasoning_content = None
             if "message" in res_json:
                 message = res_json["message"]
                 raw_content = message.get("content", "") or ""
+                reasoning_content = (
+                    message.get("thinking") or message.get("reasoning_content") or None
+                )
             else:
                 choice = res_json.get("choices", [{}])[0]
                 message = choice.get("message", {})
                 raw_content = message.get("content", "") or ""
+                reasoning_content = (
+                    message.get("reasoning_content") or choice.get("reasoning") or None
+                )
             # Strip any residual <think> tags from output
-            if "<think>" in raw_content:
+            if "<think>" in raw_content.lower():
                 raw_content = re.sub(
-                    r"<think>.*?</think>", "", raw_content, flags=re.DOTALL
+                    r"(?i)<think>.*?</think>", "", raw_content, flags=re.DOTALL
                 ).strip()
 
-            return raw_content.strip(), None
+            return raw_content.strip(), (reasoning_content.strip() if reasoning_content else None)
+        except requests.HTTPError as e:
+            err_body = ""
+            with contextlib.suppress(Exception):
+                err_body = e.response.text[:500]
+            logger.error(
+                f"HTTP error communicating with AI model ({self.config.model_name}): {e}. Server response: {err_body}"
+            )
+            raise
         except Exception as e:
             logger.error(f"Error communicating with AI model ({self.config.model_name}): {e}")
             raise
@@ -151,7 +184,7 @@ class DokkanAIClient:
                 "REGOLE TASSATIVE DI DOKKAN BATTLE:\n"
                 "1. NON usare tabelle Markdown (usa ESCLUSIVAMENTE elenchi puntati con emoji per una visualizzazione ottimale a terminale).\n"
                 "2. VERITÀ SUI LINK SKILL: I Link Skill aumentano ESCLUSIVAMENTE statistiche (Ki, % ATK, % DEF) quando due carte adiacenti condividono lo stesso link. I Link NON riducono mai il danno subito, NON riducono il Ki del nemico e NON danno recupero HP.\n"
-                "3. MECCANICHE DIFENSIVE (PASSIVE SKILL): Guardia (Guard), Riduzione Danno (Damage Reduction %), Schivata (Dodge) e Stacking DEF derivano SOLO dalla Passive Skill o Super Attack dell'unità, MAI dai link.\n"
+                "3. MECCANICHE DIFENSIVE & ORDINE OPERAZIONI: Formula danno = {[(ATK Nemico x Mod. Tipo) x (1 - DR%)] - DEF Alleato} x Riduzione Guardia (0.5). La Damage Reduction (DR%) agisce A MONTE della DEF (comprime l'attacco del boss prima di sottrarre la DEF). La Guardia agisce A VALLE della DEF (dimezza per 0.5 solo il residuo dopo la DEF, oltre a forzare il Type Mod a 0.8). Non confondere MAI la Guardia con il 50% di DR: unità con sola Guardia e DEF pre-super ordinaria (Naked Guard) subiscono oltre 1 milione di danno da Super Attack Endgame (> 2.5M) e muoiono se messe in Slot 1! Invece, la combinazione Guardia + DR (es. Beast Gohan) è la sinergia suprema. Inoltre, il vantaggio di tipo conferisce già Guardia Naturale (0.9x mod + 0.5 riduzione), rendendo la guardia da passiva ridondante su tali elementi.\n"
                 "4. ROTAZIONI DINAMICHE: Le rotazioni A e B fungono da coppie d'ancoraggio, ma NON sono vincolanti né fisse per l'intero evento. Spiega come adattarle dinamicamente in base alle battaglie, al cambio di elemento del boss e alla presenza di gimmick letali (es. Slot Lock o Cancels Dodge).\n"
                 "5. MECCANICA MULTI-BATTAGLIA (RESET STACKING): Se l'evento è composto da battaglie separate, evidenzia chiaramente che lo stacking di ATK & DEF si AZZERA a inizio di ciascuna nuova battaglia! Le unità dipendenti solo dallo stacking necessitano di protezione al Turno 1.\n"
                 "6. OGGETTI DI SUPPORTO (EFFETTI REALI):\n"
@@ -160,13 +193,16 @@ class DokkanAIClient:
                 "   - Princess Snake: Recupera il 55% di HP e riduce il danno subito del 30% per 1 turno.\n"
                 "   (Revive, Standby e Active Skill NON sono oggetti usabili, ma abilità intrinseche dei singoli personaggi).\n"
                 "7. REGOLA CRITICA SLOT 1 (NO TANK ON-HIT IN SLOT 1) & OTTIMIZZAZIONE SLOT 2:\n"
-                "   - Slot 1 Tank: Riservato SOLO a unità con difese garantite PRE-ATTACCO e prima di ricevere colpi (Guardia incondizionata attiva da inizio turno, Riduzione Danno >= 50% fin dal primo colpo, o Schivata >= 70%).\n"
-                "   - NON suggerire MAI come Slot 1 primario unità la cui Guardia, Riduzione Danno o DEF si attivano solo 'quando ricevono un attacco' (when receiving an attack / after receiving an attack / for every attack received / on-hit buildup) o con abilità difensive ad attivazione singola (once only). Se subiscono una Super Attack nemica come primo colpo (Turno 1 / colpo 1), la loro difesa o riduzione non è ancora attiva e vengono ONESHOTTATE!\n"
-                "   - Slot 2 Specialist: Le unità con build-up on-hit e le unità che accumulano difesa su Super Attacco (Stacking DEF) VANNO TASSATIVAMENTE IN SLOT 2. In Slot 2 effettuano prima la Super Attack (attivando il boost DEF post-super e accumulando stack) e solo successivamente subiscono i colpi in sicurezza, attivando le abilità on-hit senza rischio di oneshot pre-super. Mantienile in rotazione principale (Slot 2 ogni 2 turni) per massimizzare la frequenza di stacking e build-up invece di sprecarle come floater in Slot 3.\n"
+                "   - Slot 1 Tank: Riservato SOLO a unità con difese garantite PRE-ATTACCO in grado di reggere Super Attack da 2.5M+ (Guardia + DR >= 30%, DR pura >= 65-70%, o Schivata >= 70% se non annullata).\n"
+                "   - NON suggerire MAI come Slot 1 primario unità con 'Naked Guard' (guardia passiva senza DR e con bassa DEF pre-super), unità la cui difesa si attiva solo 'quando ricevono un attacco' (when receiving an attack / after receiving an attack / for every attack received / on-hit buildup) o con abilità difensive ad attivazione singola (once only). Se subiscono una Super Attack nemica come primo colpo (Turno 1 / colpo 1), la loro difesa o riduzione non è ancora attiva e vengono ONESHOTTATE!\n"
+                "   - Slot 2 Specialist: Le unità con build-up on-hit, Naked Guard o che accumulano difesa su Super Attacco (Stacking DEF) VANNO TASSATIVAMENTE IN SLOT 2. In Slot 2 effettuano prima la Super Attack (attivando il boost DEF post-super e accumulando stack) e solo successivamente subiscono i colpi in sicurezza, attivando le abilità on-hit senza rischio di oneshot pre-super. Mantienile in rotazione principale (Slot 2 ogni 2 turni) per massimizzare la frequenza di stacking e build-up invece di sprecarle come floater in Slot 3.\n"
                 "8. REGOLA CRITICA PASSIVE CONDIZIONALI SULLA CATEGORIA/CLASSE NEMICA:\n"
                 "   - Unità come Goku God TEQ (1016031) o Caulifla TEQ la cui Riduzione Danno, Guardia o Schivata dipendono da una Categoria o Classe nemica specifica (es. 77% DR solo contro nemici 'Movie Bosses' o 'Pure Saiyans') NON DEVONO MAI essere posizionate come tank o in rotazione principale se anche solo una fase dell'evento (es. Toppo, Goku Black, Cell, Buu) NON appartiene a tale categoria.\n"
                 "   - In qualsiasi fase non corrispondente, tali unità hanno 0% DR, 0 Guardia e statistiche base inadeguate, venendo oneshottate in qualsiasi slot vengano messe!\n"
-                "9. Rispondi TASSATIVAMENTE in lingua ITALIANA in modo chiaro e schematico (massimo 20-30 righe).\n\n"
+                "9. REGOLA CRITICA DIFENSORI VINCOLATI ALLO SLOT 1 (DIVIETO DI FLOATING IN SLOT 3):\n"
+                "   - Unità la cui Guardia o Riduzione Danno si attiva SOLO come 1° attaccante del turno ('As the 1st attacker in a turn' / 'in the 1st slot') NON DEVONO MAI ESSERE MANDATE COME FLOATER IN SLOT 3!\n"
+                "   - In Slot 3, la loro condizione non è soddisfatta, perdono ogni guardia e riduzione (0% guardia, 0% DR) e vengono istantaneamente oneshottate. Inoltre, se le loro statistiche base non bastano a reggere la Super Attack del boss in Slot 1, NON devono essere selezionate nel team.\n"
+                "10. Rispondi TASSATIVAMENTE in lingua ITALIANA in modo chiaro e schematico (massimo 20-30 righe).\n\n"
                 "STRUTTURA OBBLIGATORIA:\n"
                 "### 🛡️ Rotazioni Tattiche & Flessibilità Dinamica\n"
                 "- **Rotazione A**: Spiega perché lo Slot 1 difende (tank) e il ruolo di Slot 2 (dps/link). Se un'unità accumula difesa subendo colpi (on-hit), specifica di tenerla in Slot 2.\n"
@@ -187,7 +223,7 @@ class DokkanAIClient:
                 "STRICT DOKKAN BATTLE RULES:\n"
                 "1. DO NOT use Markdown tables (use ONLY bullet points with emojis for clean terminal display).\n"
                 "2. LINK SKILL FACTS: Link skills ONLY increase stats (Ki, % ATK, % DEF) between adjacent cards. Links NEVER reduce damage, reduce enemy Ki, or recover HP.\n"
-                "3. DEFENSIVE MECHANICS: Guard, Damage Reduction %, Dodge, and Stacking DEF come SOLELY from Passive Skills or Super Attacks, NEVER from links.\n"
+                "3. DEFENSIVE MECHANICS & ORDER OF OPERATIONS: Damage Formula = {[(Enemy ATK x Type Mod) x (1 - DR%)] - Ally DEF} x Guard Reduction (0.5). Damage Reduction (DR%) acts BEFORE DEF subtraction (shrinking raw boss attack). Guard acts AFTER DEF subtraction (halving by 0.5 only what passes DEF, while forcing 0.8x Type Mod). NEVER equate Guard to 50% DR: 'Naked Guard' (guard without DR and average pre-super DEF) takes >1M damage from 2.5M+ Super Attacks in Slot 1 and dies! Conversely, Guard + DR (e.g. Beast Gohan) is the ultimate survival synergy. Also, Natural Type Advantage already confers Natural Guard (0.9x mod + 0.5 reduction), making passive guard mostly redundant on those elements.\n"
                 "4. DYNAMIC ROTATIONS: Rotations A & B serve as anchor pairs, but are NOT rigid. Explain how to flexibly adapt positioning across battles based on enemy typing and lethal gimmicks (Cancels Dodge, Slot Lock).\n"
                 "5. MULTI-BATTLE MECHANICS: In multi-battle stages, emphasize that ATK & DEF stacking RESETS to 0 at the start of each new battle! Units relying purely on stacking must be protected on Turn 1.\n"
                 "6. REAL SUPPORT ITEMS:\n"
@@ -196,13 +232,16 @@ class DokkanAIClient:
                 "   - Princess Snake: Recovers 55% HP and reduces damage received by 30% for 1 turn.\n"
                 "   (Revive, Standby, and Active Skills are NOT support items, but character abilities).\n"
                 "7. CRITICAL SLOT 1 RULE (NO ON-HIT TANKS IN SLOT 1) & SLOT 2 OPTIMIZATION:\n"
-                "   - Slot 1 Tank: EXCLUSIVELY for units with guaranteed PRE-ATTACK defenses (unconditional start-of-turn Guard, Damage Reduction >= 50% on the very first hit, or Dodge >= 70%).\n"
-                "   - NEVER suggest units whose Guard, Damage Reduction, or DEF only activate 'when receiving an attack', 'after receiving an attack', 'for every attack received', or are '(once only)' as primary Slot 1 tanks. If they take an enemy Super Attack on hit 1, their defense/DR is not active and they will be ONESHOTTED!\n"
-                "   - Slot 2 Specialist: Units with on-hit buildup and units with DEF stacking on Super Attack MUST BE PLACED IN SLOT 2. In Slot 2, they launch their Super Attack first (triggering post-SA DEF boosts and stacking), allowing them to safely absorb subsequent hits and activate on-hit mechanics without pre-super oneshot risk. Keep them in the main rotation (Slot 2 every 2 turns) to maximize stacking speed instead of wasting them as Slot 3 floaters.\n"
+                "   - Slot 1 Tank: EXCLUSIVELY for units with guaranteed PRE-ATTACK defenses able to withstand 2.5M+ Super Attacks (Guard + DR >= 30%, raw DR >= 65-70%, or Dodge >= 70% if uncancelled).\n"
+                "   - NEVER suggest units with 'Naked Guard' (guard without DR or high pre-super DEF), on-hit buildup (when receiving an attack / after receiving an attack), or once-only defenses as primary Slot 1 tanks. If they take an enemy Super Attack on hit 1, they will be ONESHOTTED!\n"
+                "   - Slot 2 Specialist: Units with on-hit buildup, Naked Guard, or DEF stacking on Super Attack MUST BE PLACED IN SLOT 2. In Slot 2, they launch their Super Attack first (triggering post-SA DEF boosts and stacking), allowing them to safely absorb subsequent hits and activate on-hit mechanics without pre-super oneshot risk. Keep them in the main rotation (Slot 2 every 2 turns) to maximize stacking speed instead of wasting them as Slot 3 floaters.\n"
                 "8. CRITICAL ENEMY-CONDITIONAL PASSIVE VALIDATION:\n"
                 "   - Units such as TEQ SSG Goku (1016031) or TEQ Caulifla whose Damage Reduction, Guard, or Dodge depend on specific enemy categories or classes (e.g. 77% DR against 'Movie Bosses' or 'Pure Saiyans') MUST NEVER be recommended as tanks or main rotation units if ANY phase of the stage (e.g. Toppo, Goku Black, Cell, Buu) lacks those categories.\n"
                 "   - In non-matching phases, such units lose all conditional defense and suffer instant fatal oneshots!\n"
-                "9. Keep the response concise (max 20-30 lines).\n\n"
+                "9. CRITICAL SLOT 1-RESTRICTED DEFENSE (DO NOT FLOAT TO SLOT 3):\n"
+                "   - Units whose Guard or Damage Reduction is restricted to 'As the 1st attacker in a turn' / 'in the 1st slot' MUST NEVER BE FLOATED TO SLOT 3!\n"
+                "   - In Slot 3, their condition is inactive, they lose all guard and DR (0% guard, 0% DR) and suffer instant oneshots. If they lack raw stats to survive boss Super Attacks in Slot 1, DO NOT include them in the team.\n"
+                "10. Keep the response concise (max 20-30 lines).\n\n"
                 "MANDATORY STRUCTURE:\n"
                 "### 🛡️ Tactical Rotations & Dynamic Flexibility\n"
                 "- **Rotation A**: Why Slot 1 defends (tank) and Slot 2 damages (dps/links). If a unit builds defense on-hit, explicitly specify placing them in Slot 2.\n"

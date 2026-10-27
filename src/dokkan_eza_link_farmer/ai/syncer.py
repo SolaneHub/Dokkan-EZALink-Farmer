@@ -5,7 +5,9 @@ import contextlib
 import json
 import logging
 import os
+import random
 import re
+import threading
 import time
 from typing import Any
 
@@ -17,9 +19,281 @@ from dokkan_eza_link_farmer.ai.models import (
     LeaderSkillSpec,
     PassiveTags,
     SATags,
+    TeamConditionalBuff,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def parse_team_conditional_buffs(raw_text: str) -> list[TeamConditionalBuff]:
+    """
+    Parses defensive buffs (DR%, Guard, Dodge%) gated by team composition,
+    class ally counts, category ally counts, or dual Ki sphere triggers.
+    """
+    if not raw_text:
+        return []
+
+    blocks = re.split(r"\*([^*]+)\*", raw_text)
+    buffs: list[TeamConditionalBuff] = []
+
+    for i in range(1, len(blocks), 2):
+        h = " ".join(blocks[i].split())
+        body = blocks[i + 1].strip() if i + 1 < len(blocks) else ""
+
+        h_lower = h.lower()
+        if not any(w in h_lower for w in ["allies", "ally", "extreme class", "super class"]):
+            continue
+
+        cats = re.findall(r'"([^"]+)"', h)
+        is_same_turn = "attacking in the same turn" in h_lower or "on the same turn" in h_lower
+
+        dr = 0
+        guard = False
+        dodge = 0
+        per_ally_dr = 0
+        per_ally_dodge = 0
+        max_dr = 0
+        max_dodge = 0
+
+        body_clean = re.sub(r"\{[^}]+\}", "", body)
+        bullets = [" ".join(b.split()) for b in re.split(r"\n(?=- )", body_clean.strip())]
+
+        for bullet in bullets:
+            bullet_lower = bullet.lower()
+            if (
+                any(
+                    g in bullet_lower
+                    for g in [
+                        "guards all attacks",
+                        "guards against all attacks",
+                        "all attacks guarded",
+                        "guaranteed to guard",
+                    ]
+                )
+                and "chance of guarding" not in bullet_lower
+            ):
+                guard = True
+
+            is_per_ally = (
+                bool(re.search(r"\bper\s+(?:ally|each|member)", bullet_lower))
+                or bool(re.search(r"\bfor each\s+(?:ally|member)", bullet_lower))
+                or bool(re.search(r"\bper\b", h_lower))
+            )
+
+            # Joint DR & Dodge expressions
+            comb_m = re.findall(
+                r"(?:(?:chance of evading|evasion).*?&.*?damage reduction rate|damage reduction rate.*?&.*?(?:chance of evading|chance to evade|evasion)|chance of performing a critical hit.*?&.*?(?:damage reduction rate|chance of evading)).*?(\d+)%",
+                bullet,
+                re.I,
+            )
+            for val_s in comb_m:
+                val = int(val_s)
+                if is_per_ally:
+                    per_ally_dr = max(per_ally_dr, val)
+                    per_ally_dodge = max(per_ally_dodge, val)
+                else:
+                    dr = max(dr, val)
+                    dodge = max(dodge, val)
+
+            dr_matches = re.findall(
+                r"(?:damage reduction (?:rate|of)?|reduces? damage(?: received)? by|damage received\s*-\s*)\s*(\d+)%",
+                bullet,
+                re.I,
+            )
+            for d in dr_matches:
+                val = int(d)
+                if is_per_ally:
+                    per_ally_dr = max(per_ally_dr, val)
+                else:
+                    dr = max(dr, val)
+
+            up_to_dr = re.search(r"damage reduction[^)]*\(up to (\d+)%\)", bullet, re.I)
+            if up_to_dr:
+                max_dr = int(up_to_dr.group(1))
+
+            if any(k in bullet_lower for k in ["evad", "evasion", "dodge"]):
+                line_dodge = 0
+                if "great chance" in bullet_lower:
+                    line_dodge = 70
+                elif "high chance" in bullet_lower:
+                    line_dodge = 50
+                elif "medium chance" in bullet_lower or "med chance" in bullet_lower:
+                    line_dodge = 30
+                elif "guaranteed to evade" in bullet_lower or "guaranteed evasion" in bullet_lower:
+                    line_dodge = 100
+                for m in re.finditer(r"(\d+)%\s*chance of evading", bullet, re.I):
+                    line_dodge = max(line_dodge, int(m.group(1)))
+                for m in re.finditer(
+                    r"(?:chance of evading|chance to evade|chance of dodging|chance to dodge|evasion rate)\s*(?:enemy(?:'s)?\s+attacks?)?\s*(?:\([^)]*\))?\s*(?:rate\s*)?\+?\s*(\d+)%",
+                    bullet,
+                    re.I,
+                ):
+                    line_dodge = max(line_dodge, int(m.group(1)))
+                for m in re.finditer(r"evad\w*[^)]*\(up to (\d+)%\)", bullet, re.I):
+                    max_dodge = max(max_dodge, int(m.group(1)))
+
+                if is_per_ally:
+                    per_ally_dodge = max(per_ally_dodge, line_dodge)
+                else:
+                    dodge = max(dodge, line_dodge)
+
+        if not (dr or guard or dodge or per_ally_dr or per_ally_dodge):
+            continue
+
+        # Classify condition type
+        # 1. Dual orb + class/category condition
+        m_dual = re.search(
+            r"(\d+)\s+or\s+more\s+ki\s+spheres?\s+obtained,\s*or\s+when\s+(\d+)\s+or\s+more\s+(extreme|super)\s+class\s+allies\s+are\s+on\s+the\s+team",
+            h,
+            re.I,
+        )
+        if m_dual:
+            buffs.append(
+                TeamConditionalBuff(
+                    condition_type="dual_orb_class",
+                    req_class=m_dual.group(3).title(),
+                    min_allies=int(m_dual.group(2)),
+                    has_orb_alternative=True,
+                    orb_count=int(m_dual.group(1)),
+                    dr_percent=dr,
+                    has_guard=guard,
+                    dodge_percent=dodge,
+                    same_turn=False,
+                )
+            )
+            continue
+
+        # 2. All allies class
+        m_all_class = re.search(
+            r"when\s+all\s+allies\s+are\s+(extreme|super)\s+class\s+characters", h, re.I
+        )
+        if m_all_class:
+            buffs.append(
+                TeamConditionalBuff(
+                    condition_type="all_class",
+                    req_class=m_all_class.group(1).title(),
+                    req_categories=cats,
+                    all_allies=True,
+                    dr_percent=dr,
+                    has_guard=guard,
+                    dodge_percent=dodge,
+                    same_turn=False,
+                )
+            )
+            continue
+
+        # 3. Class count on team
+        m_class_count = re.search(
+            r"(?:when\s+)?(\d+)\s+or\s+more\s+(extreme|super)\s+class\s+allies\s+are\s+on\s+the\s+team",
+            h,
+            re.I,
+        )
+        if m_class_count:
+            buffs.append(
+                TeamConditionalBuff(
+                    condition_type="class_count",
+                    req_class=m_class_count.group(2).title(),
+                    min_allies=int(m_class_count.group(1)),
+                    dr_percent=dr,
+                    has_guard=guard,
+                    dodge_percent=dodge,
+                    same_turn=False,
+                )
+            )
+            continue
+
+        # 4. Turn allies (Class and/or Category)
+        m_turn = re.search(
+            r"when\s+there\s+are\s+(\d+)\s*(?:(extreme|super)\s+class)?\s*(?:.*Category\s+)?allies\s+attacking\s+in\s+the\s+same\s+turn",
+            h,
+            re.I,
+        )
+        if m_turn:
+            req_c = m_turn.group(2).title() if m_turn.group(2) else None
+            buffs.append(
+                TeamConditionalBuff(
+                    condition_type="turn_allies",
+                    req_class=req_c,
+                    req_categories=cats,
+                    min_allies=int(m_turn.group(1)),
+                    same_turn=True,
+                    dr_percent=dr,
+                    has_guard=guard,
+                    dodge_percent=dodge,
+                )
+            )
+            continue
+
+        # 5. Category count on team
+        m_cat_count = re.search(
+            r"(?:when\s+)?(\d+)\s+or\s+more(?:\s+extreme|\s+super)?\s+(?:.*Category\s+)?allies\s+are\s+on\s+the\s+team",
+            h,
+            re.I,
+        )
+        if m_cat_count and cats:
+            buffs.append(
+                TeamConditionalBuff(
+                    condition_type="category_count",
+                    req_categories=cats,
+                    min_allies=int(m_cat_count.group(1)),
+                    dr_percent=dr,
+                    has_guard=guard,
+                    dodge_percent=dodge,
+                    same_turn=False,
+                )
+            )
+            continue
+
+        # 6. Another category ally (on team or turn)
+        m_another_cat = re.search(
+            r"when\s+there\s+is\s+another\s+(?:.*Category\s+ally\s+)?(on\s+the\s+team|attacking\s+in\s+the\s+same\s+turn)",
+            h,
+            re.I,
+        )
+        if (m_another_cat or "when there is another" in h_lower) and cats:
+            buffs.append(
+                TeamConditionalBuff(
+                    condition_type="another_category",
+                    req_categories=cats,
+                    min_allies=1,
+                    same_turn=is_same_turn,
+                    dr_percent=dr,
+                    has_guard=guard,
+                    dodge_percent=dodge,
+                )
+            )
+            continue
+
+        # 7. Per name
+        m_per_name = re.search(r'per\s+ally\s+whose\s+name\s+includes\s+"([^"]+)"', h, re.I)
+        if m_per_name:
+            buffs.append(
+                TeamConditionalBuff(
+                    condition_type="per_name",
+                    name_substr=m_per_name.group(1),
+                    per_ally_dr=per_ally_dr,
+                    per_ally_dodge=per_ally_dodge,
+                    max_dr=max_dr,
+                    max_dodge=max_dodge,
+                )
+            )
+            continue
+
+        # 8. Per category
+        if "per " in h_lower and cats:
+            buffs.append(
+                TeamConditionalBuff(
+                    condition_type="per_category",
+                    req_categories=cats,
+                    per_ally_dr=per_ally_dr,
+                    per_ally_dodge=per_ally_dodge,
+                    max_dr=max_dr,
+                    max_dodge=max_dodge,
+                )
+            )
+            continue
+
+    return buffs
 
 
 def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> PassiveTags:
@@ -64,22 +338,53 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
         "(once only)",
         "once only",
     )
-    SLOT_2_3_PATTERNS = (
-        "as the 2nd or 3rd attacker",
-        "as the 2nd attacker",
-        "as the 3rd attacker",
-        "in the 2nd or 3rd slot",
-        "in the 2nd slot",
-        "in the 3rd slot",
+    SLOT_1_PATTERNS = (
+        "as the 1st attacker in a turn",
+        "as the 1st attacker",
+        "in the 1st slot",
+        "1st attacker in a turn",
+        "1st slot",
     )
+    SLOT_2_ONLY_PATTERNS = (
+        "as the 2nd attacker in a turn",
+        "as the 2nd attacker",
+        "in the 2nd slot",
+        "2nd attacker in a turn",
+        "2nd slot",
+    )
+    SLOT_3_ONLY_PATTERNS = (
+        "as the 3rd attacker in a turn",
+        "as the 3rd attacker",
+        "in the 3rd slot",
+        "3rd attacker in a turn",
+        "3rd slot",
+    )
+    SLOT_2_AND_3_PATTERNS = (
+        "as the 2nd or 3rd attacker",
+        "in the 2nd or 3rd slot",
+        "2nd or 3rd attacker",
+        "2nd or 3rd slot",
+    )
+    SLOT_2_PATTERNS = SLOT_2_ONLY_PATTERNS + SLOT_2_AND_3_PATTERNS
+    SLOT_3_PATTERNS = SLOT_3_ONLY_PATTERNS + SLOT_2_AND_3_PATTERNS
     ALLY_CONDITIONAL_PATTERNS = (
         "allies attacking in the same turn",
         "when there are",
         "when there is another",
+        "when there is a",
+        "when there is an ally",
         "extreme class allies",
         "super class allies",
         "category ally",
         "category allies",
+        "per ally",
+        "for each ally",
+        "on the team",
+    )
+    PRE_ATTACK_PATTERNS = (
+        "before attacking",
+        "before the character attacks",
+        "before launching a super attack",
     )
 
     unconditional_dr_base = 0
@@ -92,7 +397,22 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
     has_on_hit_guard = False
     has_on_hit_dr = False
     is_once_only_dr = False
+    has_pre_attack_only_dr = False
+    pre_attack_dr = 0
+    pre_attack_ki_req: int | None = None
+    has_pre_attack_only_guard = False
+    has_slot_1_only_guard = False
+    has_slot_1_only_dr = False
+    has_slot_1_buff = False
+    has_slot_2_buff = False
+    has_slot_3_buff = False
+    is_slot_1_or_3_only = False
+    slot_1_dr = 0
+    slot_1_dodge = 0
+    slot_3_dr = 0
+    slot_3_dodge = 0
     has_slot_2_3_buff = False
+    has_slot_2_3_guard = False
 
     has_enemy_conditional_defense = False
     enemy_conditional_categories: list[str] = []
@@ -101,11 +421,21 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
     enemy_conditional_guard = False
     enemy_conditional_dodge = 0
 
+    has_orb_conditional_dr = False
+    has_orb_conditional_dodge = False
+    has_orb_conditional_guard = False
+
     for header, content in sections:
         header_is_on_hit = any(p in header for p in ON_HIT_PATTERNS)
         header_is_once_only = any(p in header for p in ONCE_ONLY_PATTERNS)
-        header_is_slot_2_3 = any(p in header for p in SLOT_2_3_PATTERNS)
+        header_is_slot_1 = any(p in header for p in SLOT_1_PATTERNS)
+        header_is_slot_2 = any(p in header for p in SLOT_2_PATTERNS)
+        header_is_slot_3 = any(p in header for p in SLOT_3_PATTERNS)
+        header_is_slot_2_3 = header_is_slot_2 or header_is_slot_3
         header_is_ally_conditional = any(p in header for p in ALLY_CONDITIONAL_PATTERNS)
+        header_is_pre_attack = any(p in header for p in PRE_ATTACK_PATTERNS)
+        m_hki = re.search(r"(?:with\s+)?(\d+)\s+or\s+more\s+ki", header)
+        header_ki_req = int(m_hki.group(1)) if m_hki else None
 
         header_clean = " ".join(header.split())
         header_is_enemy_conditional = (
@@ -140,26 +470,51 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
         is_basic = "basic effect" in header or header == ""
         is_conditional_header = (
             "ki spheres obtained" in header
+            or "sphere" in header
+            or "spheres" in header
             or "collecting" in header
             or "when hp is" in header
             or "when attacking" in header
             or header_is_slot_2_3
             or header_is_on_hit
+            or header_is_pre_attack
             or header_is_ally_conditional
             or header_is_enemy_conditional
             or "starting from" in header
             or "after the character's" in header
         )
 
-        lines = [line.strip() for line in content.split("\n") if line.strip()]
+        raw_lines = [line.strip() for line in content.split("\n") if line.strip()]
+        lines: list[str] = []
+        for rline in raw_lines:
+            if rline.startswith("-") or not lines:
+                lines.append(rline)
+            else:
+                lines[-1] = f"{lines[-1]} {rline}"
         for line in lines:
             line_clean = " ".join(line.split())
             line_is_on_hit = header_is_on_hit or any(p in line for p in ON_HIT_PATTERNS)
             line_is_once_only = header_is_once_only or any(p in line for p in ONCE_ONLY_PATTERNS)
-            line_is_slot_2_3 = header_is_slot_2_3 or any(p in line for p in SLOT_2_3_PATTERNS)
+            line_is_slot_1 = header_is_slot_1 or any(p in line for p in SLOT_1_PATTERNS)
+            line_is_slot_2 = header_is_slot_2 or any(p in line for p in SLOT_2_PATTERNS)
+            line_is_slot_3 = header_is_slot_3 or any(p in line for p in SLOT_3_PATTERNS)
+            line_is_slot_2_3 = line_is_slot_2 or line_is_slot_3
             line_is_ally_conditional = header_is_ally_conditional or any(
                 p in line for p in ALLY_CONDITIONAL_PATTERNS
             )
+            line_is_pre_attack = header_is_pre_attack or any(p in line for p in PRE_ATTACK_PATTERNS)
+            line_ki_req = header_ki_req
+            if not line_ki_req:
+                m_lki = re.search(r"(?:with\s+)?(\d+)\s+or\s+more\s+ki", line)
+                if m_lki:
+                    line_ki_req = int(m_lki.group(1))
+
+            if line_is_slot_1:
+                has_slot_1_buff = True
+            if line_is_slot_2:
+                has_slot_2_buff = True
+            if line_is_slot_3:
+                has_slot_3_buff = True
 
             line_is_enemy_conditional = header_is_enemy_conditional or (
                 any(
@@ -198,12 +553,36 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
                 has_on_hit_def = True
 
             # Damage Reduction %
+            is_sphere_header = "sphere" in header or "spheres" in header
+            is_sphere_line = (
+                "per ki sphere" in line
+                or "per rainbow" in line
+                or "ki sphere" in line
+                or "spheres obtained" in line
+            )
+            line_is_sphere_rel = is_sphere_header or is_sphere_line
+
             dr_m = re.findall(
-                r"(?:damage reduction (?:rate|of)?|damage received by(?:\s+up to)?|reduces damage(?: received)? by(?:\s+up to)?(?:\s+an additional)?|damage received\s*-\s*)\s*(\d+)%",
+                r"(?:damage reduction rate\s*&[^\d%]*|damage reduction (?:rate|of)?|damage received by(?:\s+up to)?|reduces damage(?: received)? by(?:\s+up to)?(?:\s+an additional)?|damage received\s*-\s*)\s*(\d+)%",
                 line,
+                re.I,
             )
             for d in dr_m:
                 val = int(d)
+                if line_is_slot_1:
+                    has_slot_1_only_dr = True
+                    if val > slot_1_dr:
+                        slot_1_dr = val
+                if line_is_slot_3 and val > slot_3_dr:
+                    slot_3_dr = val
+                if line_is_pre_attack:
+                    has_pre_attack_only_dr = True
+                    if val > pre_attack_dr:
+                        pre_attack_dr = val
+                    if line_ki_req:
+                        pre_attack_ki_req = line_ki_req
+                if line_is_sphere_rel:
+                    has_orb_conditional_dr = True
                 if line_is_on_hit:
                     has_on_hit_dr = True
                 if line_is_once_only:
@@ -219,7 +598,7 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
                         if cl not in enemy_conditional_classes:
                             enemy_conditional_classes.append(cl)
                 else:
-                    if val > unconditional_dr_base:
+                    if not line_is_pre_attack and val > unconditional_dr_base:
                         unconditional_dr_base = val
                     if (
                         (is_basic or not is_conditional_header)
@@ -227,6 +606,8 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
                         and not line_is_once_only
                         and not line_is_slot_2_3
                         and not line_is_ally_conditional
+                        and not line_is_sphere_rel
+                        and not line_is_pre_attack
                         and val > pre_hit_dr
                     ):
                         pre_hit_dr = val
@@ -246,8 +627,16 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
                     )
                 )
             ):
+                if line_is_slot_1:
+                    has_slot_1_only_guard = True
+                if line_is_pre_attack:
+                    has_pre_attack_only_guard = True
+                if line_is_sphere_rel:
+                    has_orb_conditional_guard = True
                 if line_is_on_hit:
                     has_on_hit_guard = True
+                if line_is_slot_2_3:
+                    has_slot_2_3_guard = True
                 if line_is_enemy_conditional:
                     has_enemy_conditional_defense = True
                     enemy_conditional_guard = True
@@ -265,11 +654,15 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
                         and not line_is_once_only
                         and not line_is_ally_conditional
                         and not line_is_slot_2_3
+                        and not line_is_sphere_rel
+                        and not line_is_pre_attack
                     ):
                         pre_hit_guard = True
 
             # Dodge %
             if any(k in line for k in ("evad", "evasion", "dodge")):
+                if line_is_sphere_rel:
+                    has_orb_conditional_dodge = True
                 line_dodge = 0
                 if any(
                     g in line
@@ -292,7 +685,7 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
                 for m in re.finditer(r"(\d+)%\s*chance of evading", line):
                     line_dodge = max(line_dodge, int(m.group(1)))
                 for m in re.finditer(
-                    r"(?:chance of evading|chance to evade|chance of dodging|chance to dodge|evasion rate)\s*(?:enemy(?:'s)?\s+attacks?)?\s*(?:\([^)]*\))?\s*(?:rate\s*)?\+?\s*(\d+)%",
+                    r"(?:chance of evading|chance to evade|chance of dodging|chance to dodge|evasion rate)\s*(?:enemy(?:'s)?\s+attacks?)?\s*(?:&[^\d%]*|\([^)]*\))?\s*(?:rate\s*)?\+?\s*(\d+)%",
                     line,
                 ):
                     line_dodge = max(line_dodge, int(m.group(1)))
@@ -303,6 +696,10 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
                     line_dodge = max(line_dodge, int(m.group(1)))
 
                 if line_dodge > 0:
+                    if line_is_slot_1 and line_dodge > slot_1_dodge:
+                        slot_1_dodge = line_dodge
+                    if line_is_slot_3 and line_dodge > slot_3_dodge:
+                        slot_3_dodge = line_dodge
                     if line_is_enemy_conditional:
                         has_enemy_conditional_defense = True
                         if line_dodge > enemy_conditional_dodge:
@@ -362,12 +759,20 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
     )
     has_standby = "standby" in text
     has_domain = "domain" in text
+    has_rainbow_orb_changing = bool(
+        re.search(r"changes?\s+.*to\s+rainbow\s+ki sphere", text)
+        or re.search(r"randomly changes?\s+.*to\s+rainbow", text)
+        or re.search(
+            r"changes?\s+.*ki spheres?\s+(?:of\s+a\s+certain\s+type\s+)?to\s+rainbow", text
+        )
+    )
     has_orb_changing = (
         "changes ki spheres" in text
         or "changes spheres" in text
         or "orb changing" in text
         or "rainbow ki sphere" in text
     )
+    is_orb_hungry = has_orb_conditional_dr or has_orb_conditional_dodge or has_orb_conditional_guard
 
     has_on_hit_defense = bool(
         has_on_hit_guard
@@ -376,16 +781,37 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
         or (is_once_only_dr and pre_hit_dr < 50)
     )
 
+    if has_slot_1_only_guard and has_slot_2_3_guard:
+        has_slot_1_only_guard = False
+        has_slot_2_3_guard = False
+
+    has_slot_2_3_buff = has_slot_2_buff
+    is_slot_1_or_3_only = (has_slot_1_buff or has_slot_3_buff) and not has_slot_2_buff
+    if has_slot_1_only_dr and slot_3_dr > 0:
+        has_slot_1_only_dr = False
+    if has_slot_1_only_guard and (
+        has_slot_3_buff or has_slot_2_buff or has_slot_2_3_guard or pre_hit_guard
+    ):
+        has_slot_1_only_guard = False
+
     slot1_exclusive = (
         (
             "1st attacker in a turn" in text
             or "in the 1st slot" in text
             or "as the 1st attacker" in text
+            or has_slot_1_buff
         )
         and not is_once_only_dr
         and not has_on_hit_dr
         and not has_on_hit_guard
-        and ("guard" in text or "damage reduction" in text or "reduces damage" in text)
+        and not has_orb_conditional_guard
+        and (
+            "guard" in text
+            or "damage reduction" in text
+            or "reduces damage" in text
+            or slot_1_dr > 0
+            or has_slot_1_only_guard
+        )
     )
 
     # slot1_viable requires genuine unconditional defense in base form
@@ -393,14 +819,21 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
     if (
         pre_hit_dr >= 50
         or dodge_chance >= 70
-        or pre_hit_guard
-        and not has_on_hit_defense
-        or slot1_exclusive
-        and (pre_hit_dr >= 30 or pre_hit_guard)
+        or (pre_hit_guard and not has_on_hit_defense and not has_orb_conditional_guard)
+        or (
+            slot1_exclusive
+            and (
+                pre_hit_dr >= 30
+                or pre_hit_guard
+                or slot_1_dr >= 30
+                or has_slot_1_only_guard
+                or (slot_1_dodge >= 50 and (pre_hit_guard or has_guard))
+            )
+        )
     ):
         slot1_viable = True
 
-    has_slot_2_3_buff = has_slot_2_3_buff or any(p in text for p in SLOT_2_3_PATTERNS)
+    team_conditional_buffs = parse_team_conditional_buffs(raw_text)
 
     return PassiveTags(
         slot1_viable=slot1_viable,
@@ -413,7 +846,22 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
         has_on_hit_dr=has_on_hit_dr,
         has_on_hit_def=has_on_hit_def,
         is_once_only_dr=is_once_only_dr,
+        has_pre_attack_only_dr=has_pre_attack_only_dr,
+        pre_attack_dr_percent=pre_attack_dr,
+        pre_attack_dr_ki_req=pre_attack_ki_req,
+        has_pre_attack_only_guard=has_pre_attack_only_guard,
         has_slot_2_3_buff=has_slot_2_3_buff,
+        has_slot_2_3_guard=has_slot_2_3_guard,
+        has_slot_1_only_guard=has_slot_1_only_guard,
+        has_slot_1_only_dr=has_slot_1_only_dr,
+        has_slot_1_buff=has_slot_1_buff,
+        has_slot_2_buff=has_slot_2_buff,
+        has_slot_3_buff=has_slot_3_buff,
+        is_slot_1_or_3_only=is_slot_1_or_3_only,
+        slot_1_dr_percent=slot_1_dr,
+        slot_1_dodge_percent=slot_1_dodge,
+        slot_3_dr_percent=slot_3_dr,
+        slot_3_dodge_percent=slot_3_dodge,
         has_enemy_conditional_defense=has_enemy_conditional_defense,
         enemy_conditional_categories=enemy_conditional_categories,
         enemy_conditional_classes=enemy_conditional_classes,
@@ -428,6 +876,12 @@ def parse_passive_tags(passive_text: str, sa_tags: SATags | None = None) -> Pass
         has_standby=has_standby,
         has_domain=has_domain,
         has_orb_changing=has_orb_changing,
+        has_rainbow_orb_changing=has_rainbow_orb_changing,
+        has_orb_conditional_dr=has_orb_conditional_dr,
+        has_orb_conditional_dodge=has_orb_conditional_dodge,
+        has_orb_conditional_guard=has_orb_conditional_guard,
+        is_orb_hungry=is_orb_hungry,
+        team_conditional_buffs=team_conditional_buffs,
     )
 
 
@@ -680,6 +1134,22 @@ class DokkanSyncer:
         "Accept": "application/json, image/*, */*",
     }
 
+    _rate_limit_until: float = 0.0
+    _rate_limit_lock: threading.Lock = threading.Lock()
+
+    @classmethod
+    def _set_rate_limit_cooldown(cls, seconds: float) -> None:
+        """Sets a cooperative cooldown across all threads and coroutines when HTTP 429 is hit."""
+        with cls._rate_limit_lock:
+            cls._rate_limit_until = max(cls._rate_limit_until, time.time() + seconds)
+
+    @classmethod
+    def _get_rate_limit_cooldown(cls) -> float:
+        """Returns remaining seconds for active rate limit cooldown, or 0.0."""
+        with cls._rate_limit_lock:
+            remaining = cls._rate_limit_until - time.time()
+            return max(0.0, remaining)
+
     def __init__(self, cache_dir: str | None = None) -> None:
         if cache_dir is None:
             cache_dir = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache")
@@ -904,53 +1374,104 @@ class DokkanSyncer:
     ) -> dict[str, Any] | None:
         """
         Synchronously fetches deep card details (/api/card?code={id}) with disk caching.
+        Resilient against HTTP 429 rate limits with exponential backoff and smooth cache fallback.
         """
         cached = self.get_cached_card_detail(card_id, region=region)
         if not force and cached:
             return cached
 
+        # If forced, but we are currently in an active rate-limit cooldown from DokkanDB,
+        # fallback to cached immediately if available rather than provoking further 429 blocks
+        cooldown = self._get_rate_limit_cooldown()
+        if cooldown > 0 and cached:
+            return cached
+
         url = f"{self.API_BASE}/card?code={card_id}"
         target_path = os.path.join(self.cards_dir, f"card_{card_id}_{region.lower()}.json")
-        try:
-            resp = requests.get(url, headers=self.DEFAULT_HEADERS, timeout=12)
-            resp.raise_for_status()
-            data = resp.json()
-            card_info = (
-                data[0]
-                if isinstance(data, list) and data
-                else (data if isinstance(data, dict) else None)
-            )
-            if not card_info:
-                # Try fallback variant code (e.g. 1015822 -> 1015821 or 1015820)
-                cid_str = str(card_id)
-                if len(cid_str) > 1 and cid_str[-1] not in ("0", "1"):
-                    for fallback_last in ("1", "0"):
-                        alt_code = int(cid_str[:-1] + fallback_last)
-                        alt_url = f"{self.API_BASE}/card?code={alt_code}"
-                        try:
-                            alt_resp = requests.get(
-                                alt_url, headers=self.DEFAULT_HEADERS, timeout=8
+        max_retries = 3
+
+        for attempt in range(max_retries + 1):
+            cooldown = self._get_rate_limit_cooldown()
+            if cooldown > 0:
+                time.sleep(cooldown)
+
+            try:
+                resp = requests.get(url, headers=self.DEFAULT_HEADERS, timeout=12)
+                if resp.status_code == 429:
+                    retry_after_str = resp.headers.get("Retry-After")
+                    if retry_after_str and retry_after_str.strip().isdigit():
+                        backoff = float(retry_after_str.strip())
+                    else:
+                        backoff = 2.0 * (2**attempt) + random.uniform(0.2, 0.6)
+
+                    self._set_rate_limit_cooldown(backoff)
+                    if attempt < max_retries and not cached:
+                        logger.warning(
+                            f"DokkanDB rate limited (429) for card {card_id}. "
+                            f"Backing off for {backoff:.1f}s (attempt {attempt + 1}/{max_retries})..."
+                        )
+                        time.sleep(backoff)
+                        continue
+                    else:
+                        if cached:
+                            logger.info(
+                                f"DokkanDB rate limited (429) for card {card_id}; smoothly utilizing existing disk cache."
                             )
-                            if alt_resp.status_code == 200:
-                                alt_data = alt_resp.json()
-                                cand = (
-                                    alt_data[0]
-                                    if isinstance(alt_data, list) and alt_data
-                                    else (alt_data if isinstance(alt_data, dict) else None)
+                            return cached
+                        logger.warning(
+                            f"DokkanDB rate limit (429) for card {card_id} could not be resolved after {max_retries} retries."
+                        )
+                        return None
+
+                resp.raise_for_status()
+                data = resp.json()
+                card_info = (
+                    data[0]
+                    if isinstance(data, list) and data
+                    else (data if isinstance(data, dict) else None)
+                )
+                if not card_info:
+                    # Try fallback variant code (e.g. 1015822 -> 1015821 or 1015820)
+                    cid_str = str(card_id)
+                    if len(cid_str) > 1 and cid_str[-1] not in ("0", "1"):
+                        for fallback_last in ("1", "0"):
+                            alt_code = int(cid_str[:-1] + fallback_last)
+                            alt_url = f"{self.API_BASE}/card?code={alt_code}"
+                            try:
+                                alt_resp = requests.get(
+                                    alt_url, headers=self.DEFAULT_HEADERS, timeout=8
                                 )
-                                if cand:
-                                    card_info = dict(cand)
-                                    card_info["id"] = card_id
-                                    break
-                        except Exception:
-                            pass
-            if card_info:
-                with open(target_path, "w", encoding="utf-8") as f:
-                    json.dump(card_info, f, ensure_ascii=False, indent=2)
-            return card_info
-        except Exception as e:
-            logger.error(f"Error fetching card detail for {card_id} ({url}): {e}")
-            return cached
+                                if alt_resp.status_code == 200:
+                                    alt_data = alt_resp.json()
+                                    cand = (
+                                        alt_data[0]
+                                        if isinstance(alt_data, list) and alt_data
+                                        else (alt_data if isinstance(alt_data, dict) else None)
+                                    )
+                                    if cand:
+                                        card_info = dict(cand)
+                                        card_info["id"] = card_id
+                                        break
+                            except Exception:
+                                pass
+                if card_info:
+                    with open(target_path, "w", encoding="utf-8") as f:
+                        json.dump(card_info, f, ensure_ascii=False, indent=2)
+                return card_info
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries and not cached:
+                    time.sleep(1.0 * (attempt + 1))
+                    continue
+                if cached:
+                    logger.debug(
+                        f"Network error fetching card {card_id} ({e}); using cached version."
+                    )
+                    return cached
+                logger.error(f"Error fetching card detail for {card_id} ({url}): {e}")
+                return cached
+            except Exception as e:
+                logger.error(f"Error processing card detail for {card_id} ({url}): {e}")
+                return cached
 
     async def fetch_card_detail_async(
         self,
@@ -967,11 +1488,17 @@ class DokkanSyncer:
             return cached
 
         async with semaphore:
+            cooldown = self._get_rate_limit_cooldown()
+            if cooldown > 0:
+                if cached:
+                    return cached
+                await asyncio.sleep(cooldown)
+
             loop = asyncio.get_running_loop()
             res = await loop.run_in_executor(
                 None, self.fetch_card_detail_sync, card_id, region, force
             )
-            await asyncio.sleep(0.08)  # Gentle rate-limit pacing
+            await asyncio.sleep(0.15)  # Gentle rate-limit pacing
             return res
 
     def build_dokkan_card(
@@ -1113,7 +1640,7 @@ class DokkanSyncer:
     def sync_user_box_details(
         self,
         user_box_file: str | None = None,
-        concurrency: int = 5,
+        concurrency: int = 4,
         region: str = "glb",
         force: bool = False,
     ) -> list[DokkanCard]:
@@ -1195,7 +1722,7 @@ class DokkanSyncer:
     def sync_box_details(
         self,
         box_file: str | None = None,
-        concurrency: int = 10,
+        concurrency: int = 4,
         region: str = "glb",
         force: bool = False,
         save_to_file: bool = True,

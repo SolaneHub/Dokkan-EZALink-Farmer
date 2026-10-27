@@ -149,6 +149,9 @@ class CandidateEvaluation:
     counter_points: list[str] = field(default_factory=list)
     penalty_points: list[str] = field(default_factory=list)
     shared_links_with_core: list[str] = field(default_factory=list)
+    estimated_damage_taken: int | None = None
+    guard_type: str = "none"  # "passive_guard", "natural_guard", or "none"
+    defensive_tier: str = ""
 
     @property
     def reasoning(self) -> str:
@@ -202,7 +205,57 @@ class DokkanConstraintSolver:
         return 0
 
     @staticmethod
-    def is_slot1_viable(card: DokkanCard, boss_stage: Any = None) -> bool:
+    def calculate_damage_taken(
+        enemy_atk: int,
+        type_matchup: int = 0,
+        has_passive_guard: bool = False,
+        dr_pct: int = 0,
+        def_stat: int = 0,
+        is_super_vs_extreme: bool = True,
+        variance: float = 1.0,
+    ) -> int:
+        """Calculates exact Dokkan Battle incoming damage using the official order of operations:
+        Damage = {[(Enemy ATK * Variance * Type Modifier) * (1 - DR%)] - Ally DEF} * Guard Reduction
+
+        Order of Operations & Mechanics:
+        1. Type Modifier:
+           - Passive Guard: Always 0.8 regardless of enemy typing or class.
+           - Natural Advantage (Natural Guard): 0.9 (Super vs Extreme) or 1.0 (Same Class).
+           - Neutral: 1.15 (Super vs Extreme) or 1.0 (Same Class).
+           - Disadvantage: 1.5 (Super vs Extreme) or 1.25 (Same Class).
+        2. Damage Reduction (DR%):
+           - Multiplied BEFORE Ally DEF subtraction: compresses raw incoming boss attack.
+        3. Ally DEF Subtraction:
+           - Post-DEF = max(0, damage_before_def - def_stat).
+        4. Guard Reduction:
+           - If Passive Guard OR Natural Type Advantage: Guard Reduction = 0.5 (halving remainder).
+           - Else: Guard Reduction = 1.0.
+           - Final Damage = int(Post-DEF * Guard Reduction).
+        """
+        if has_passive_guard:
+            type_mod = 0.8
+            guard_reduction = 0.5
+        elif type_matchup > 0:
+            type_mod = 0.9 if is_super_vs_extreme else 1.0
+            guard_reduction = 0.5
+        elif type_matchup < 0:
+            type_mod = 1.5 if is_super_vs_extreme else 1.25
+            guard_reduction = 1.0
+        else:
+            type_mod = 1.15 if is_super_vs_extreme else 1.0
+            guard_reduction = 1.0
+
+        effective_dr = max(0.0, min(1.0, float(dr_pct) / 100.0))
+        damage_before_def = enemy_atk * variance * type_mod * (1.0 - effective_dr)
+        damage_after_def = max(0.0, damage_before_def - float(max(0, def_stat)))
+        return int(damage_after_def * guard_reduction)
+
+    @staticmethod
+    def is_slot1_viable(
+        card: DokkanCard,
+        boss_stage: Any = None,
+        team: list[DokkanCard] | None = None,
+    ) -> bool:
         """
         Determines whether a card is viable as a defensive anchor in Slot 1 in its Base Form (Turns 1-3).
         A true Slot 1 anchor must have pre-attack defensive survival against Endgame Super Attacks:
@@ -217,6 +270,12 @@ class DokkanConstraintSolver:
         """
         if card.is_tank_override is not None:
             return card.is_tank_override
+
+        # Check team-composition dynamic defense (e.g. Majin Vegeta with 5+ Extreme allies)
+        if team and hasattr(card, "calculate_team_conditional_defense"):
+            team_def = card.calculate_team_conditional_defense(team)
+            if team_def.get("is_slot1_safe"):
+                return True
 
         def_mech = (
             card._parse_defense_mechanics() if hasattr(card, "_parse_defense_mechanics") else {}
@@ -245,10 +304,20 @@ class DokkanConstraintSolver:
         if def_mech.get("has_on_hit_guard") and not def_mech.get("pre_hit_guard"):
             return False
 
+        # Disqualify if card relies on Slot 2/3 restricted guard (fatal Slot 1 trap)
+        if (
+            (def_mech.get("has_slot_2_3_guard") or getattr(card, "has_slot_2_3_guard", False))
+            and not def_mech.get("pre_hit_guard")
+            and not def_mech.get("is_guard_unconditional")
+        ):
+            return False
+
         # 1. Guaranteed Pre-Attack Guard (Start-of-Turn)
         has_guard = False
-        if def_mech.get("pre_hit_guard") or (
-            def_mech.get("is_guard_unconditional") and card.has_guard
+        if (
+            def_mech.get("pre_hit_guard")
+            or (def_mech.get("is_guard_unconditional") and card.has_guard)
+            or (card.has_guard and getattr(card, "has_revive", False))
         ):
             has_guard = True
         elif (
@@ -314,12 +383,36 @@ class DokkanConstraintSolver:
                 "1st attacker in a turn" in text
                 or "in the 1st slot" in text
                 or "as the 1st attacker" in text
+                or getattr(card, "has_slot_1_buff", False)
+                or def_mech.get("has_slot_1_buff", False)
             )
             and not def_mech.get("is_once_only_dr")
             and not def_mech.get("has_on_hit_dr")
             and not def_mech.get("has_on_hit_guard")
-            and ("guard" in text or "damage reduction" in text or "reduces damage" in text)
+            and (
+                "guard" in text
+                or "damage reduction" in text
+                or "reduces damage" in text
+                or def_mech.get("slot_1_dr", 0) > 0
+                or getattr(card, "slot_1_dr_percent", 0) > 0
+            )
         )
+
+        if slot1_exclusive:
+            slot1_dr = max(
+                getattr(card, "slot_1_dr_percent", 0),
+                def_mech.get("slot_1_dr", 0),
+            )
+            if slot1_dr > 0:
+                dr = max(dr, slot1_dr)
+
+            if not cancels_dodge:
+                slot1_dodge = max(
+                    getattr(card, "slot_1_dodge_percent", 0),
+                    def_mech.get("slot_1_dodge", 0),
+                )
+                if slot1_dodge > 0:
+                    dodge = max(dodge, min(100, dodge + slot1_dodge))
 
         # If enemy conditional defense matched across all phases, apply active conditional defensive buffs
         if has_enemy_cond:
@@ -339,16 +432,80 @@ class DokkanConstraintSolver:
             if cond_dodge > 0 and not cancels_dodge:
                 dodge = max(dodge, cond_dodge)
 
-        if dr >= 50:
+        max_boss_sa = 0
+        if boss_stage and getattr(boss_stage, "phases", None):
+            for p in boss_stage.phases:
+                sa_p = getattr(p, "estimated_sa_damage", 0) or (getattr(p, "atk", 0) * 3)
+                if sa_p > max_boss_sa:
+                    max_boss_sa = sa_p
+
+        slot1_has_guard = has_guard or (
+            slot1_exclusive
+            and (
+                "guard" in text
+                or def_mech.get("has_slot_1_only_guard")
+                or getattr(card, "has_slot_1_only_guard", False)
+            )
+        )
+
+        # Disqualify units whose DR only lasts before attacking (and vanishes post-attack),
+        # or units that require high Ki before attack (e.g. TEQ SS3 Goku needing 18+ Ki)
+        if getattr(card, "has_pre_attack_only_dr", False) and not slot1_has_guard:
+            return False
+        if def_mech.get("has_pre_attack_only_dr") and not slot1_has_guard:
+            return False
+        if getattr(card, "pre_attack_dr_ki_req", None) is not None and not slot1_has_guard:
+            return False
+
+        # 1. 100% Guaranteed Dodge always survives Slot 1 (unless dodge is cancelled)
+        if dodge >= 100:
+            return True
+
+        # 2. Against Endgame Bosses with high SA damage (>= 1.8M up to 10M+):
+        if max_boss_sa >= 1_800_000:
+            # Naked DR without Guard must be extremely high (>= 75%, e.g. Golden Frieza / SS3 Vegeta)
+            if not slot1_has_guard and dr >= 75:
+                return True
+            # Naked Dodge or mid DR (e.g. 50% DR Goten, 70% Dodge LR Vegito) is fatal against 4M-10M boss Supers
+            if not slot1_has_guard:
+                return False
+            # Guarded unit: must not be on-hit, and against >= 1.8M boss SA needs at least 30% DR, 50% dodge, or stacking DEF
+            if slot1_has_guard:
+                if (
+                    getattr(card, "is_once_only_dr", False)
+                    or getattr(card, "has_on_hit_guard", False)
+                    or getattr(card, "has_on_hit_dr", False)
+                ):
+                    return False
+                if getattr(card, "has_on_hit_defense", False) and not (
+                    slot1_exclusive and dr >= 30
+                ):
+                    return False
+                return bool(
+                    dr >= 30
+                    or dodge >= 50
+                    or getattr(card, "has_stacking_def", False)
+                    or getattr(card, "has_revive", False)
+                )
+            return False
+
+        # 3. For lower difficulty / standard stages (< 1.8M SA) or when boss_stage is None:
+        if dr >= 60:
             return True
         if dodge >= 70:
             return True
-        if has_guard:
-            # If the unit has on-hit defense (e.g. DEF only when receiving attack, or once-only DR),
-            # raw guard is not sufficient in Slot 1 against high-difficulty Super Attacks.
-            return not getattr(card, "has_on_hit_defense", False)
+        if slot1_has_guard:
+            if (
+                getattr(card, "is_once_only_dr", False)
+                or getattr(card, "has_on_hit_guard", False)
+                or getattr(card, "has_on_hit_dr", False)
+            ):
+                return False
+            return not (
+                getattr(card, "has_on_hit_defense", False) and not (slot1_exclusive and dr >= 30)
+            )
 
-        return bool(slot1_exclusive and (dr >= 30 or has_guard))
+        return bool(slot1_exclusive and dr >= 30)
 
     def filter_by_leader_skill(
         self,
@@ -592,14 +749,16 @@ class DokkanConstraintSolver:
                 and card.guard_turns_limit <= 6
                 and not card.is_guard_permanent
             )
+            is_slot1_only = getattr(card, "has_slot_1_only_guard", False)
             has_guard_reliable = (
-                (card.has_guard and not is_intro_only)
-                or (card.is_guard_permanent and card.is_guard_unconditional)
+                (card.has_guard and not is_intro_only and not is_slot1_only)
+                or (card.is_guard_permanent and card.is_guard_unconditional and not is_slot1_only)
                 or bool(
                     card.base_form
                     and card.base_form.passive_tags
                     and card.base_form.passive_tags.has_guard
                     and card.base_form.passive_tags.is_guard_permanent
+                    and not getattr(card.base_form.passive_tags, "has_slot_1_only_guard", False)
                 )
             )
             dr_any = max(
@@ -627,19 +786,35 @@ class DokkanConstraintSolver:
 
         # 4. Defensive Expiration in Long Battles (>= 3 phases or Multi-Battle)
         if num_phases >= 3 or is_multi_battle:
+            has_transformation_bridge = any(
+                getattr(form, "min_turn", 99) <= (card.dr_turns_limit or 0) + 1
+                for form in getattr(card, "transformations", [])
+            )
             if (
                 card.dr_turns_limit is not None
                 and card.dr_turns_limit <= 6
                 and card.permanent_damage_reduction_percent == 0
+                and not has_transformation_bridge
             ):
                 delta -= 25.0
                 penalties.append(
                     f"Defensive Expiration: DR ({card.damage_reduction_percent}%) expires after {card.dr_turns_limit} turn(s), leaving unit vulnerable in late game (-25.0)"
                 )
+            elif (
+                card.dr_turns_limit is not None
+                and card.dr_turns_limit <= 6
+                and has_transformation_bridge
+            ):
+                delta += 15.0
+                counters.append(
+                    f"Seamless Transformation Bridge: Intro DR ({card.damage_reduction_percent}%) protects unit until Turn {card.transformations[0].min_turn}+ transformation (+15.0)"
+                )
+
             if (
                 card.guard_turns_limit is not None
                 and card.guard_turns_limit <= 6
                 and not card.is_guard_permanent
+                and not has_transformation_bridge
             ):
                 delta -= 25.0
                 penalties.append(
@@ -695,14 +870,24 @@ class DokkanConstraintSolver:
         if rainbow_phases:
             # Check unconditional guard or permanent guard, or DR >= 50%
             is_omni_guard = (
-                card.is_guard_unconditional
-                or card.is_guard_permanent
+                (card.is_guard_unconditional and not getattr(card, "has_slot_1_only_guard", False))
+                or (
+                    card.is_guard_permanent
+                    and card.is_guard_unconditional
+                    and not getattr(card, "has_slot_1_only_guard", False)
+                )
                 or (
                     card.base_form is not None
                     and card.base_form.passive_tags is not None
                     and (
                         card.base_form.passive_tags.is_guard_unconditional
-                        or card.base_form.passive_tags.is_guard_permanent
+                        or (
+                            card.base_form.passive_tags.is_guard_permanent
+                            and card.base_form.passive_tags.is_guard_unconditional
+                            and not getattr(
+                                card.base_form.passive_tags, "has_slot_1_only_guard", False
+                            )
+                        )
                     )
                 )
             )
@@ -814,7 +999,7 @@ class DokkanConstraintSolver:
             counter_points.append(f"150% Sub-Leader Boost ({lead_pct}%)")
 
         # 2. Early-Game Slot 1 Viability (Turns 1-3 Survival)
-        base_s1 = self.is_slot1_viable(card, boss_stage)
+        base_s1 = self.is_slot1_viable(card, boss_stage, team=selected_team)
         if base_s1:
             score += 28.0
             counter_points.append("Base Form is Slot 1 viable (guaranteed survival Turns 1-3)")
@@ -826,6 +1011,97 @@ class DokkanConstraintSolver:
                 "Optimal Slot 2 Partner: launches Super Attack first (triggering post-SA DEF / stacks), then safely absorbs incoming hits for on-hit build-up"
             )
             score += 8.0
+
+        # Slot-1 Restricted Defense check
+        if getattr(card, "has_slot_1_only_guard", False) or getattr(
+            card, "has_slot_1_only_dr", False
+        ):
+            score -= 10.0
+            penalty_points.append(
+                "Slot-1 Restricted Defense: Guard/DR activates exclusively as 1st attacker in a turn; defense is completely disabled (0% guard / 0% DR) in Slot 2 or Slot 3 (-10.0)"
+            )
+
+        # Slot-2/3 Restricted Guard check (Delayed guard fatal trap in Slot 1)
+        if getattr(card, "has_slot_2_3_guard", False):
+            penalty_points.append(
+                "Slot 2/3 Restricted Guard: Guard activates exclusively as 2nd or 3rd attacker in a turn; DO NOT PLACE IN SLOT 1 (Fatal Slot 1 Trap)"
+            )
+            counter_points.append(
+                "Slot 2 Anchor Specialist: Guaranteed Guard when attacking 2nd/3rd, safely protected from pre-attack Slot 1 Super Attacks"
+            )
+
+        # Pre-Attack Only Defense check (DR/Guard ceases immediately after attacking)
+        if getattr(card, "has_pre_attack_only_dr", False):
+            pre_at_dr = getattr(card, "pre_attack_dr_percent", 50)
+            ki_req = getattr(card, "pre_attack_dr_ki_req", None)
+            score -= 20.0
+            ki_note = f" (requires {ki_req}+ Ki)" if ki_req else ""
+            penalty_points.append(
+                f"Pre-Attack Only DR: Damage reduction ({pre_at_dr}%){ki_note} ceases immediately after attacking (0% DR post-attack). Highly vulnerable to post-attack boss hits (-20.0)"
+            )
+            if ki_req and ki_req >= 18:
+                score -= 10.0
+                penalty_points.append(
+                    f"Ki-Restricted Pre-Attack Defense: Requires {ki_req}+ Ki before attack to activate DR (-10.0)"
+                )
+
+        # Orb-Conditional Defense check (Ki Spheres required for DR/Guard/Dodge)
+        team_def = (
+            card.calculate_team_conditional_defense(selected_team)
+            if hasattr(card, "calculate_team_conditional_defense")
+            else {}
+        )
+        bypasses_orbs = team_def.get("bypasses_orb_requirement", False)
+
+        if (
+            getattr(card, "has_orb_conditional_defense", False)
+            and not bypasses_orbs
+            and not getattr(card, "pre_hit_guard", False)
+            and getattr(card, "pre_hit_dr_percent", 0) < 50
+        ):
+            penalty_points.append(
+                "Ki Sphere Conditional Defense: DR/Guard/Dodge requires Ki Spheres; INACTIVE pre-attack in Slot 1 before collecting spheres (Slot 2/3 recommended)"
+            )
+            counter_points.append(
+                "Slot 2/3 Specialist: Collects Ki Spheres before taking hits to activate orb-conditional DR/Guard/Dodge"
+            )
+        elif bypasses_orbs:
+            counter_points.append(
+                f"Team Composition Milestone: Full defensive kit activated via {team_def.get('dr', 0)}% DR + Guard (no Ki Spheres required!)"
+            )
+            score += 15.0
+
+        # Orb Changing Utility (vital for team Ki and orb-hungry partners)
+        if getattr(card, "has_rainbow_orb_changing", False):
+            counter_points.append(
+                "Rainbow Ki Sphere Changer: Provides consistent rainbow orbs, activating orb-conditional passives and Ki synergy across the team (+6.0)"
+            )
+            score += 6.0
+        elif getattr(card, "has_orb_changing", False):
+            counter_points.append(
+                "Ki Sphere Changer: Improves Ki consistency and orb access for team members (+3.0)"
+            )
+            score += 3.0
+
+        # Leader Synergy Milestone: Reward sub-units that fulfill Leader's class/category team conditions
+        if leader and leader.base_form and leader.base_form.passive_tags:
+            for lb in getattr(leader.base_form.passive_tags, "team_conditional_buffs", []):
+                if lb.req_class:
+                    c_elem = getattr(card, "element", 0)
+                    is_ext = getattr(card, "is_extreme", False) or c_elem >= 20
+                    is_sup = getattr(card, "is_super", False) or (10 <= c_elem < 20)
+                    if lb.req_class == "Extreme" and is_ext:
+                        score += 15.0
+                        counter_points.append(
+                            f"Leader Synergy: Extreme Class ally activates {leader.name}'s defensive kit (+15.0)"
+                        )
+                        break
+                    elif lb.req_class == "Super" and is_sup:
+                        score += 15.0
+                        counter_points.append(
+                            f"Leader Synergy: Super Class ally activates {leader.name}'s defensive kit (+15.0)"
+                        )
+                        break
 
         # 3. Base Kit Power
         kit_power, _ = card.evaluate_kit_power()
@@ -928,6 +1204,170 @@ class DokkanConstraintSolver:
         else:
             shared_links = []
 
+        # 9. Dokkan Damage Formula Simulation & Guard vs DR Analysis
+        # Damage = {[(Enemy ATK * Variance * Type Modifier) * (1 - DR%)] - Ally DEF} * Guard Reduction
+        benchmark_sa_atk = 0
+        final_phase_elem = 0
+        is_final_phase_present = False
+        is_super_boss = False
+
+        if boss_stage and boss_stage.phases:
+            final_p = boss_stage.phases[-1]
+            final_phase_elem = getattr(final_p, "element", 0)
+            is_final_phase_present = not getattr(final_p, "is_rainbow", False)
+            if getattr(final_p, "estimated_sa_damage", 0) > 0:
+                benchmark_sa_atk = final_p.estimated_sa_damage
+            elif getattr(final_p, "atk", 0) > 0:
+                benchmark_sa_atk = final_p.atk * 3
+            elif (
+                isinstance(getattr(boss_stage, "difficulty", 0), (int, float))
+                and getattr(boss_stage, "difficulty", 0) >= 8
+            ) or (
+                isinstance(getattr(boss_stage, "difficulty", 0), str)
+                and any(
+                    s in str(getattr(boss_stage, "difficulty", 0)).lower()
+                    for s in ("super", "z-hard", "extreme")
+                )
+            ):
+                benchmark_sa_atk = 2_500_000
+            is_super_boss = final_phase_elem >= 10 and final_phase_elem < 20
+
+        final_matchup = (
+            self.check_type_matchup(card.element, final_phase_elem) if is_final_phase_present else 0
+        )
+        is_s_vs_e = True
+        if card.card_class and is_final_phase_present:
+            is_s_vs_e = (card.card_class.lower() == "super" and not is_super_boss) or (
+                card.card_class.lower() == "extreme" and is_super_boss
+            )
+
+        def_mech = (
+            card._parse_defense_mechanics() if hasattr(card, "_parse_defense_mechanics") else {}
+        )
+        pre_hit_dr = (
+            def_mech.get("pre_hit_dr", 0)
+            or (
+                card.base_form.passive_tags.dr_base_percent
+                if card.base_form and card.base_form.passive_tags
+                else 0
+            )
+            or card.damage_reduction_percent
+        )
+        has_pass_guard = (
+            def_mech.get("pre_hit_guard", False)
+            or card.has_guard
+            or (
+                card.base_form.passive_tags.has_guard
+                if card.base_form and card.base_form.passive_tags
+                else False
+            )
+        )
+        if getattr(card, "has_on_hit_defense", False) or def_mech.get("has_on_hit_guard"):
+            has_pass_guard = False
+            pre_hit_dr = 0
+
+        # If defense is slot-1 restricted and the unit is NOT slot-1 viable for this boss,
+        # it cannot safely play in Slot 1, meaning its guard / DR is completely deactivated!
+        if getattr(card, "has_slot_1_only_guard", False) and not base_s1:
+            has_pass_guard = False
+        if getattr(card, "has_slot_1_only_dr", False) and not base_s1:
+            pre_hit_dr = 0
+
+        if has_pass_guard:
+            guard_type = "passive_guard"
+        elif final_matchup > 0:
+            guard_type = "natural_guard"
+        else:
+            guard_type = "none"
+
+        # In long fights (>= 3 phases), late-game transformations (Turn 4+) fight the final phase
+        if boss_stage and len(boss_stage.phases) >= 3 and card.transformations:
+            best_trans = max(
+                card.transformations,
+                key=lambda t: (
+                    (1 if getattr(t.passive_tags, "has_guard", False) else 0) * 100
+                    + getattr(t.passive_tags, "permanent_dr_percent", 0)
+                ),
+            )
+            if getattr(best_trans, "min_turn", 99) <= 4:
+                if getattr(best_trans.passive_tags, "has_guard", False):
+                    has_pass_guard = True
+                    guard_type = "passive_guard"
+                if getattr(best_trans.passive_tags, "permanent_dr_percent", 0) > pre_hit_dr:
+                    pre_hit_dr = best_trans.passive_tags.permanent_dr_percent
+                if getattr(best_trans, "element", 0) and is_final_phase_present:
+                    final_matchup = self.check_type_matchup(best_trans.element, final_phase_elem)
+                    if final_matchup > 0 and guard_type != "passive_guard":
+                        guard_type = "natural_guard"
+
+        est_sot_def = 300_000
+        if getattr(card, "has_on_hit_defense", False):
+            est_sot_def = 200_000
+        elif pre_hit_dr >= 40 and has_pass_guard:
+            est_sot_def = 400_000
+
+        simulated_sa_damage = 0
+        if benchmark_sa_atk > 0:
+            simulated_sa_damage = self.calculate_damage_taken(
+                enemy_atk=benchmark_sa_atk,
+                type_matchup=final_matchup,
+                has_passive_guard=has_pass_guard,
+                dr_pct=pre_hit_dr,
+                def_stat=est_sot_def,
+                is_super_vs_extreme=is_s_vs_e,
+            )
+
+            # Damage mitigation impact on candidate score
+            if simulated_sa_damage >= 1_000_000:
+                score -= 40.0
+                penalty_points.append(
+                    f"Lethal SA Vulnerability: Takes simulated {simulated_sa_damage:,} damage from boss Super Attack (instant oneshot / wipes total team HP) (-40.0)"
+                )
+            elif simulated_sa_damage >= 700_000:
+                score -= 20.0
+                penalty_points.append(
+                    f"Severe SA Vulnerability: Takes simulated {simulated_sa_damage:,} damage from boss Super Attack (exceeds typical ~650k-700k team HP pool) (-20.0)"
+                )
+            elif simulated_sa_damage <= 250_000:
+                score += 15.0
+                counter_points.append(
+                    f"Defensive Wall: Takes only simulated {simulated_sa_damage:,} damage from boss Super Attack (+15.0)"
+                )
+
+        # Check vulnerability to normal attacks in endgame (where boss normals exceed 1.5M - 4.0M)
+        if benchmark_sa_atk >= 1_800_000 and boss_stage and getattr(boss_stage, "phases", None):
+            known_normals = [
+                getattr(p, "atk", 0) for p in boss_stage.phases if getattr(p, "atk", 0) > 0
+            ]
+            max_normal_atk = max(known_normals) if known_normals else int(benchmark_sa_atk / 3)
+            if not has_pass_guard and pre_hit_dr <= 55 and card.dodge_chance_percent < 70:
+                simulated_normal_damage = self.calculate_damage_taken(
+                    enemy_atk=max_normal_atk,
+                    type_matchup=final_matchup,
+                    has_passive_guard=False,
+                    dr_pct=pre_hit_dr,
+                    def_stat=est_sot_def,
+                    is_super_vs_extreme=is_s_vs_e,
+                )
+                if simulated_normal_damage >= 500_000:
+                    score -= 35.0
+                    penalty_points.append(
+                        f"Lethal Normal Attack Vulnerability: Naked {pre_hit_dr}% DR without Guard takes simulated {simulated_normal_damage:,} damage per normal hit from endgame boss (lethal even as floater) (-35.0)"
+                    )
+
+        if has_pass_guard and pre_hit_dr >= 30:
+            def_tier = f"God Tank (Passive Guard + {pre_hit_dr}% DR)"
+        elif pre_hit_dr >= 60:
+            def_tier = f"Heavy DR Tank ({pre_hit_dr}% DR)"
+        elif guard_type == "natural_guard":
+            def_tier = "Natural Guard Tank (Type Advantage)"
+        elif has_pass_guard:
+            def_tier = "Naked Guard Tank (Guard without DR)"
+        elif card.dodge_chance_percent >= 70:
+            def_tier = f"High Dodge Specialist ({card.dodge_chance_percent}%)"
+        else:
+            def_tier = "Standard / Offensive Unit"
+
         return CandidateEvaluation(
             card=card,
             score=round(score, 2),
@@ -936,6 +1376,9 @@ class DokkanConstraintSolver:
             counter_points=counter_points,
             penalty_points=penalty_points,
             shared_links_with_core=shared_links,
+            estimated_damage_taken=simulated_sa_damage,
+            guard_type=guard_type,
+            defensive_tier=def_tier,
         )
 
     def get_shortlist(
@@ -955,11 +1398,11 @@ class DokkanConstraintSolver:
             if card.id in exclude:
                 continue
             ev = self.evaluate_card(card, leader, boss_stage)
-            if ev.score > -90.0:
-                evaluations.append(ev)
+            evaluations.append(ev)
 
         evaluations.sort(key=lambda x: x.score, reverse=True)
-        return evaluations[:top_k]
+        viable = [ev for ev in evaluations if ev.score > -90.0]
+        return viable[:top_k] if viable else evaluations[:top_k]
 
     def solve(
         self,
@@ -1324,6 +1767,14 @@ class DokkanConstraintSolver:
 
             candidate_subset = remaining_candidates
 
+            # Exclude duplicate character names on the team (strictly illegal in Dokkan Battle)
+            current_base_names = {get_base_form_name(tc) for tc in team_cards}
+            non_duplicate_cands = [
+                c for c in candidate_subset if get_base_form_name(c) not in current_base_names
+            ]
+            if len(non_duplicate_cands) >= slots_left:
+                candidate_subset = non_duplicate_cands
+
             # Mission partial category enforcement
             if mission_batch is not None:
                 for req_count, cat_name in getattr(mission_batch, "required_categories", []):
@@ -1429,11 +1880,11 @@ class DokkanConstraintSolver:
         shortlist_evals: list[CandidateEvaluation] = []
         for cand in shortlist_candidates:
             ev = self.evaluate_card(cand, leader, boss_stage, selected_team=team_cards)
-            if ev.score > -90.0:
-                shortlist_evals.append(ev)
+            shortlist_evals.append(ev)
 
         shortlist_evals.sort(key=lambda ev: ev.score, reverse=True)
-        shortlist = shortlist_evals[:5]
+        viable_shortlist = [ev for ev in shortlist_evals if ev.score > -90.0]
+        shortlist = viable_shortlist[:5] if viable_shortlist else shortlist_evals[:5]
 
         return ConstraintSolverResult(
             leader=leader,

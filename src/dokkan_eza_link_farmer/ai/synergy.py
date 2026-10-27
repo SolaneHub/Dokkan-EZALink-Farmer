@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from dokkan_eza_link_farmer.ai.card_models import DokkanCard
 
+from dokkan_eza_link_farmer.ai.tactical_dictionary import SLOT_2_3_LOCKED_IDS
+
 KI_LINKS = {
     "Prepared for Battle",
     "Over in a Flash",
@@ -173,7 +175,7 @@ def calculate_slot1_def_priority(card: DokkanCard, boss_stage: Any = None) -> fl
     if is_once_only_dr or has_on_hit_dr:
         perm_dr = pre_hit_dr
 
-    if perm_dr > 0:
+    if perm_dr > 0 and not getattr(card, "has_pre_attack_only_dr", False):
         priority += float(perm_dr) * 1.0
 
     dr_limit = getattr(card, "dr_turns_limit", None)
@@ -220,10 +222,17 @@ def calculate_slot1_def_priority(card: DokkanCard, boss_stage: Any = None) -> fl
             or has_on_hit_guard
             or has_on_hit_dr
             or is_once_only_dr
+            or getattr(card, "has_slot_2_3_guard", False)
+            or getattr(card, "has_orb_conditional_defense", False)
+            or getattr(card, "has_pre_attack_only_dr", False)
         ):
             priority -= 45.0
         else:
             priority -= 20.0
+
+    # Strict lock: Cards with guard/DR limited to slot 2/3 must never be placed in Slot 1
+    if getattr(card, "id", None) in SLOT_2_3_LOCKED_IDS:
+        priority -= 90.0
 
     return priority
 
@@ -231,6 +240,12 @@ def calculate_slot1_def_priority(card: DokkanCard, boss_stage: Any = None) -> fl
 def calculate_slot1_anchor_weight(card: DokkanCard, boss_stage: Any = None) -> float:
     """Assigns rotation anchor fitness bonus: Heavily rewards god-tier permanent tanks in Slot 1."""
     from dokkan_eza_link_farmer.ai.solver import DokkanConstraintSolver
+
+    if getattr(card, "id", None) in SLOT_2_3_LOCKED_IDS:
+        return 0.0
+
+    if getattr(card, "has_pre_attack_only_dr", False):
+        return 0.0
 
     if not DokkanConstraintSolver.is_slot1_viable(card, boss_stage):
         return 0.0
@@ -244,19 +259,38 @@ def calculate_slot1_anchor_weight(card: DokkanCard, boss_stage: Any = None) -> f
 
     def_mech = card._parse_defense_mechanics() if hasattr(card, "_parse_defense_mechanics") else {}
     if def_mech.get("has_on_hit_defense", False) or getattr(card, "has_on_hit_defense", False):
-        return 0.0
+        # Only disqualify if unit lacks pre-hit guard or high pre-hit DR (>= 40%) or high dodge
+        has_solid_guard = (
+            getattr(card, "is_guard_permanent", False)
+            or getattr(card, "has_guard", False)
+            or def_mech.get("pre_hit_guard", False)
+        )
+        has_high_dr = (
+            def_mech.get("pre_hit_dr", 0) >= 40
+            or getattr(card, "slot_1_dr_percent", 0) >= 40
+            or def_mech.get("slot_1_dr", 0) >= 40
+        )
+        has_high_dodge = (
+            def_mech.get("base_dodge", 0) >= 50
+            or getattr(card, "slot_1_dodge_percent", 0) >= 40
+            or def_mech.get("slot_1_dodge", 0) >= 40
+        )
+        if not (has_solid_guard and (has_high_dr or has_high_dodge)):
+            return 0.0
 
     bonus = 0.0
     if (
         getattr(card, "is_guard_permanent", False)
-        and getattr(card, "is_guard_unconditional", False)
-        and def_mech.get("pre_hit_guard", False)
+        and (getattr(card, "is_guard_unconditional", False) or getattr(card, "has_guard", False))
+        and (def_mech.get("pre_hit_guard", False) or getattr(card, "has_guard", False))
     ):
         bonus += 10.0
-    if def_mech.get("pre_hit_dr", 0) >= 40:
+    if def_mech.get("pre_hit_dr", 0) >= 40 or getattr(card, "slot_1_dr_percent", 0) >= 40:
         bonus += 8.0
     if getattr(card, "has_target_taunt", False) or getattr(card, "has_revive", False):
         bonus += 6.0
+    if getattr(card, "has_slot_1_buff", False):
+        bonus += 12.0
     bonus += 6.0
     return bonus
 
@@ -268,11 +302,21 @@ def calculate_slot2_partner_weight(card: DokkanCard, boss_stage: Any = None) -> 
     1. Permanent DEF Stacking: Main rotation ensures SA launches every 2 turns (vital for scaling).
     2. Post-Super DEF / Raises DEF on SA: Attacks before Slot 2 hits, raising defense pre-impact.
     3. On-Hit Defense / Buildup: Safely triggers after Super Attack raises DEF, avoiding pre-super oneshots.
-    4. Slot 2/3 specific passive bonuses (e.g. LR Buu Boys 60% DR in Slot 2/3).
+    4. Slot 2 specific passive bonuses (e.g. LR Buu Boys 60% DR in Slot 2/3).
     5. High Kit Power / Damage output.
+
+    Disqualifies:
+    Units that are Slot 1 or Slot 3 ONLY (e.g. Pui Pui 1033031) or units with Slot 3 buffs that have NO Slot 2 buffs.
     """
     if card is None:
         return 0.0
+
+    # 0. Strict check: Units that are Slot 1 or Slot 3 ONLY (e.g. Pui Pui 1033031) or have Slot 3 buffs without Slot 2 buffs
+    # must NEVER be placed in Slot 2! In Slot 2 they lose their buffs, having 0% slot DR and 0% slot dodge.
+    if getattr(card, "is_slot_1_or_3_only", False) or (
+        getattr(card, "has_slot_3_buff", False) and not getattr(card, "has_slot_2_buff", False)
+    ):
+        return -100.0
 
     weight = 0.0
     is_long_event = False
@@ -312,11 +356,17 @@ def calculate_slot2_partner_weight(card: DokkanCard, boss_stage: Any = None) -> 
         if has_stacking or getattr(card, "raises_def_on_sa", False):
             weight += 6.0
 
-    # 4. Slot 2/3 specific passive bonus
-    if getattr(card, "has_slot_2_3_buff", False):
+    # 4. Slot 2 specific passive bonus
+    if getattr(card, "has_slot_2_3_guard", False):
+        weight += 18.0
+    elif getattr(card, "has_slot_2_buff", False) or getattr(card, "has_slot_2_3_buff", False):
         weight += 10.0
 
-    # 5. Kit power / damage output in Slot 2
+    # 5. Orb-conditional defense: picks up Ki Spheres in Slot 2 before receiving the bulk of enemy hits
+    if getattr(card, "has_orb_conditional_defense", False):
+        weight += 12.0
+
+    # 6. Kit power / damage output in Slot 2
     kit_power, _ = card.evaluate_kit_power() if hasattr(card, "evaluate_kit_power") else (0.0, None)
     weight += min(kit_power * 0.1, 10.0)
 
@@ -335,7 +385,15 @@ def evaluate_rotation_pair(
     kit_a, _ = card_a.evaluate_kit_power() if hasattr(card_a, "evaluate_kit_power") else (0.0, None)
     kit_b, _ = card_b.evaluate_kit_power() if hasattr(card_b, "evaluate_kit_power") else (0.0, None)
 
-    if a_def_priority != b_def_priority:
+    # Check SLOT_2_3_LOCKED_IDS: Cards in this set must NEVER be in Slot 1
+    a_locked = getattr(card_a, "id", None) in SLOT_2_3_LOCKED_IDS
+    b_locked = getattr(card_b, "id", None) in SLOT_2_3_LOCKED_IDS
+
+    if a_locked and not b_locked:
+        slot1, slot2 = card_b, card_a
+    elif b_locked and not a_locked:
+        slot1, slot2 = card_a, card_b
+    elif a_def_priority != b_def_priority:
         slot1, slot2 = (card_a, card_b) if a_def_priority > b_def_priority else (card_b, card_a)
     else:
         a_is_lr = bool(getattr(card_a, "is_lr", False))
@@ -413,6 +471,13 @@ def optimize_rotations_for_team(
         for (p1_a, p1_b), (p2_a, p2_b) in pairings:
             rot1 = evaluate_rotation_pair(p1_a, p1_b, boss_stage=boss_stage)
             rot2 = evaluate_rotation_pair(p2_a, p2_b, boss_stage=boss_stage)
+
+            # Prevent cards in SLOT_2_3_LOCKED_IDS from anchoring Slot 1
+            if (
+                getattr(rot1.slot1, "id", None) in SLOT_2_3_LOCKED_IDS
+                or getattr(rot2.slot1, "id", None) in SLOT_2_3_LOCKED_IDS
+            ):
+                continue
             total = (
                 (rot1.synergy_score + rot2.synergy_score)
                 + (
@@ -425,14 +490,57 @@ def optimize_rotations_for_team(
                 )
             )
 
-            # Floater opportunity cost: Stacking and on-hit units should NOT be floated!
+            # Orb Synergy: Pairing orb-hungry units with orb changers (especially Rainbow)
+            for rot in (rot1, rot2):
+                u1, u2 = rot.slot1, rot.slot2
+                u1_hungry = getattr(u1, "is_orb_hungry", False) or getattr(
+                    u1, "has_orb_conditional_defense", False
+                )
+                u2_hungry = getattr(u2, "is_orb_hungry", False) or getattr(
+                    u2, "has_orb_conditional_defense", False
+                )
+                u1_changer = getattr(u1, "has_orb_changing", False)
+                u2_changer = getattr(u2, "has_orb_changing", False)
+                u1_rb_changer = getattr(u1, "has_rainbow_orb_changing", False)
+                u2_rb_changer = getattr(u2, "has_rainbow_orb_changing", False)
+
+                if (u1_hungry and u2_rb_changer) or (u2_hungry and u1_rb_changer):
+                    total += 12.0
+                elif (u1_hungry and u2_changer) or (u2_hungry and u1_changer):
+                    total += 7.0
+
+            # Floater opportunity cost: Stacking, on-hit, and slot-1 restricted units should NOT be floated!
             cand_floaters = [cards[i] for i in range(n) if i not in idxs]
+            rot_has_hungry = any(
+                getattr(c, "is_orb_hungry", False)
+                or getattr(c, "has_orb_conditional_defense", False)
+                for c in (rot1.slot1, rot1.slot2, rot2.slot1, rot2.slot2)
+            )
+            for fl in cand_floaters:
+                if rot_has_hungry:
+                    if getattr(fl, "has_rainbow_orb_changing", False):
+                        total += 8.0
+                    elif getattr(fl, "has_orb_changing", False):
+                        total += 4.0
             for fl in cand_floaters:
                 fl_stacks = getattr(fl, "has_stacking_def", False) or bool(
                     fl.base_form and fl.base_form.sa_tags and fl.base_form.sa_tags.stacks_def
                 )
                 fl_on_hit = getattr(fl, "has_on_hit_defense", False)
-                if fl_stacks:
+                fl_slot1_guard = getattr(fl, "has_slot_1_only_guard", False)
+                fl_slot1_dr = getattr(fl, "has_slot_1_only_dr", False)
+                fl_has_slot3 = (
+                    getattr(fl, "has_slot_3_buff", False) or getattr(fl, "slot_3_dr_percent", 0) > 0
+                )
+                fl_slot1_or_3 = getattr(fl, "is_slot_1_or_3_only", False)
+
+                if fl_has_slot3 or fl_slot1_or_3:
+                    # Slot 3 specialist / floater receives strong floater synergy bonus
+                    total += 12.0
+                elif fl_slot1_guard or (fl_slot1_dr and not fl_has_slot3):
+                    # Floating a unit whose guard/DR only works as 1st attacker disables its defense completely in Slot 3
+                    total -= 35.0
+                elif fl_stacks:
                     # Floating a stacking unit cuts its SA frequency by ~33-50%
                     total -= 12.0
                 elif fl_on_hit and not getattr(fl, "has_support", False):
@@ -478,8 +586,27 @@ def optimize_rotations_for_team(
                 best_floaters = [cards[i] for i in range(n) if i not in used_indices]
 
     if best_rot_a is None or best_rot_b is None:
-        best_rot_a = evaluate_rotation_pair(cards[0], cards[1], boss_stage=boss_stage)
-        best_rot_b = evaluate_rotation_pair(cards[2], cards[3], boss_stage=boss_stage)
+        p_a = evaluate_rotation_pair(cards[0], cards[1], boss_stage=boss_stage)
+        p_b = evaluate_rotation_pair(cards[2], cards[3], boss_stage=boss_stage)
+        # Ensure slot 1 is never a locked card even in emergency fallback
+        if getattr(p_a.slot1, "id", None) in SLOT_2_3_LOCKED_IDS:
+            p_a = RotationPair(
+                slot1=p_a.slot2,
+                slot2=p_a.slot1,
+                shared_links=p_a.shared_links,
+                shared_ki_links=p_a.shared_ki_links,
+                synergy_score=p_a.synergy_score,
+            )
+        if getattr(p_b.slot1, "id", None) in SLOT_2_3_LOCKED_IDS:
+            p_b = RotationPair(
+                slot1=p_b.slot2,
+                slot2=p_b.slot1,
+                shared_links=p_b.shared_links,
+                shared_ki_links=p_b.shared_ki_links,
+                synergy_score=p_b.synergy_score,
+            )
+        best_rot_a = p_a
+        best_rot_b = p_b
         best_floaters = cards[4:]
 
     return best_rot_a, best_rot_b, best_floaters
@@ -672,10 +799,13 @@ def check_type_matchup(attacker_element: int, defender_element: int) -> int:
     return DokkanConstraintSolver.check_type_matchup(attacker_element, defender_element)
 
 
+RotationOptimizer = optimize_rotations_for_team
+
 __all__ = [
     "KI_LINKS",
     "TOP_TIER_STAT_LINKS",
     "RotationPair",
+    "RotationOptimizer",
     "calculate_link_synergy",
     "calculate_slot1_def_priority",
     "calculate_slot1_anchor_weight",

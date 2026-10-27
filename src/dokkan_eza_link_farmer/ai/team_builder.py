@@ -52,6 +52,7 @@ from dokkan_eza_link_farmer.ai.synergy import (
     rate_sub_unit,
     select_best_friend_leader,
 )
+from dokkan_eza_link_farmer.ai.tactical_dictionary import SLOT_2_3_LOCKED_IDS
 from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 
 logger = logging.getLogger(__name__)
@@ -228,6 +229,24 @@ class TeamBuilder:
         rot_a, rot_b, floaters = self.optimize_rotations_for_team(
             combat_team, boss_stage=boss_stage
         )
+
+        # Preventive check on SLOT_2_3_LOCKED_IDS: ensure no slot 2/3 locked card ends up in Slot 1
+        if getattr(rot_a.slot1, "id", None) in SLOT_2_3_LOCKED_IDS:
+            rot_a = RotationPair(
+                slot1=rot_a.slot2,
+                slot2=rot_a.slot1,
+                shared_links=rot_a.shared_links,
+                shared_ki_links=rot_a.shared_ki_links,
+                synergy_score=rot_a.synergy_score,
+            )
+        if getattr(rot_b.slot1, "id", None) in SLOT_2_3_LOCKED_IDS:
+            rot_b = RotationPair(
+                slot1=rot_b.slot2,
+                slot2=rot_b.slot1,
+                shared_links=rot_b.shared_links,
+                shared_ki_links=rot_b.shared_ki_links,
+                synergy_score=rot_b.synergy_score,
+            )
 
         def _label_card(c: DokkanCard) -> str:
             badge = (
@@ -570,12 +589,17 @@ def build_team(*args: Any, **kwargs: Any) -> tuple[TeamRecommendation, list[Cand
     return TeamBuilder().build_team(*args, **kwargs)
 
 
+ThreeLevelTeamBuilder = TeamBuilder
+RotationOptimizer = optimize_rotations_for_team
+
 __all__ = [
     "CandidateEvaluation",
     "ConstraintSolverResult",
     "DokkanConstraintSolver",
     "FailureReport",
     "TeamBuilder",
+    "ThreeLevelTeamBuilder",
+    "RotationOptimizer",
     "KI_LINKS",
     "TOP_TIER_STAT_LINKS",
     "ELEMENT_ADVANTAGE",
