@@ -1,5 +1,22 @@
 # Changelog
 
+## [v2.0.0] - 2026-10-28
+
+### Added
+- **AI Tactical Engine Overhaul (i.solver, i.synergy)**: Realistic multi-slot combat damage simulation taking pre-attack vs post-attack defense into account. Cards suffering lethal unmitigated damage (>700k against 2.5M-3.5M boss Super Attacks) are strictly disqualified from Slot 1.
+- **Post-10th Anniversary Mechanics & Tactical Dictionary (i.passive_parser, i.dokkandb_parser, i.card_heuristics)**:
+  - Full passive skill deconstruction extracting unconditional vs timed guard, pre-attack-only damage reduction, on-hit damage reduction, and Ki-dependent defensive thresholds.
+  - Evaluation of active skills, standbys, domain fields, and transformation timelines.
+  - Offline dataset and extraction tools (data/dokkan_cards_post_10th_anniversary.json, data/dokkan_tactical_dictionary.json, data/cards_tactical_matrix.json, data/damage_simulation_benchmarks.json).
+- **Tactical Rich Briefing & Terminal UI (ui.formatters, ui.briefing, ui.cli)**:
+  - Enhanced Rich tables detailing rotation assignments (Slot 1 Tank vs Slot 2 DPS vs Floater).
+  - Clear visual warnings for lethal floater vulnerabilities and pre-attack-only damage reduction dependencies.
+  - Fully updated English and Italian localization bundles (locales/en.yaml, locales/it.yaml).
+- **Unified Quality Gate CLI (scripts/quality_gate.py)**:
+  - Standardized developer toolchain executing 
+uff (lint & format), pyright (strict static typing), and pytest across dual-granularity tiers (--fast sub-20s, --full comprehensive pre-release matrix).
+  - PyInstaller configuration (uild_exe.py) updated with hidden imports for all new AI tactical modules.
+
 ## [v1.9.0] - 2026-10-25
 
 ### Added
