@@ -50,6 +50,7 @@ cli:
     no_events: "No Challenge events found."
     select_event: "Choose the Challenge event to clear:"
     select_stage: "Choose the Stage to challenge:"
+    select_difficulty: "Choose stage difficulty:"
     all_stages: "All Stages (Full Event Clearance)"
     stage_boss_info_title: "🛡️ Stage Boss Telemetry & Mechanics"
     stage_missions_found: "🎯 Stage {stage}: {total} matching missions bundled into {batches} run batches!"

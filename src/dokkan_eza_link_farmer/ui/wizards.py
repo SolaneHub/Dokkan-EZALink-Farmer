@@ -15,6 +15,11 @@ from rich.prompt import Prompt
 if TYPE_CHECKING:
     from dokkan_eza_link_farmer.core.bot_engine import BotEngine
 
+from dokkan_eza_link_farmer.ai.boss_models import (
+    DIFFICULTY_NAMES,
+    infer_difficulty_from_stage_id,
+    parse_difficulty_code,
+)
 from dokkan_eza_link_farmer.automation.tasks.box_scanner import (
     DEFAULT_BOX_SCAN_LOG_PATH,
     DEFAULT_USER_BOX_PATH,
@@ -91,30 +96,103 @@ def _build_event_choices(events: list[dict[str, Any]], limit: int = 50) -> list[
     return choices
 
 
+def _extract_stage_difficulty(s: dict[str, Any] | None) -> int:
+    """Extracts integer difficulty code from a stage dict (0..5), inferring from stage_id if needed."""
+    if not s:
+        return 1
+    diff = s.get("difficulty")
+    if diff is not None:
+        try:
+            return int(diff)
+        except (ValueError, TypeError):
+            pass
+    inferred = infer_difficulty_from_stage_id(s.get("stage_id"))
+    return inferred if inferred is not None else 1
+
+
 def _build_quest_stage_choices(
     quests: list[dict[str, Any]], include_all: bool = False
 ) -> list[Any]:
-    """Builds questionary stage choices from event quests."""
+    """Builds questionary stage choices from event quests with difficulty indicators."""
     choices: list[Any] = []
     for idx, q in enumerate(quests, 1):
         q_name = q.get("quest_name") or f"Stage {idx}"
         stages_arr = q.get("stages", [])
-        st_id = stages_arr[0].get("stage_id") if stages_arr else None
-        title = f"Stage {idx}: {q_name}" + (f" (ID: {st_id})" if st_id else "")
+        diff_names = [
+            DIFFICULTY_NAMES.get(_extract_stage_difficulty(s), f"D{_extract_stage_difficulty(s)}")
+            for s in stages_arr
+        ]
+        diff_summary = f" [{', '.join(diff_names)}]" if diff_names else ""
+        sorted_stages = sorted(stages_arr, key=_extract_stage_difficulty, reverse=True)
+        st_id = sorted_stages[0].get("stage_id") if sorted_stages else None
+        title = f"Stage {idx}: {q_name}{diff_summary}" + (
+            f" (ID: {st_id})" if st_id and not diff_summary else ""
+        )
         choices.append(
             questionary.Choice(
-                title=title, value={"stage_num": idx, "stage_id": st_id, "stage_name": q_name}
+                title=title,
+                value={
+                    "stage_num": idx,
+                    "stage_id": st_id,
+                    "stage_name": q_name,
+                    "stages": stages_arr,
+                    "quest": q,
+                },
             )
         )
     if include_all:
         choices.append(
             questionary.Choice(
                 title=t("cli.challenge.all_stages"),
-                value={"stage_num": 0, "stage_id": None, "stage_name": "All Stages"},
+                value={
+                    "stage_num": 0,
+                    "stage_id": None,
+                    "stage_name": "All Stages",
+                    "stages": [],
+                },
             )
         )
     choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value=None))
     return choices
+
+
+def _build_difficulty_choices(stages: list[dict[str, Any]]) -> list[Any]:
+    """Builds questionary difficulty choices for a selected quest's stages."""
+    sorted_stages = sorted(stages, key=_extract_stage_difficulty, reverse=True)
+    choices: list[Any] = []
+    max_diff = _extract_stage_difficulty(sorted_stages[0]) if sorted_stages else 0
+    for s in sorted_stages:
+        diff_val = _extract_stage_difficulty(s)
+        diff_label = DIFFICULTY_NAMES.get(diff_val, f"Difficulty {diff_val}")
+        act = s.get("act", 0)
+        s_id = s.get("stage_id")
+        prefix = "⭐ " if diff_val == max_diff else ""
+        sta_str = f" (STA: {act})" if act else ""
+        id_str = f" (ID: {s_id})" if s_id else ""
+        title = f"{prefix}{diff_label}{sta_str}{id_str}"
+        choices.append(questionary.Choice(title=title, value=s))
+    choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value=None))
+    return choices
+
+
+def _resolve_stage_by_diff(stages: list[dict[str, Any]], diff_spec: Any) -> dict[str, Any] | None:
+    """Matches a stage by difficulty code/name, defaulting to highest difficulty."""
+    if not stages:
+        return None
+    if diff_spec is None:
+        return max(stages, key=_extract_stage_difficulty)
+    code = parse_difficulty_code(diff_spec)
+    if code is not None:
+        for s in stages:
+            if _extract_stage_difficulty(s) == code:
+                return s
+    diff_str = str(diff_spec).lower()
+    for s in stages:
+        d_val = _extract_stage_difficulty(s)
+        d_name = DIFFICULTY_NAMES.get(d_val, "").lower()
+        if diff_str in d_name or d_name in diff_str:
+            return s
+    return max(stages, key=_extract_stage_difficulty)
 
 
 def handle_eza_interactive(engine: BotEngine, console: Console, args: list | None = None) -> None:
@@ -437,6 +515,7 @@ def handle_challenge_interactive(
         ]
 
         explicit_stage: int | None = None
+        explicit_diff: str | int | None = None
         query_args: list[str] = []
         skip_next = False
         for idx, a in enumerate(raw_query_args):
@@ -455,6 +534,24 @@ def handle_challenge_interactive(
                 if val_str.isdigit():
                     explicit_stage = int(val_str)
                     continue
+            elif low_a in ("--difficulty", "--diff", "-d") and idx + 1 < len(raw_query_args):
+                explicit_diff = str(raw_query_args[idx + 1]).lower()
+                skip_next = True
+                continue
+            elif low_a.startswith(("--difficulty=", "--diff=", "-d=")):
+                explicit_diff = low_a.split("=", 1)[1].lower()
+                continue
+            elif low_a in (
+                "--super3",
+                "--super2",
+                "--super",
+                "--zhard",
+                "--z-hard",
+                "--hard",
+                "--normal",
+            ):
+                explicit_diff = low_a.lstrip("-")
+                continue
             query_args.append(str(a))
 
         if explicit_stage is None and len(query_args) >= 2 and str(query_args[-1]).isdigit():
@@ -515,6 +612,7 @@ def handle_challenge_interactive(
         target_stage_num: int = 1
         target_stage_id: int | None = None
         target_stage_name: str | None = None
+        target_diff: int = 1
 
         if explicit_stage is not None:
             target_stage_num = explicit_stage
@@ -529,7 +627,26 @@ def handle_challenge_interactive(
             )
             if matched_quest:
                 stages_arr = matched_quest.get("stages", [])
-                target_stage_id = stages_arr[0].get("stage_id") if stages_arr else None
+                if explicit_diff is not None:
+                    matched_s = _resolve_stage_by_diff(stages_arr, explicit_diff)
+                    target_stage_id = matched_s.get("stage_id") if matched_s else None
+                    target_diff = _extract_stage_difficulty(matched_s)
+                elif len(stages_arr) > 1 and not auto_confirm:
+                    chosen_diff = questionary.select(
+                        t("cli.challenge.select_difficulty"),
+                        choices=_build_difficulty_choices(stages_arr),
+                        use_arrow_keys=True,
+                        use_jk_keys=False,
+                    ).ask()
+                    if not chosen_diff:
+                        console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
+                        return
+                    target_stage_id = chosen_diff.get("stage_id")
+                    target_diff = _extract_stage_difficulty(chosen_diff)
+                else:
+                    matched_s = _resolve_stage_by_diff(stages_arr, None)
+                    target_stage_id = matched_s.get("stage_id") if matched_s else None
+                    target_diff = _extract_stage_difficulty(matched_s)
                 target_stage_name = matched_quest.get("quest_name")
             else:
                 target_stage_name = f"Stage {explicit_stage}"
@@ -545,12 +662,38 @@ def handle_challenge_interactive(
                 console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
                 return
             target_stage_num = chosen_stage_dict.get("stage_num", 1)
-            target_stage_id = chosen_stage_dict.get("stage_id")
             target_stage_name = chosen_stage_dict.get("stage_name")
+            stages_arr = chosen_stage_dict.get("stages", [])
+
+            if target_stage_num == 0:
+                target_stage_id = None
+                target_diff = 1
+            elif explicit_diff is not None:
+                matched_s = _resolve_stage_by_diff(stages_arr, explicit_diff)
+                target_stage_id = matched_s.get("stage_id") if matched_s else None
+                target_diff = _extract_stage_difficulty(matched_s)
+            elif len(stages_arr) > 1:
+                chosen_diff = questionary.select(
+                    t("cli.challenge.select_difficulty"),
+                    choices=_build_difficulty_choices(stages_arr),
+                    use_arrow_keys=True,
+                    use_jk_keys=False,
+                ).ask()
+                if not chosen_diff:
+                    console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
+                    return
+                target_stage_id = chosen_diff.get("stage_id")
+                target_diff = _extract_stage_difficulty(chosen_diff)
+            else:
+                matched_s = _resolve_stage_by_diff(stages_arr, None)
+                target_stage_id = matched_s.get("stage_id") if matched_s else None
+                target_diff = _extract_stage_difficulty(matched_s)
         elif quests:
             target_stage_num = 1
             stages_arr = quests[0].get("stages", [])
-            target_stage_id = stages_arr[0].get("stage_id") if stages_arr else None
+            matched_s = _resolve_stage_by_diff(stages_arr, explicit_diff)
+            target_stage_id = matched_s.get("stage_id") if matched_s else None
+            target_diff = _extract_stage_difficulty(matched_s)
             target_stage_name = quests[0].get("quest_name")
 
         if target_stage_id and ev_id:
@@ -586,8 +729,11 @@ def handle_challenge_interactive(
                 console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
                 return
 
-        stage_str = f"Stage {target_stage_num}" + (
-            f": {target_stage_name}" if target_stage_name else ""
+        diff_str = DIFFICULTY_NAMES.get(target_diff, f"Diff {target_diff}")
+        stage_str = (
+            f"Stage {target_stage_num}"
+            + (f": {target_stage_name}" if target_stage_name else "")
+            + f" [{diff_str}]"
         )
         console.print(
             f"[bold green]{t('cli.challenge.starting', name=ev_name, stage=stage_str)}[/bold green]"
@@ -603,6 +749,8 @@ def handle_challenge_interactive(
             stage_num=target_stage_num or 1,
             stage_id=target_stage_id,
             stage_name=target_stage_name,
+            preferred_difficulty=diff_str.lower(),
+            difficulty=target_diff,
         )
 
 
@@ -741,10 +889,30 @@ def select_challenge_boss_stage(
             use_arrow_keys=True,
             use_jk_keys=False,
         ).ask()
-        if not chosen_stage or not chosen_stage.get("stage_id"):
+        if not chosen_stage:
             return None
 
-        target_stage_id = chosen_stage["stage_id"]
+        stages_arr = chosen_stage.get("stages", [])
+        target_stage_id = chosen_stage.get("stage_id")
+        target_diff = 1
+        if len(stages_arr) > 1:
+            chosen_diff = questionary.select(
+                t("cli.challenge.select_difficulty"),
+                choices=_build_difficulty_choices(stages_arr),
+                use_arrow_keys=True,
+                use_jk_keys=False,
+            ).ask()
+            if not chosen_diff:
+                return None
+            target_stage_id = chosen_diff.get("stage_id")
+            target_diff = _extract_stage_difficulty(chosen_diff)
+        elif stages_arr:
+            target_stage_id = stages_arr[0].get("stage_id")
+            target_diff = _extract_stage_difficulty(stages_arr[0])
+
+        if not target_stage_id:
+            return None
+
         boss_info = engine.dokkandb.get_stage_boss_info(ev_id, target_stage_id)
         if not boss_info or not boss_info.get("phases"):
             return BossStage(
@@ -753,9 +921,17 @@ def select_challenge_boss_stage(
                 stage_name=chosen_stage.get("stage_name")
                 or f"Stage {chosen_stage.get('stage_num')}",
                 event_name=ev_name,
-                difficulty=4,
+                difficulty=target_diff,
                 phases=[],
             )
+        boss_info.setdefault("stage_id", target_stage_id)
+        boss_info.setdefault("event_id", ev_id)
+        boss_info.setdefault(
+            "stage_name",
+            chosen_stage.get("stage_name") or f"Stage {chosen_stage.get('stage_num')}",
+        )
+        boss_info.setdefault("event_name", ev_name)
+        boss_info.setdefault("difficulty", target_diff)
         return BossStage.from_dokkandb(boss_info)
     return None
 

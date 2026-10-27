@@ -75,9 +75,11 @@ def format_team_summary_table(
     rot_role_map: dict[int, str] = {}
     if len(team_cards) == 6:
         try:
-            rot_a, rot_b, floaters = optimize_rotations_for_team(team_cards)
+            rot_a, rot_b, floaters = optimize_rotations_for_team(team_cards, boss_stage=boss_stage)
 
             def _slot2_role_label(c: DokkanCard, rot_name: str) -> str:
+                if getattr(c, "is_slot_1_or_3_only", False):
+                    return f"Slot 2 Suboptimal ({rot_name})"
                 stacks = c.has_stacking_def or bool(
                     c.base_form and c.base_form.sa_tags and c.base_form.sa_tags.stacks_def
                 )
@@ -91,9 +93,31 @@ def format_team_summary_table(
                 else:
                     return f"Slot 2 DPS ({rot_name})"
 
-            rot_role_map[rot_a.slot1.id] = "Slot 1 Tank (Rot A)"
+            rot_a_s1_viable = DokkanConstraintSolver.is_slot1_viable(
+                rot_a.slot1, boss_stage=boss_stage
+            )
+            rot_b_s1_viable = DokkanConstraintSolver.is_slot1_viable(
+                rot_b.slot1, boss_stage=boss_stage
+            )
+            rot_a_s1_label = (
+                "Slot 1 Specialist / Tank (Rot A)"
+                if getattr(rot_a.slot1, "is_slot_1_or_3_only", False)
+                or getattr(rot_a.slot1, "has_slot_1_buff", False)
+                else "Slot 1 Tank (Rot A)"
+            )
+            rot_b_s1_label = (
+                "Slot 1 Specialist / Tank (Rot B)"
+                if getattr(rot_b.slot1, "is_slot_1_or_3_only", False)
+                or getattr(rot_b.slot1, "has_slot_1_buff", False)
+                else "Slot 1 Tank (Rot B)"
+            )
+            rot_role_map[rot_a.slot1.id] = (
+                rot_a_s1_label if rot_a_s1_viable else "Slot 2 / Partner (Rot A)"
+            )
             rot_role_map[rot_a.slot2.id] = _slot2_role_label(rot_a.slot2, "Rot A")
-            rot_role_map[rot_b.slot1.id] = "Slot 1 Tank (Rot B)"
+            rot_role_map[rot_b.slot1.id] = (
+                rot_b_s1_label if rot_b_s1_viable else "Slot 2 / Partner (Rot B)"
+            )
             rot_role_map[rot_b.slot2.id] = _slot2_role_label(rot_b.slot2, "Rot B")
             for fl in floaters:
                 if fl.has_support or (
@@ -106,6 +130,10 @@ def format_team_summary_table(
                     fl.base_form and fl.base_form.sa_tags and fl.base_form.sa_tags.stacks_def
                 ):
                     fl_role = "Floater (Stacker)"
+                elif getattr(fl, "has_slot_3_buff", False) or getattr(
+                    fl, "is_slot_1_or_3_only", False
+                ):
+                    fl_role = "Floater Specialist (Slot 3)"
                 else:
                     fl_role = "Floater (Slot 3)"
                 rot_role_map[fl.id] = fl_role
@@ -187,7 +215,7 @@ def format_team_summary_table(
         if c.id in rot_role_map:
             role_str = rot_role_map[c.id]
         else:
-            is_s1 = DokkanConstraintSolver.is_slot1_viable(c)
+            is_s1 = DokkanConstraintSolver.is_slot1_viable(c, boss_stage=boss_stage)
             stacks = bool(
                 (c.base_form and c.base_form.sa_tags and c.base_form.sa_tags.stacks_def)
                 or c.has_stacking_def
@@ -219,25 +247,60 @@ def format_team_summary_table(
         else:
             guard_label = "No Guard"
 
-        dr_pct = max(
+        team_def = (
+            c.calculate_team_conditional_defense(team_cards)
+            if hasattr(c, "calculate_team_conditional_defense")
+            else {}
+        )
+        base_dr = max(
             c.damage_reduction_percent,
             c.base_form.passive_tags.dr_base_percent
             if c.base_form and c.base_form.passive_tags
             else 0,
         )
+        team_dr = team_def.get("dr", base_dr)
+        dr_pct = max(base_dr, team_dr)
+
+        max_dr = getattr(c, "max_damage_reduction_percent", 0)
+        if (
+            c.base_form
+            and c.base_form.passive_tags
+            and c.base_form.passive_tags.team_conditional_buffs
+        ):
+            cond_sum = c.base_form.passive_tags.dr_base_percent + sum(
+                b.dr_percent
+                for b in c.base_form.passive_tags.team_conditional_buffs
+                if b.dr_percent
+            )
+            if cond_sum > max_dr:
+                max_dr = cond_sum
+
         dr_limit = getattr(c, "dr_turns_limit", None)
         perm_dr = getattr(c, "permanent_damage_reduction_percent", 0)
         if dr_pct > 0:
-            if getattr(c, "has_on_hit_dr", False):
+            if max_dr > dr_pct:
+                dr_label = f"DR {dr_pct}%~{max_dr}%"
+            elif getattr(c, "has_on_hit_dr", False):
                 dr_label = f"DR {dr_pct}% (On-Hit)"
             elif getattr(c, "is_once_only_dr", False):
                 dr_label = f"DR {dr_pct}% (1-Hit)"
+            elif getattr(c, "has_pre_attack_only_dr", False) and not getattr(
+                c, "is_dr_permanent", False
+            ):
+                ki_s = (
+                    f" {c.pre_attack_dr_ki_req}+ Ki"
+                    if getattr(c, "pre_attack_dr_ki_req", None)
+                    else ""
+                )
+                dr_label = f"DR {dr_pct}% (Pre-Atk{ki_s})"
             elif perm_dr == dr_pct and getattr(c, "is_dr_permanent", False):
                 dr_label = f"DR {dr_pct}% (Perm)"
             elif dr_limit:
                 dr_label = f"DR {dr_pct}% ({dr_limit}T)"
             else:
                 dr_label = f"DR {dr_pct}%"
+        elif max_dr > 0:
+            dr_label = f"DR fino a {max_dr}%"
         else:
             dr_label = "DR 0%"
 
@@ -318,9 +381,11 @@ def render_team_summary_table_rich(
     rot_role_map: dict[int, str] = {}
     if len(team_cards) == 6:
         try:
-            rot_a, rot_b, floaters = optimize_rotations_for_team(team_cards)
+            rot_a, rot_b, floaters = optimize_rotations_for_team(team_cards, boss_stage=boss_stage)
 
             def _slot2_role_label(c: DokkanCard, rot_name: str) -> str:
+                if getattr(c, "is_slot_1_or_3_only", False):
+                    return f"Slot 2 Suboptimal ({rot_name})"
                 stacks = c.has_stacking_def or bool(
                     c.base_form and c.base_form.sa_tags and c.base_form.sa_tags.stacks_def
                 )
@@ -334,9 +399,31 @@ def render_team_summary_table_rich(
                 else:
                     return f"Slot 2 DPS ({rot_name})"
 
-            rot_role_map[rot_a.slot1.id] = "Slot 1 Tank (Rot A)"
+            rot_a_s1_viable = DokkanConstraintSolver.is_slot1_viable(
+                rot_a.slot1, boss_stage=boss_stage
+            )
+            rot_b_s1_viable = DokkanConstraintSolver.is_slot1_viable(
+                rot_b.slot1, boss_stage=boss_stage
+            )
+            rot_a_s1_label = (
+                "Slot 1 Specialist / Tank (Rot A)"
+                if getattr(rot_a.slot1, "is_slot_1_or_3_only", False)
+                or getattr(rot_a.slot1, "has_slot_1_buff", False)
+                else "Slot 1 Tank (Rot A)"
+            )
+            rot_b_s1_label = (
+                "Slot 1 Specialist / Tank (Rot B)"
+                if getattr(rot_b.slot1, "is_slot_1_or_3_only", False)
+                or getattr(rot_b.slot1, "has_slot_1_buff", False)
+                else "Slot 1 Tank (Rot B)"
+            )
+            rot_role_map[rot_a.slot1.id] = (
+                rot_a_s1_label if rot_a_s1_viable else "Slot 2 / Partner (Rot A)"
+            )
             rot_role_map[rot_a.slot2.id] = _slot2_role_label(rot_a.slot2, "Rot A")
-            rot_role_map[rot_b.slot1.id] = "Slot 1 Tank (Rot B)"
+            rot_role_map[rot_b.slot1.id] = (
+                rot_b_s1_label if rot_b_s1_viable else "Slot 2 / Partner (Rot B)"
+            )
             rot_role_map[rot_b.slot2.id] = _slot2_role_label(rot_b.slot2, "Rot B")
             for fl in floaters:
                 if fl.has_support or (
@@ -349,6 +436,10 @@ def render_team_summary_table_rich(
                     fl.base_form and fl.base_form.sa_tags and fl.base_form.sa_tags.stacks_def
                 ):
                     fl_role = "Floater (Stacker)"
+                elif getattr(fl, "has_slot_3_buff", False) or getattr(
+                    fl, "is_slot_1_or_3_only", False
+                ):
+                    fl_role = "Floater Specialist (Slot 3)"
                 else:
                     fl_role = "Floater (Slot 3)"
                 rot_role_map[fl.id] = fl_role
@@ -403,7 +494,7 @@ def render_team_summary_table_rich(
             else:
                 role_text = Text(role_label, style="dim yellow")
         else:
-            is_s1 = DokkanConstraintSolver.is_slot1_viable(c)
+            is_s1 = DokkanConstraintSolver.is_slot1_viable(c, boss_stage=boss_stage)
             stacks = bool(
                 (c.base_form and c.base_form.sa_tags and c.base_form.sa_tags.stacks_def)
                 or c.has_stacking_def
@@ -448,6 +539,15 @@ def render_team_summary_table_rich(
                 dr_part = f"DR {dr_pct}% (On-Hit)"
             elif getattr(c, "is_once_only_dr", False):
                 dr_part = f"DR {dr_pct}% (1-Hit)"
+            elif getattr(c, "has_pre_attack_only_dr", False) and not getattr(
+                c, "is_dr_permanent", False
+            ):
+                ki_s = (
+                    f" {c.pre_attack_dr_ki_req}+ Ki"
+                    if getattr(c, "pre_attack_dr_ki_req", None)
+                    else ""
+                )
+                dr_part = f"DR {dr_pct}% (Pre-Atk{ki_s})"
             elif perm_dr == dr_pct and getattr(c, "is_dr_permanent", False):
                 dr_part = f"DR {dr_pct}% (Perm)"
             elif dr_limit:
@@ -801,7 +901,7 @@ def render_stage_intel_rich(boss_stage: Any) -> Any:
     return Panel(
         content,
         title=title,
-        subtitle=f"[dim]Fasi totali: {len(phases)} | Difficoltà: {getattr(boss_stage, 'difficulty', 1)}[/dim]",
+        subtitle=f"[dim]Fasi totali: {len(phases)} | Difficoltà: {getattr(boss_stage, 'difficulty_name', getattr(boss_stage, 'difficulty', 1))}[/dim]",
         border_style="cyan",
     )
 
@@ -902,6 +1002,40 @@ def generate_deterministic_tactical_guide(
         warnings_section += (
             "\n\n### 🛑 Allerta Critica Categoria Nemica (Rischio Oneshot)\n"
             + "\n".join(cond_warn_lines)
+        )
+
+    slot1_floater_warn_lines = []
+    for fl in floaters:
+        if getattr(fl, "has_slot_1_only_guard", False) or getattr(fl, "has_slot_1_only_dr", False):
+            slot1_floater_warn_lines.append(
+                f"- 🛑 **{_name_with_badge(fl)}**: La sua guardia o riduzione del danno si attiva SOLO come 1° attaccante del turno ('As the 1st attacker in a turn'). Essendo in **Slot 3 (Floater)**, la guardia/DR è COMPLETAMENTE DISATTIVATA (0% guardia, 0% DR)! Subirà danno pieno e rischia il oneshot istantaneo se riceve attacchi in Slot 3!"
+            )
+    if slot1_floater_warn_lines:
+        warnings_section += (
+            "\n\n### 🛑 Allerta Critica Floater con Meccanica Slot 1 (Rischio Oneshot Assoluto)\n"
+            + "\n".join(slot1_floater_warn_lines)
+        )
+
+    pre_attack_warn_lines = []
+    all_team_units = [rot_a.slot1, rot_a.slot2, rot_b.slot1, rot_b.slot2] + list(floaters)
+    seen_pa_ids = set()
+    for u in all_team_units:
+        if u.id in seen_pa_ids:
+            continue
+        seen_pa_ids.add(u.id)
+        if getattr(u, "has_pre_attack_only_dr", False) and not getattr(u, "is_dr_permanent", False):
+            ki_txt = (
+                f" con {u.pre_attack_dr_ki_req}+ Ki"
+                if getattr(u, "pre_attack_dr_ki_req", None)
+                else ""
+            )
+            pre_attack_warn_lines.append(
+                f"- 🛑 **{_name_with_badge(u)}**: La sua riduzione danno ({u.damage_reduction_percent}%) si attiva SOLO prima di attaccare{ki_txt}. Dopo aver lanciato l'attacco, la riduzione CESSA (0% DR)! Attacchi nemici successivi (post-attacco) infliggeranno danno pieno e letale!"
+            )
+    if pre_attack_warn_lines:
+        warnings_section += (
+            "\n\n### 🛑 Allerta Critica Difesa Pre-Attacco (0% DR Post-Attacco)\n"
+            + "\n".join(pre_attack_warn_lines)
         )
 
     return (

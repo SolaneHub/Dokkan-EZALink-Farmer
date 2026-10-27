@@ -38,7 +38,9 @@ def _get_flag_val(flags: list[str], *flag_names: str) -> str | None:
     return None
 
 
-def _resolve_boss_stage(dokkandb: Any, target_stage: Any) -> Any | None:
+def _resolve_boss_stage(
+    dokkandb: Any, target_stage: Any, difficulty: int | str | None = None
+) -> Any | None:
     from dokkan_eza_link_farmer.ai.boss_catalog import get_boss_stage
     from dokkan_eza_link_farmer.ai.models import BossStage
 
@@ -47,7 +49,7 @@ def _resolve_boss_stage(dokkandb: Any, target_stage: Any) -> Any | None:
     if target_stage is None:
         return None
     with contextlib.suppress(Exception):
-        return get_boss_stage(target_stage, dokkandb=dokkandb)
+        return get_boss_stage(target_stage, dokkandb=dokkandb, difficulty=difficulty)
     query = str(target_stage).strip().lower()
     with contextlib.suppress(Exception):
         for ev in dokkandb.get_challenge_events(active_only=False):
@@ -57,12 +59,31 @@ def _resolve_boss_stage(dokkandb: Any, target_stage: Any) -> Any | None:
                 det = dokkandb.get_event_details(int(ev_id))
                 if det and det.get("quests"):
                     stages = det["quests"][0].get("stages", [])
-                    if stages and stages[0].get("stage_id"):
-                        b_info = dokkandb.get_stage_boss_info(
-                            int(ev_id), int(stages[0]["stage_id"])
+                    if stages:
+                        from dokkan_eza_link_farmer.ai.boss_models import parse_difficulty_code
+
+                        diff_code = (
+                            parse_difficulty_code(difficulty) if difficulty is not None else None
                         )
-                        if b_info and b_info.get("phases"):
-                            return BossStage.from_dokkandb(b_info)
+                        chosen_s = None
+                        if diff_code is not None:
+                            chosen_s = next(
+                                (s for s in stages if int(s.get("difficulty") or 0) == diff_code),
+                                None,
+                            )
+                        if not chosen_s:
+                            sorted_stages = sorted(
+                                stages,
+                                key=lambda s: int(s.get("difficulty") or 0),
+                                reverse=True,
+                            )
+                            chosen_s = sorted_stages[0]
+                        if chosen_s.get("stage_id"):
+                            b_info = dokkandb.get_stage_boss_info(
+                                int(ev_id), int(chosen_s["stage_id"])
+                            )
+                            if b_info and b_info.get("phases"):
+                                return BossStage.from_dokkandb(b_info)
     return None
 
 
@@ -324,8 +345,14 @@ class TerminalCLI:
         args = args or []
         force = "--force" in args or "-f" in args
         target_file = next((a for a in args if not a.startswith("-")), None)
+        mode_desc = (
+            "Refreshing details from DokkanDB (adaptive rate limiting & exponential backoff)"
+            if force
+            else "Syncing character box details using disk cache (instant)"
+        )
         self.console.print(
-            "[cyan]Enriching character box with deep card details (leader skills, categories, passives)...[/cyan]"
+            f"[cyan]Enriching character box with deep card details (leader skills, categories, passives)...[/cyan]\n"
+            f"[dim]{mode_desc}...[/dim]"
         )
         try:
             enriched = DokkanSyncer().sync_box_details(

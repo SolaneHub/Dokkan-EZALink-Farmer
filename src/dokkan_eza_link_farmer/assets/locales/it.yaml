@@ -50,6 +50,7 @@ cli:
     no_events: "Nessun evento Challenge trovato."
     select_event: "Scegli l'evento da completare:"
     select_stage: "Scegli lo stage dell'evento da affrontare:"
+    select_difficulty: "Scegli la difficoltà dello stage:"
     all_stages: "Tutti gli Stage (Completamento Totale Evento)"
     stage_boss_info_title: "🛡️ Boss Telemetry & Informazioni Stage"
     stage_missions_found: "🎯 Stage {stage}: {total} missioni combacianti raggruppate in {batches} run!"

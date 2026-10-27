@@ -8,6 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from dokkan_eza_link_farmer.ai.boss_models import DIFFICULTY_NAMES
 from dokkan_eza_link_farmer.core.i18n import t
 
 
@@ -21,8 +22,12 @@ def render_stage_boss_info(
     c = console or Console()
     if not boss_info or not boss_info.get("phases"):
         return
+    diff_val = boss_info.get("difficulty")
+    diff_str = (
+        f" | {DIFFICULTY_NAMES.get(diff_val, f'Diff {diff_val}')}" if diff_val is not None else ""
+    )
     t_boss = Table(
-        title=f"{t('cli.challenge.stage_boss_info_title')} - {target_stage_name} (Stage {target_stage_num})",
+        title=f"{t('cli.challenge.stage_boss_info_title')} - {target_stage_name} (Stage {target_stage_num}{diff_str})",
         border_style="magenta",
         expand=True,
     )
@@ -273,15 +278,45 @@ def render_team_presentation(
             return Text.assemble(base, badge)
         return base
 
-    def _get_card_tactical_role(card: Any, is_slot1: bool = False) -> str:
+    def _get_card_tactical_role(
+        card: Any, is_slot1: bool = False, team: list[Any] | None = None
+    ) -> str:
         if card is None:
             return "🛡️ Difesa solida" if is_slot1 else "💥 Attaccante"
         tags = []
         if getattr(card, "has_guard", False):
             tags.append("🛡️ Guardia")
-        dr = getattr(card, "damage_reduction_percent", 0)
-        if dr > 0:
-            tags.append(f"DR {dr}%")
+
+        # Evaluate dynamic team-conditional DR
+        team_def = {}
+        if team and hasattr(card, "calculate_team_conditional_defense"):
+            team_def = card.calculate_team_conditional_defense(team)
+
+        base_dr = getattr(card, "damage_reduction_percent", 0)
+        team_dr = team_def.get("dr", base_dr)
+
+        # Calculate max potential DR with full conditions/orbs
+        max_dr = getattr(card, "max_damage_reduction_percent", 0)
+        if (
+            hasattr(card, "base_form")
+            and card.base_form
+            and hasattr(card.base_form, "passive_tags")
+        ):
+            pt = card.base_form.passive_tags
+            if pt.team_conditional_buffs:
+                cond_sum = pt.dr_base_percent + sum(
+                    b.dr_percent for b in pt.team_conditional_buffs if b.dr_percent
+                )
+                if cond_sum > max_dr:
+                    max_dr = cond_sum
+
+        if team_dr > 0:
+            if max_dr > team_dr:
+                tags.append(f"DR {team_dr}%~{max_dr}%")
+            else:
+                tags.append(f"DR {team_dr}%")
+        elif max_dr > 0:
+            tags.append(f"DR fino a {max_dr}%")
         elif getattr(card, "has_damage_reduction", False):
             tags.append("DR")
         if getattr(card, "has_target_taunt", False):
@@ -316,12 +351,14 @@ def render_team_presentation(
     t_team.add_column("Ruolo Tattico & Kit", style="green", ratio=3, no_wrap=False)
     t_team.add_column("Sinergia Link & Note", style="dim", ratio=3, no_wrap=False)
 
+    all_team = getattr(rec, "all_cards", None)
+
     # Rotazione A
     t_team.add_row(
         "Rotazione A",
         "[bold red]Slot 1 (Tank)[/bold red]",
         _get_card_badge(rec.rotation_a.slot1, rec.leader, rec.friend_leader, is_floater=False),
-        _get_card_tactical_role(rec.rotation_a.slot1, is_slot1=True),
+        _get_card_tactical_role(rec.rotation_a.slot1, is_slot1=True, team=all_team),
         f"🔗 {', '.join(rec.rotation_a.shared_links[:4])}"
         if rec.rotation_a.shared_links
         else "Difensore principale",
@@ -330,7 +367,7 @@ def render_team_presentation(
         "",
         "[bold yellow]Slot 2 (DPS)[/bold yellow]",
         _get_card_badge(rec.rotation_a.slot2, rec.leader, rec.friend_leader, is_floater=False),
-        _get_card_tactical_role(rec.rotation_a.slot2, is_slot1=False),
+        _get_card_tactical_role(rec.rotation_a.slot2, is_slot1=False, team=all_team),
         f"⭐ Sinergia: {rec.rotation_a.synergy_score:.1f} ({len(rec.rotation_a.shared_links)} link)",
     )
 
@@ -341,7 +378,7 @@ def render_team_presentation(
         "Rotazione B",
         "[bold red]Slot 1 (Tank)[/bold red]",
         _get_card_badge(rec.rotation_b.slot1, rec.leader, rec.friend_leader, is_floater=False),
-        _get_card_tactical_role(rec.rotation_b.slot1, is_slot1=True),
+        _get_card_tactical_role(rec.rotation_b.slot1, is_slot1=True, team=all_team),
         f"🔗 {', '.join(rec.rotation_b.shared_links[:4])}"
         if rec.rotation_b.shared_links
         else "Difensore principale",
@@ -350,7 +387,7 @@ def render_team_presentation(
         "",
         "[bold yellow]Slot 2 (DPS)[/bold yellow]",
         _get_card_badge(rec.rotation_b.slot2, rec.leader, rec.friend_leader, is_floater=False),
-        _get_card_tactical_role(rec.rotation_b.slot2, is_slot1=False),
+        _get_card_tactical_role(rec.rotation_b.slot2, is_slot1=False, team=all_team),
         f"⭐ Sinergia: {rec.rotation_b.synergy_score:.1f} ({len(rec.rotation_b.shared_links)} link)",
     )
 
@@ -362,7 +399,7 @@ def render_team_presentation(
             "Floaters" if idx == 1 else "",
             f"[dim]Slot 3 (#{idx})[/dim]",
             _get_card_badge(fl, rec.leader, rec.friend_leader, is_floater=True),
-            _get_card_tactical_role(fl, is_slot1=False),
+            _get_card_tactical_role(fl, is_slot1=False, team=all_team),
             "Ruota ogni 3 turni (Support / Flex)",
         )
 
