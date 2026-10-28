@@ -573,8 +573,13 @@ class Vision:
     def is_filter_dialog_open(self, screen: np.ndarray) -> bool:
         """Determines if the Filter / Sort modal is currently displayed."""
         return (
-            self.find_template(screen, "button_remove_all", threshold=0.80) is not None
-            or self.find_template(screen, "header_link_skill_level", threshold=0.80) is not None
+            self.find_template(screen, "button_remove_all", threshold=0.75) is not None
+            or self.find_template(screen, "header_link_skill_level", threshold=0.75) is not None
+            or self.find_template(screen, "btn_released_selected", threshold=0.75) is not None
+            or self.find_template(screen, "btn_ur_unselected", threshold=0.75) is not None
+            or self.find_template(screen, "btn_ur_selected", threshold=0.75) is not None
+            or self.find_template(screen, "btn_lr_unselected", threshold=0.75) is not None
+            or self.find_template(screen, "btn_lr_selected", threshold=0.75) is not None
         )
 
     def get_link_level_filter_status(self, screen: np.ndarray) -> dict[str, Any]:
@@ -706,13 +711,26 @@ class Vision:
     def find_yellow_sort_button(self, screen: np.ndarray) -> tuple[int, int] | None:
         """
         Locates the yellow/gold Display Order & Filter button in the bottom right of the Character Box / Team Formation screen.
-        First tries template matching for 'tag_sort_released'.
-        If not found, falls back to the exact bottom-right position (X: ~80%, Y: ~96%).
+        First tries template matching for 'tag_sort_released' and 'tag_filter_on'.
+        If neither matches, checks green back button to align Y coordinate.
+        Finally falls back to aspect-ratio adapted bottom-right coordinates.
         """
-        m = self.find_template(screen, "tag_sort_released", threshold=0.75)
+        m = self.find_template(screen, "tag_sort_released", threshold=0.70) or self.find_template(
+            screen, "tag_filter_on", threshold=0.70
+        )
         if m:
             return (m[0], m[1])
+
         h, w = screen.shape[:2]
+        back_btn = self.find_template(screen, "button_back_green", threshold=0.70)
+        if back_btn:
+            return (int(w * 0.79), int(back_btn[1]))
+
+        aspect = h / float(w) if w > 0 else 1.77
+        if aspect >= 1.85:
+            # Modern tall display (e.g. 1080x2400)
+            return (int(w * 0.79), int(h * 0.760))
+        # Standard 16:9 display (e.g. 1080x1920)
         return (int(w * 0.80), int(h * 0.958))
 
     def is_sort_released(self, screen: np.ndarray) -> bool:
