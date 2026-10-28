@@ -1471,9 +1471,12 @@ class TestMultiEnemyAdvisorAndBriefing:
         rows = list(table.rows)
         assert len(rows) == 2
 
-        # Check column 1 (Boss Nemico) for phase 1
+        # Check column 1 (Boss Nemico / Boss Enemy) for phase 1
         p1_boss_text = table.columns[1]._cells[0]
         plain_text = p1_boss_text.plain if hasattr(p1_boss_text, "plain") else str(p1_boss_text)
-        assert "👥 5 Nemici (Rainbow (5 Enemies: All 5 Types))" in plain_text
+        assert (
+            "👥 5 Nemici (Rainbow (5 Enemies: All 5 Types))" in plain_text
+            or "👥 5 Enemies (Rainbow (5 Enemies: All 5 Types))" in plain_text
+        )
         assert "• [AGL] Cell Jr. (AGL)" in plain_text
         assert "• [STR] Cell Jr. (STR)" in plain_text

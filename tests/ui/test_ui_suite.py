@@ -251,8 +251,8 @@ class TestUIBriefing:
         console, buf = _create_test_console()
         briefing.render_team_presentation(rec, console=console)
         out = buf.getvalue()
-        assert "Rotazione A" in out
-        assert "Rotazione B" in out
+        assert "Rotation A" in out or "Rotazione A" in out
+        assert "Rotation B" in out or "Rotazione B" in out
         assert "Leader • Floater" in out
         assert "Friend • Floater" in out
 
@@ -343,7 +343,7 @@ class TestUIBriefing:
 
         briefing.render_team_presentation(MockRec(), console=console, shortlist=[MockCand()])
         out = buf.getvalue()
-        assert "Rotazione A" in out
+        assert "Rotazione A" in out or "Rotation A" in out
         assert "Good sub" in out
         assert "8.5" in out
 
@@ -417,22 +417,42 @@ class TestUIWizards:
             wizards.handle_eza_interactive(engine, console, None)
             engine.start_eza_farm.assert_not_called()
 
-    def test_select_challenge_boss_stage_preset_and_cancellation(self):
+    def test_select_challenge_boss_stage_selection_and_cancellation(self):
         engine = MagicMock()
+        engine.dokkandb.get_challenge_events.return_value = [{"id": 100, "name": "Test Event"}]
+        engine.dokkandb.get_event_details.return_value = {
+            "quests": [
+                {
+                    "quest_id": 1,
+                    "quest_name": "Stage 1",
+                    "stages": [{"stage_id": 1001, "difficulty": 1}],
+                }
+            ]
+        }
+        engine.dokkandb.get_stage_boss_info.return_value = {
+            "phases": [{"phase_index": 1, "bosses": [{"name": "Test Boss", "type_name": "AGL"}]}]
+        }
         console, _ = _create_test_console()
         with patch("questionary.select") as mock_select:
             mock_select.side_effect = [
-                MagicMock(ask=MagicMock(return_value="preset")),
-                MagicMock(ask=MagicMock(return_value="rz_broly")),
+                MagicMock(ask=MagicMock(return_value={"id": 100, "name": "Test Event"})),
+                MagicMock(
+                    ask=MagicMock(
+                        return_value={
+                            "stage_id": 1001,
+                            "quest_name": "Stage 1",
+                            "stages": [{"stage_id": 1001}],
+                        }
+                    )
+                ),
             ]
             stage = wizards.select_challenge_boss_stage(engine, console)
             assert stage is not None
-            assert "broly" in str(stage.stage_id).lower() or "broly" in stage.stage_name.lower()
+            assert stage.stage_id == 1001
 
         with patch("questionary.select") as mock_select:
             mock_select.side_effect = [
-                MagicMock(ask=MagicMock(return_value="preset")),
-                MagicMock(ask=MagicMock(side_effect=KeyboardInterrupt)),
+                MagicMock(ask=MagicMock(return_value=None)),
             ]
             res = wizards.select_challenge_boss_stage(engine, console)
             assert res is None
@@ -481,8 +501,20 @@ class TestUIWizards:
             mock_select.return_value.ask.side_effect = KeyboardInterrupt
             wizards.ai_build_team(engine, console, query="")
 
+        with (
+            patch("questionary.select") as mock_select,
+            patch("questionary.text") as mock_text,
+        ):
+            mock_select.return_value.ask.return_value = "cancel"
+            wizards.ai_build_team(engine, console, query="")
+            mock_text.assert_not_called()
+
         with patch("questionary.select") as mock_select:
             mock_select.side_effect = KeyboardInterrupt
+            wizards.handle_ai_interactive(engine, console, args=[])
+
+        with patch("questionary.select") as mock_select:
+            mock_select.return_value.ask.return_value = "cancel"
             wizards.handle_ai_interactive(engine, console, args=[])
 
     def test_handle_box_scan_interactive_cancellation_and_custom_prompt(self):

@@ -1150,7 +1150,8 @@ class TestDokkanAI:
         rot_tables = [
             obj
             for obj in printed_objects
-            if isinstance(obj, Table) and "Rotazione" in [c.header for c in obj.columns]
+            if isinstance(obj, Table)
+            and any(h in [c.header for c in obj.columns] for h in ("Rotazione", "Rotation"))
         ]
         assert len(rot_tables) == 1
         table = rot_tables[0]
@@ -1158,11 +1159,11 @@ class TestDokkanAI:
 
         # Check column properties
         col_names = [c.header for c in table.columns]
-        assert "Rotazione" in col_names
-        assert "Posizione" in col_names
-        assert "Personaggio" in col_names
+        assert any(h in col_names for h in ("Rotazione", "Rotation"))
+        assert any(h in col_names for h in ("Posizione", "Position"))
+        assert any(h in col_names for h in ("Personaggio", "Character"))
 
-        p_col = next(c for c in table.columns if c.header == "Personaggio")
+        p_col = next(c for c in table.columns if c.header in ("Personaggio", "Character"))
         assert p_col.no_wrap is False
 
         # 2. Verify distinction between Leader and Friend in floaters
