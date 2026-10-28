@@ -21,6 +21,7 @@ from dokkan_eza_link_farmer.ai.models import (
     SATags,
     TeamConditionalBuff,
 )
+from dokkan_eza_link_farmer.core.system_tools import AppPaths
 
 logger = logging.getLogger(__name__)
 
@@ -1152,12 +1153,15 @@ class DokkanSyncer:
 
     def __init__(self, cache_dir: str | None = None) -> None:
         if cache_dir is None:
-            cache_dir = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache")
+            cache_dir = AppPaths.get_cache_dir()
+            default_user_box = AppPaths.get_user_box_path()
+        else:
+            default_user_box = os.path.join(os.path.abspath(cache_dir), "user_box.json")
         self.cache_dir = os.path.abspath(cache_dir)
         self.thumbs_dir = os.path.join(self.cache_dir, "thumbs")
         self.cards_dir = os.path.join(self.cache_dir, "cards")
         self.catalog_cache_file = os.path.join(self.cache_dir, "dokkandb_catalog.json")
-        self.user_box_file = os.path.join(self.cache_dir, "user_box.json")
+        self.user_box_file = default_user_box
         self.categories_cache_file = os.path.join(self.cache_dir, "dokkandb_categories.json")
 
         self._ensure_dirs()
@@ -1650,8 +1654,14 @@ class DokkanSyncer:
         """
         box_path = user_box_file or self.user_box_file
         if not os.path.exists(box_path):
-            logger.warning(f"User box file {box_path} does not exist.")
-            return []
+            legacy_box = os.path.join(self.cache_dir, "user_box.json")
+            if os.path.exists(legacy_box):
+                box_path = legacy_box
+            elif os.path.exists("config/box.json"):
+                box_path = "config/box.json"
+            else:
+                logger.warning(f"User box file {box_path} does not exist.")
+                return []
 
         try:
             with open(box_path, encoding="utf-8") as f:
@@ -1734,8 +1744,13 @@ class DokkanSyncer:
         """
         target_path = box_file
         if not target_path:
+            legacy_box = os.path.join(self.cache_dir, "user_box.json")
             if os.path.exists("config/box.json"):
                 target_path = "config/box.json"
+            elif os.path.exists(self.user_box_file):
+                target_path = self.user_box_file
+            elif os.path.exists(legacy_box):
+                target_path = legacy_box
             else:
                 target_path = self.user_box_file
 

@@ -14,6 +14,7 @@ from dokkan_eza_link_farmer.core.i18n import (
     t,
 )
 from dokkan_eza_link_farmer.core.system_tools import (
+    AppPaths,
     SingleInstanceMutex,
     ToolLocator,
     get_config_path,
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from dokkan_eza_link_farmer.core.bot_engine import BotEngine
 
 __all__ = [
+    "AppPaths",
     "BotEngine",
     "SingleInstanceMutex",
     "ToolLocator",

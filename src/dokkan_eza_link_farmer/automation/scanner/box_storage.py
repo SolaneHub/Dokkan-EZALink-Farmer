@@ -9,25 +9,43 @@ import shutil
 from datetime import datetime, timezone
 from typing import Any
 
+from dokkan_eza_link_farmer.core.system_tools import AppPaths
+
 logger = logging.getLogger(__name__)
 
 CANONICAL_BOX_PATH = "config/box.json"
-CACHE_BOX_PATH = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache", "user_box.json")
+CACHE_BOX_PATH = AppPaths.get_user_box_path()
 DEFAULT_USER_BOX_PATH = CACHE_BOX_PATH
+_DEFAULT_IMPORT_CACHE_BOX = CACHE_BOX_PATH
+_DEFAULT_IMPORT_USER_BOX = DEFAULT_USER_BOX_PATH
 
 
 def resolve_box_path(preferred_path: str | None = None) -> str:
     """Resolves canonical user box path."""
+    current_canonical_box = AppPaths.get_user_box_path()
+    legacy_cache_box = os.path.join(AppPaths.get_cache_dir(), "user_box.json")
     if preferred_path and preferred_path not in (
         DEFAULT_USER_BOX_PATH,
         CACHE_BOX_PATH,
+        current_canonical_box,
+        legacy_cache_box,
         CANONICAL_BOX_PATH,
     ):
         return preferred_path
     if os.path.exists(CANONICAL_BOX_PATH):
         return CANONICAL_BOX_PATH
-    if os.path.exists(CACHE_BOX_PATH):
+    if os.path.exists(current_canonical_box):
+        return current_canonical_box
+    if os.path.exists(legacy_cache_box):
+        return legacy_cache_box
+    if os.path.exists(CACHE_BOX_PATH) and os.path.abspath(CACHE_BOX_PATH) != os.path.abspath(
+        _DEFAULT_IMPORT_CACHE_BOX
+    ):
         return CACHE_BOX_PATH
+    if os.path.exists(DEFAULT_USER_BOX_PATH) and os.path.abspath(
+        DEFAULT_USER_BOX_PATH
+    ) != os.path.abspath(_DEFAULT_IMPORT_USER_BOX):
+        return DEFAULT_USER_BOX_PATH
     return preferred_path or CANONICAL_BOX_PATH
 
 
@@ -35,11 +53,18 @@ def sync_box_cache(source_path: str, target_path: str | None = None) -> None:
     """Synchronizes source box file to target paths (keeping config/box.json and cache mirror in sync)."""
     if not source_path or not os.path.exists(source_path):
         return
+    current_canonical_box = AppPaths.get_user_box_path()
+    legacy_cache_box = os.path.join(AppPaths.get_cache_dir(), "user_box.json")
     if target_path:
         destinations = [target_path]
     elif os.path.abspath(source_path) == os.path.abspath(CANONICAL_BOX_PATH):
-        destinations = [CACHE_BOX_PATH]
-    elif os.path.abspath(source_path) == os.path.abspath(CACHE_BOX_PATH):
+        destinations = [current_canonical_box]
+    elif os.path.abspath(source_path) == os.path.abspath(legacy_cache_box):
+        destinations = [CANONICAL_BOX_PATH, current_canonical_box]
+    elif os.path.abspath(source_path) in (
+        os.path.abspath(current_canonical_box),
+        os.path.abspath(CACHE_BOX_PATH),
+    ):
         destinations = [CANONICAL_BOX_PATH]
     else:
         return
@@ -156,6 +181,8 @@ __all__ = [
     "CACHE_BOX_PATH",
     "CANONICAL_BOX_PATH",
     "DEFAULT_USER_BOX_PATH",
+    "_DEFAULT_IMPORT_CACHE_BOX",
+    "_DEFAULT_IMPORT_USER_BOX",
     "load_existing_box",
     "resolve_box_path",
     "save_box",

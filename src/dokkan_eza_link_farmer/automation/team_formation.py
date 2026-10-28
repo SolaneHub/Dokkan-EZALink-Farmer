@@ -31,6 +31,7 @@ import numpy as np
 from dokkan_eza_link_farmer.ai.models import DokkanCard
 from dokkan_eza_link_farmer.automation.game_state import GameState, StateDetector
 from dokkan_eza_link_farmer.automation.vision import Vision
+from dokkan_eza_link_farmer.core.system_tools import AppPaths
 from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
 
 logger = logging.getLogger(__name__)
@@ -308,9 +309,7 @@ def find_card_on_screen(
     candidate_dirs: list[str] = []
     if thumbs_dir:
         candidate_dirs.append(thumbs_dir)
-    candidate_dirs.append(
-        os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache", "thumbs")
-    )
+    candidate_dirs.append(AppPaths.get_thumbnails_cache_dir())
     candidate_dirs.append(os.path.join("data", "thumbs"))
     candidate_dirs.append(os.path.join("cache", "thumbs"))
 

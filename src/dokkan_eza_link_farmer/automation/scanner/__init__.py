@@ -11,6 +11,8 @@ from dokkan_eza_link_farmer.automation.scanner.banner_extractor import (
     stitch_marquee_text,
 )
 from dokkan_eza_link_farmer.automation.scanner.box_storage import (
+    _DEFAULT_IMPORT_CACHE_BOX,
+    _DEFAULT_IMPORT_USER_BOX,
     CACHE_BOX_PATH,
     CANONICAL_BOX_PATH,
     DEFAULT_USER_BOX_PATH,
@@ -53,6 +55,8 @@ __all__ = [
     "CACHE_BOX_PATH",
     "CANONICAL_BOX_PATH",
     "DEFAULT_USER_BOX_PATH",
+    "_DEFAULT_IMPORT_CACHE_BOX",
+    "_DEFAULT_IMPORT_USER_BOX",
     "BannerExtractor",
     "CatalogMatcher",
     "DetailEvaluator",

@@ -11,12 +11,13 @@ import cv2
 import numpy as np
 import requests
 
+from dokkan_eza_link_farmer.core.system_tools import AppPaths
+
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_USER_BOX_PATH = os.path.join(
-    os.path.expanduser("~"), ".dokkan-farmer", "cache", "user_box.json"
-)
+DEFAULT_USER_BOX_PATH = AppPaths.get_user_box_path()
+_DEFAULT_IMPORT_USER_BOX = DEFAULT_USER_BOX_PATH
 
 
 class DokkanDBClient:
@@ -42,7 +43,7 @@ class DokkanDBClient:
     def __init__(self, cache_dir: str | None = None, cache_ttl_seconds: int = 43200):
         if cache_dir is None:
             # Default to user home directory to keep application/distribution directory completely clean
-            cache_dir = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache")
+            cache_dir = AppPaths.get_cache_dir()
         self.cache_dir = os.path.abspath(cache_dir)
         self.banners_dir = os.path.join(self.cache_dir, "banners")
         self.cache_ttl_seconds = cache_ttl_seconds
@@ -1185,8 +1186,11 @@ class DokkanDBClient:
         Loads player-owned card IDs from config/box.json or box.json if available.
         Format can be [1025551, 1028731] or [{"id": 1025551}, ...].
         """
-        candidate_paths = [
-            DEFAULT_USER_BOX_PATH,
+        candidate_paths = (
+            [DEFAULT_USER_BOX_PATH, AppPaths.get_user_box_path()]
+            if os.path.abspath(DEFAULT_USER_BOX_PATH) != os.path.abspath(_DEFAULT_IMPORT_USER_BOX)
+            else [AppPaths.get_user_box_path()]
+        ) + [
             os.path.join(self.cache_dir, "user_box.json"),
             "config/box.json",
             "config/my_box.json",

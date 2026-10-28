@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import datetime
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -23,9 +22,14 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from dokkan_eza_link_farmer.ai.card_models import DokkanCard  # noqa: E402
 from dokkan_eza_link_farmer.ai.solver import DokkanConstraintSolver  # noqa: E402
+from dokkan_eza_link_farmer.core.system_tools import AppPaths  # noqa: E402
 
 CATALOG_PATH = PROJECT_ROOT / "data" / "dokkan_cards_post_10th_anniversary.json"
-USER_BOX_PATH = Path(os.path.expanduser("~/.dokkan-farmer/cache/user_box.json"))
+_canonical_box = Path(AppPaths.get_user_box_path())
+_legacy_box = Path(AppPaths.get_cache_dir()) / "user_box.json"
+USER_BOX_PATH = (
+    _canonical_box if _canonical_box.exists() or not _legacy_box.exists() else _legacy_box
+)
 OUTPUT_MATRIX_PATH = PROJECT_ROOT / "data" / "cards_tactical_matrix.json"
 
 # Fallback definition for Supreme Kai (ID: 1015201) if local cache is absent

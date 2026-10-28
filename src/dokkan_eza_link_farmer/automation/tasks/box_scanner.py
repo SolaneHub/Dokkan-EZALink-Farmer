@@ -10,6 +10,7 @@ import numpy as np
 
 from dokkan_eza_link_farmer.ai.syncer import DokkanSyncer
 from dokkan_eza_link_farmer.automation.scanner import (
+    _DEFAULT_IMPORT_CACHE_BOX,
     CACHE_BOX_PATH,
     CANONICAL_BOX_PATH,
     DEFAULT_USER_BOX_PATH,
@@ -41,12 +42,14 @@ from dokkan_eza_link_farmer.automation.scanner import (
 from dokkan_eza_link_farmer.automation.scanner.catalog_matcher import CatalogMatcher
 from dokkan_eza_link_farmer.automation.tasks.base_task import BaseTask
 from dokkan_eza_link_farmer.automation.vision import Vision
+from dokkan_eza_link_farmer.core.system_tools import AppPaths
 from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
 from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BOX_SCAN_LOG_PATH = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "box_scan.log")
+DEFAULT_BOX_SCAN_LOG_PATH = AppPaths.get_box_scan_log_path()
+_DEFAULT_IMPORT_LOG_PATH = DEFAULT_BOX_SCAN_LOG_PATH
 _normalize_title = normalize_title
 _SHARED_OCR: Any = None
 
@@ -97,18 +100,34 @@ class BoxScannerTask(BaseTask):
         on_run_complete: Callable[[int, int], None] | None = None,
         output_file: str | None = None,
         max_cards_to_scan: int | None = None,
-        log_file: str | None = DEFAULT_BOX_SCAN_LOG_PATH,
+        log_file: str | None = None,
     ):
         super().__init__(adb, vision, config, on_status, on_run_complete)
         self.dokkandb = dokkandb or DokkanDBClient()
         db_cache = getattr(self.dokkandb, "cache_dir", None)
         syncer_cache = db_cache if isinstance(db_cache, str) else None
         self.syncer = syncer or DokkanSyncer(cache_dir=syncer_cache)
-        self.output_file = output_file if output_file is not None else DEFAULT_USER_BOX_PATH
+        self.output_file = (
+            output_file
+            if (output_file is not None and output_file != _DEFAULT_IMPORT_CACHE_BOX)
+            else (
+                DEFAULT_USER_BOX_PATH
+                if DEFAULT_USER_BOX_PATH != _DEFAULT_IMPORT_CACHE_BOX
+                else AppPaths.get_user_box_path()
+            )
+        )
         self.max_cards_to_scan = max_cards_to_scan
         self.pure_grid_mode = config.get("pure_grid_mode", False)
         self.include_ssr = bool(config.get("include_ssr", False))
-        self.log_file = log_file if log_file is not None else DEFAULT_BOX_SCAN_LOG_PATH
+        self.log_file = (
+            log_file
+            if (log_file is not None and log_file != _DEFAULT_IMPORT_LOG_PATH)
+            else (
+                DEFAULT_BOX_SCAN_LOG_PATH
+                if DEFAULT_BOX_SCAN_LOG_PATH != _DEFAULT_IMPORT_LOG_PATH
+                else AppPaths.get_box_scan_log_path()
+            )
+        )
         self._file_handler: logging.Handler | None = None
         self._setup_file_logger()
 

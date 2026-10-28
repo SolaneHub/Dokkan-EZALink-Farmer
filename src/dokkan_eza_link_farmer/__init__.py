@@ -9,7 +9,7 @@ Specialized endgame automation for DBZ Dokkan Battle:
 from dokkan_eza_link_farmer.automation.game_state import GameState, StateDetector
 from dokkan_eza_link_farmer.automation.vision import Vision
 from dokkan_eza_link_farmer.core.bot_engine import BotEngine
-from dokkan_eza_link_farmer.core.system_tools import SingleInstanceMutex, ToolLocator
+from dokkan_eza_link_farmer.core.system_tools import AppPaths, SingleInstanceMutex, ToolLocator
 from dokkan_eza_link_farmer.integrations.adb_client import ADBClient
 from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 from dokkan_eza_link_farmer.ui.cli import TerminalCLI
@@ -18,6 +18,7 @@ __version__ = "1.1.0"
 __author__ = "SolaneHub"
 
 __all__ = [
+    "AppPaths",
     "BotEngine",
     "TerminalCLI",
     "ADBClient",

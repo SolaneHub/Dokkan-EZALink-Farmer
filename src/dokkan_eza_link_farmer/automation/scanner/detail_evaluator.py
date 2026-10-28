@@ -239,9 +239,9 @@ def save_diagnostic_crops(
     import os
     import time
 
-    target_dir = output_dir or os.path.join(
-        os.path.expanduser("~"), ".dokkan-farmer", "debug_crops"
-    )
+    from dokkan_eza_link_farmer.core.system_tools import AppPaths
+
+    target_dir = output_dir or os.path.join(AppPaths.get_base_dir(), "debug_crops")
     try:
         os.makedirs(target_dir, exist_ok=True)
         h, w = screen_img.shape[:2]

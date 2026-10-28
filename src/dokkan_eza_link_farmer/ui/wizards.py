@@ -20,11 +20,8 @@ from dokkan_eza_link_farmer.ai.boss_models import (
     infer_difficulty_from_stage_id,
     parse_difficulty_code,
 )
-from dokkan_eza_link_farmer.automation.tasks.box_scanner import (
-    DEFAULT_BOX_SCAN_LOG_PATH,
-    DEFAULT_USER_BOX_PATH,
-)
 from dokkan_eza_link_farmer.core.i18n import get_language, t
+from dokkan_eza_link_farmer.core.system_tools import AppPaths
 from dokkan_eza_link_farmer.ui.briefing import (
     render_ai_stage_synthesis_header,
     render_linking_partners,
@@ -824,13 +821,13 @@ def handle_box_scan_interactive(
         elif max_cards is None:
             max_cards = 0
 
-        target_log = custom_log if custom_log is not None else DEFAULT_BOX_SCAN_LOG_PATH
+        target_log = custom_log if custom_log is not None else AppPaths.get_box_scan_log_path()
         limit_text = f"up to {max_cards} cards" if max_cards else "all cards"
         console.print(f"[bold green]Starting autonomous box scanner ({limit_text})...[/bold green]")
         console.print(f"[dim]Debug log saved to: {target_log}[/dim]\n")
 
         engine.start_box_scanner(
-            output_file=DEFAULT_USER_BOX_PATH,
+            output_file=AppPaths.get_user_box_path(),
             max_cards_to_scan=max_cards,
             log_file=target_log,
         )

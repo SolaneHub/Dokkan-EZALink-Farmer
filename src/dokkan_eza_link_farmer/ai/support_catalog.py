@@ -8,11 +8,13 @@ from typing import Any
 import requests
 
 from dokkan_eza_link_farmer.ai.models import DokkanCard
+from dokkan_eza_link_farmer.core.system_tools import AppPaths
 
 logger = logging.getLogger(__name__)
 
-CACHE_DIR = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache")
+CACHE_DIR = AppPaths.get_cache_dir()
 MEMORIES_CACHE_FILE = os.path.join(CACHE_DIR, "dokkandb_support_memories.json")
+_DEFAULT_IMPORT_MEMORIES_CACHE_FILE = MEMORIES_CACHE_FILE
 
 # Curated Tier-1 Support Items ranked strictly from strongest to weakest
 TIER_1_SUPPORT_ITEMS: list[dict[str, Any]] = [
@@ -199,9 +201,15 @@ def get_recommended_support_items(
 
 def fetch_all_support_memories(force_refresh: bool = False) -> list[dict[str, Any]]:
     """Fetches support memories from DokkanDB API or local cache."""
-    if not force_refresh and os.path.exists(MEMORIES_CACHE_FILE):
+    cache_dir = AppPaths.get_cache_dir()
+    cache_file = os.path.join(cache_dir, "dokkandb_support_memories.json")
+    if os.path.abspath(MEMORIES_CACHE_FILE) != os.path.abspath(_DEFAULT_IMPORT_MEMORIES_CACHE_FILE):
+        target_load = MEMORIES_CACHE_FILE
+    else:
+        target_load = cache_file
+    if not force_refresh and os.path.exists(target_load):
         try:
-            with open(MEMORIES_CACHE_FILE, encoding="utf-8") as f:
+            with open(target_load, encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list) and data:
                     return data
@@ -218,8 +226,14 @@ def fetch_all_support_memories(force_refresh: bool = False) -> list[dict[str, An
         if resp.status_code == 200:
             data = resp.json()
             if isinstance(data, list):
-                os.makedirs(CACHE_DIR, exist_ok=True)
-                with open(MEMORIES_CACHE_FILE, "w", encoding="utf-8") as f:
+                target_save = (
+                    MEMORIES_CACHE_FILE
+                    if os.path.abspath(MEMORIES_CACHE_FILE)
+                    != os.path.abspath(_DEFAULT_IMPORT_MEMORIES_CACHE_FILE)
+                    else cache_file
+                )
+                os.makedirs(os.path.dirname(os.path.abspath(target_save)), exist_ok=True)
+                with open(target_save, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
                 return data
     except Exception as e:

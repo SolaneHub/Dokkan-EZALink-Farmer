@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import glob
 import os
 import shutil
@@ -74,6 +75,68 @@ def get_config_path(config_filename: str = "config/settings.yaml") -> str:
         return bundled_path
 
     return cwd_path
+
+
+class AppPaths:
+    """
+    Centralized architectural source of truth for application directories and state files.
+    Eliminates hardcoded user paths, supporting PyInstaller portability and configurable
+    overrides via DOKKAN_FARMER_HOME.
+    """
+
+    @classmethod
+    def get_base_dir(cls) -> str:
+        """
+        Returns the root application directory.
+        Reads DOKKAN_FARMER_HOME from os.environ if present;
+        fallback to os.path.join(os.path.expanduser("~"), ".dokkan-farmer").
+        Handles surrounding quotes, whitespace, and tilde expansions safely.
+        """
+        env_home = os.environ.get("DOKKAN_FARMER_HOME")
+        if env_home:
+            clean_home = env_home.strip().strip("\"'")
+            if clean_home:
+                return os.path.abspath(os.path.expanduser(os.path.expandvars(clean_home)))
+        return os.path.join(os.path.expanduser("~"), ".dokkan-farmer")
+
+    @classmethod
+    def get_cache_dir(cls) -> str:
+        """
+        Returns the cache directory (base dir + 'cache').
+        Automatically ensures directory exists via os.makedirs(..., exist_ok=True).
+        Catches OSError to safely handle read-only environments.
+        """
+        cache_dir = os.path.join(cls.get_base_dir(), "cache")
+        with contextlib.suppress(OSError):
+            os.makedirs(cache_dir, exist_ok=True)
+        return cache_dir
+
+    @classmethod
+    def get_user_box_path(cls) -> str:
+        """Returns the canonical path to user_box.json inside base dir."""
+        return os.path.join(cls.get_base_dir(), "user_box.json")
+
+    @classmethod
+    def get_box_scan_log_path(cls) -> str:
+        """Returns the canonical path to box_scan.log inside base dir."""
+        return os.path.join(cls.get_base_dir(), "box_scan.log")
+
+    @classmethod
+    def get_ai_memory_path(cls) -> str:
+        """Returns the canonical path to ai_memory.json inside base dir."""
+        return os.path.join(cls.get_base_dir(), "ai_memory.json")
+
+    @classmethod
+    def get_thumbnails_cache_dir(cls) -> str:
+        """
+        Returns the thumbnails cache directory inside cache dir.
+        Automatically ensures directory exists via os.makedirs(..., exist_ok=True).
+        Catches OSError to safely handle read-only environments.
+        """
+        thumbs_dir = os.path.join(cls.get_cache_dir(), "thumbs")
+        with contextlib.suppress(OSError):
+            os.makedirs(thumbs_dir, exist_ok=True)
+        return thumbs_dir
 
 
 class SingleInstanceMutex:

@@ -7,6 +7,7 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from dokkan_eza_link_farmer.ai.card_models import CardForm, PassiveTags, SATags
+from dokkan_eza_link_farmer.core.system_tools import AppPaths
 
 if TYPE_CHECKING:
     from dokkan_eza_link_farmer.ai.card_models import DokkanCard
@@ -197,7 +198,7 @@ def parse_card_from_dokkandb(
         t_ids = data.get("transformation_ids") or []
         t_elems = data.get("transformation_elements") or []
         count = max(len(t_names), len(t_ids))
-        cache_dir = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache", "cards")
+        cache_dir = os.path.join(AppPaths.get_cache_dir(), "cards")
         for idx in range(count):
             tid = int(t_ids[idx]) if idx < len(t_ids) else 0
             tname = str(t_names[idx]) if idx < len(t_names) else f"Transform_{idx + 1}"
