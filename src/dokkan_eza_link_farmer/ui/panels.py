@@ -177,8 +177,8 @@ def render_ai_status(conf: Any, is_up: bool, console: Console | None = None) -> 
     """Displays AI backend connection status and model details."""
     c = console or Console()
     table = Table(title=t("cli.ai.status_title"), border_style="cyan")
-    table.add_column("Property", style="bold")
-    table.add_column("Value")
+    table.add_column(t("cli.ai.prop_property"), style="bold")
+    table.add_column(t("cli.ai.prop_value"))
 
     base_url = getattr(conf, "base_url", "http://localhost:11434")
     model_family = getattr(conf, "model_family", None)
@@ -194,17 +194,14 @@ def render_ai_status(conf: Any, is_up: bool, console: Console | None = None) -> 
         if is_up
         else f"[bold red]{t('cli.ai.offline', url=base_url)}[/]"
     )
-    table.add_row("Status", status_str)
-    table.add_row("Model Family", family_str)
-    table.add_row("Model Name", str(model_name))
-    table.add_row("Provider / Endpoint", f"{provider} ({base_url})")
+    table.add_row(t("cli.ai.prop_status"), status_str)
+    table.add_row(t("cli.ai.prop_family"), family_str)
+    table.add_row(t("cli.ai.prop_model"), str(model_name))
+    table.add_row(t("cli.ai.prop_provider"), f"{provider} ({base_url})")
 
     c.print(table)
     if not is_up:
-        c.print(
-            "[dim yellow]Hint: To run locally via Ollama, open terminal and type: "
-            f"ollama run {model_name}[/dim yellow]\n"
-        )
+        c.print(f"[dim yellow]{t('cli.ai.ollama_hint', model=model_name)}[/dim yellow]\n")
 
 
 def render_devices_table(devices: list[Any], console: Console | None = None) -> None:

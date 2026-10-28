@@ -9,7 +9,7 @@ from rich.table import Table
 from rich.text import Text
 
 from dokkan_eza_link_farmer.ai.boss_models import DIFFICULTY_NAMES
-from dokkan_eza_link_farmer.core.i18n import t
+from dokkan_eza_link_farmer.core.i18n import get_language, t
 
 
 def render_stage_boss_info(
@@ -31,10 +31,12 @@ def render_stage_boss_info(
         border_style="magenta",
         expand=True,
     )
-    t_boss.add_column("Phase", style="bold cyan", justify="center", width=12, no_wrap=True)
-    t_boss.add_column("Boss Enemy", style="bold", ratio=3, no_wrap=False)
-    t_boss.add_column("Typing", style="bold yellow", width=15, no_wrap=True)
-    t_boss.add_column("Key Mechanics & Immunities", style="dim", ratio=4, no_wrap=False)
+    t_boss.add_column(
+        t("cli.briefing.phase"), style="bold cyan", justify="center", width=12, no_wrap=True
+    )
+    t_boss.add_column(t("cli.briefing.boss_enemy"), style="bold", ratio=3, no_wrap=False)
+    t_boss.add_column(t("cli.briefing.typing"), style="bold yellow", width=15, no_wrap=True)
+    t_boss.add_column(t("cli.briefing.mechanics_immunities"), style="dim", ratio=4, no_wrap=False)
 
     for ph in boss_info.get("phases") or []:
         if not ph:
@@ -44,8 +46,14 @@ def render_stage_boss_info(
         for b in raw_bosses:
             if not b:
                 continue
-            b_name = b.get("name", "Unknown Boss") if isinstance(b, dict) else str(b)
-            b_type = b.get("type_name", "Unknown") if isinstance(b, dict) else "Unknown"
+            b_name = (
+                b.get("name", t("cli.briefing.unknown_boss")) if isinstance(b, dict) else str(b)
+            )
+            b_type = (
+                b.get("type_name", t("cli.briefing.unknown"))
+                if isinstance(b, dict)
+                else t("cli.briefing.unknown")
+            )
             raw_mechs = (b.get("mechanics") if isinstance(b, dict) else []) or []
             mechs_list = []
             for m in raw_mechs:
@@ -55,8 +63,8 @@ def render_stage_boss_info(
                         mechs_list.append(str(m_name))
                 elif isinstance(m, str) and m:
                     mechs_list.append(m)
-            mechs = ", ".join(mechs_list) or "None"
-            t_boss.add_row(f"Phase {ph_num}", str(b_name), str(b_type), mechs)
+            mechs = ", ".join(mechs_list) or t("cli.briefing.none")
+            t_boss.add_row(t("cli.briefing.phase_num", num=ph_num), str(b_name), str(b_type), mechs)
     c.print(t_boss)
 
 
@@ -84,19 +92,23 @@ def render_mission_batches(
         c.print(f"[bold green]{t('cli.challenge.savings_badge', saved=saved)}[/bold green]")
 
     t_batches = Table(
-        title=f"🎯 Mission Batches for {ev_name} (Stage {target_stage_num})",
+        title=t("cli.briefing.mission_batches_title", name=ev_name, stage=target_stage_num),
         border_style="green",
         expand=True,
     )
-    t_batches.add_column("Batch #", style="bold cyan", width=14, no_wrap=True)
-    t_batches.add_column("Combined Requirements", style="bold", ratio=4, no_wrap=False)
-    t_batches.add_column("Missions Cleared in Batch", style="dim", ratio=3, no_wrap=False)
+    t_batches.add_column(t("cli.briefing.col_batch"), style="bold cyan", width=14, no_wrap=True)
+    t_batches.add_column(t("cli.briefing.col_requirements"), style="bold", ratio=4, no_wrap=False)
+    t_batches.add_column(
+        t("cli.briefing.col_missions_cleared"), style="dim", ratio=3, no_wrap=False
+    )
 
     for idx, b in enumerate(batches, 1):
         raw_missions = getattr(b, "missions", []) or []
-        m_names = ", ".join(f"#{getattr(m, 'id', m)}" for m in raw_missions) or "Standard Clear"
-        summary = str(getattr(b, "summary", "") or "Standard Clear")
-        t_batches.add_row(f"Run Batch #{idx}", summary, m_names)
+        m_names = ", ".join(f"#{getattr(m, 'id', m)}" for m in raw_missions) or t(
+            "cli.briefing.standard_clear"
+        )
+        summary = str(getattr(b, "summary", "") or t("cli.briefing.standard_clear"))
+        t_batches.add_row(t("cli.briefing.run_batch_num", idx=idx), summary, m_names)
 
     c.print(t_batches)
 
@@ -194,12 +206,14 @@ def render_ai_stage_synthesis_header(stage: Any, console: Console | None = None)
     gimmicks_str = f" [{', '.join(gimmicks)}]" if gimmicks else ""
 
     total_battles = getattr(stage, "total_battles", 1)
-    battles_str = f"{total_battles} battagli{'e' if total_battles > 1 else 'a'}"
-    stack_warn = (
-        "\n[bold red]⚠️ Stacking ATK/DEF: Si azzera a inizio di ciascuna nuova battaglia separata![/bold red]"
-        if getattr(stage, "is_multi_battle", False)
-        else ""
+    s_suffix = (
+        ("e" if total_battles > 1 else "a")
+        if get_language() == "it"
+        else ("s" if total_battles != 1 else "")
     )
+    battles_str = t("cli.briefing.battles_count", count=total_battles, s=s_suffix)
+    stack_warn = t("cli.briefing.stack_warn") if getattr(stage, "is_multi_battle", False) else ""
+    phases_text = t("cli.briefing.phases_count", count=len(raw_phases), phases=phases_str)
 
     ev_name = getattr(stage, "event_name", "Challenge Event")
     st_name = getattr(stage, "stage_name", "Stage")
@@ -207,10 +221,10 @@ def render_ai_stage_synthesis_header(stage: Any, console: Console | None = None)
 
     c.print(
         Panel.fit(
-            f"[bold cyan]🎯 AI Team Synthesis for: {ev_name}[/bold cyan]\n"
-            f"[bold yellow]Stage:[/bold yellow] {st_name} (ID: {st_id})\n"
-            f"[bold yellow]Struttura:[/bold yellow] {battles_str} ({len(raw_phases)} Fasi: {phases_str}){gimmicks_str}{stack_warn}\n"
-            f"[dim]Consulting Constraint Solver & AI Tactical Advisor against lethal boss gimmicks...[/dim]",
+            f"[bold cyan]{t('cli.briefing.ai_synthesis_for', name=ev_name)}[/bold cyan]\n"
+            f"[bold yellow]{t('cli.briefing.stage_label')}[/bold yellow] {st_name} (ID: {st_id})\n"
+            f"[bold yellow]{t('cli.briefing.structure_label')}[/bold yellow] {battles_str} ({phases_text}){gimmicks_str}{stack_warn}\n"
+            f"[dim]{t('cli.briefing.consulting_solver')}[/dim]",
             border_style="cyan",
         )
     )
@@ -243,8 +257,8 @@ def render_team_presentation(
     if getattr(rec, "mission_summary", None):
         c.print(
             Panel(
-                f"[bold green]🎯 Solved for Stage Missions:[/bold green] [bold yellow]{rec.mission_summary}[/bold yellow]\n"
-                f"[bold cyan]All 6 team members strictly comply with mission requirements![/bold cyan]",
+                f"[bold green]{t('cli.briefing.solved_for_missions', summary=rec.mission_summary)}[/bold green]\n"
+                f"[bold cyan]{t('cli.briefing.all_members_comply')}[/bold cyan]",
                 border_style="green",
                 expand=True,
             )
@@ -264,17 +278,17 @@ def render_team_presentation(
             if hasattr(card, "rich_formatted_name")
             else str(getattr(card, "name", card))
         )
-        loc_label = "Floater" if is_floater else "Rotazione"
+        loc_label = t("cli.briefing.floater") if is_floater else t("cli.briefing.rotation")
         # 1. Distinguish between Friend Leader and Player Leader even if card.id == friend.id
         if getattr(card, "is_friend_leader", False) or (friend is not None and card is friend):
-            badge = Text(f" [Friend • {loc_label}]", style="bold cyan")
+            badge = Text(t("cli.briefing.friend_badge", loc=loc_label), style="bold cyan")
             return Text.assemble(base, badge)
         elif (leader is not None and card is leader) or (
             leader is not None
             and getattr(card, "id", None) is not None
             and getattr(card, "id", None) == getattr(leader, "id", None)
         ):
-            badge = Text(f" [Leader • {loc_label}]", style="bold green")
+            badge = Text(t("cli.briefing.leader_badge", loc=loc_label), style="bold green")
             return Text.assemble(base, badge)
         return base
 
@@ -282,10 +296,14 @@ def render_team_presentation(
         card: Any, is_slot1: bool = False, team: list[Any] | None = None
     ) -> str:
         if card is None:
-            return "🛡️ Difesa solida" if is_slot1 else "💥 Attaccante"
+            return (
+                t("cli.briefing.role_solid_defense")
+                if is_slot1
+                else t("cli.briefing.role_attacker")
+            )
         tags = []
         if getattr(card, "has_guard", False):
-            tags.append("🛡️ Guardia")
+            tags.append(t("cli.briefing.tag_guard"))
 
         # Evaluate dynamic team-conditional DR
         team_def = {}
@@ -312,30 +330,34 @@ def render_team_presentation(
 
         if team_dr > 0:
             if max_dr > team_dr:
-                tags.append(f"DR {team_dr}%~{max_dr}%")
+                tags.append(t("cli.briefing.tag_dr_range", min=team_dr, max=max_dr))
             else:
-                tags.append(f"DR {team_dr}%")
+                tags.append(t("cli.briefing.tag_dr", val=team_dr))
         elif max_dr > 0:
-            tags.append(f"DR fino a {max_dr}%")
+            tags.append(t("cli.briefing.tag_dr_up_to", val=max_dr))
         elif getattr(card, "has_damage_reduction", False):
             tags.append("DR")
         if getattr(card, "has_target_taunt", False):
-            tags.append("🎯 Taunt")
+            tags.append(t("cli.briefing.tag_taunt"))
         if getattr(card, "has_stacking_def", False):
-            tags.append("📈 Stack DEF")
+            tags.append(t("cli.briefing.tag_stack_def"))
         if getattr(card, "has_dodge", False):
-            tags.append("💨 Schivata")
+            tags.append(t("cli.briefing.tag_dodge"))
         if getattr(card, "has_active_skill", False):
-            tags.append("💥 Active")
+            tags.append(t("cli.briefing.tag_active"))
         if getattr(card, "has_standby", False):
-            tags.append("⏳ Standby")
+            tags.append(t("cli.briefing.tag_standby"))
         if getattr(card, "has_support", False):
-            tags.append("✨ Supporto")
+            tags.append(t("cli.briefing.tag_support"))
         if getattr(card, "has_orb_changing", False):
-            tags.append("🔮 Orbi")
+            tags.append(t("cli.briefing.tag_orbs"))
 
         if not tags:
-            return "🛡️ Difesa solida" if is_slot1 else "💥 Attaccante"
+            return (
+                t("cli.briefing.role_solid_defense")
+                if is_slot1
+                else t("cli.briefing.role_attacker")
+            )
         return " | ".join(tags[:3])
 
     t_team = Table(
@@ -345,50 +367,64 @@ def render_team_presentation(
         header_style="bold cyan",
         expand=True,
     )
-    t_team.add_column("Rotazione", style="bold cyan", justify="center", width=14, no_wrap=True)
-    t_team.add_column("Posizione", justify="center", width=16, no_wrap=True)
-    t_team.add_column("Personaggio", ratio=5, no_wrap=False)
-    t_team.add_column("Ruolo Tattico & Kit", style="green", ratio=3, no_wrap=False)
-    t_team.add_column("Sinergia Link & Note", style="dim", ratio=3, no_wrap=False)
+    t_team.add_column(
+        t("cli.briefing.col_rotation"),
+        style="bold cyan",
+        justify="center",
+        width=14,
+        no_wrap=True,
+    )
+    t_team.add_column(t("cli.briefing.col_position"), justify="center", width=16, no_wrap=True)
+    t_team.add_column(t("cli.briefing.col_character"), ratio=5, no_wrap=False)
+    t_team.add_column(t("cli.briefing.col_tactical_role"), style="green", ratio=3, no_wrap=False)
+    t_team.add_column(t("cli.briefing.col_link_synergy"), style="dim", ratio=3, no_wrap=False)
 
     all_team = getattr(rec, "all_cards", None)
 
     # Rotazione A
     t_team.add_row(
-        "Rotazione A",
-        "[bold red]Slot 1 (Tank)[/bold red]",
+        t("cli.briefing.rotation_a"),
+        f"[bold red]{t('cli.briefing.slot1_tank')}[/bold red]",
         _get_card_badge(rec.rotation_a.slot1, rec.leader, rec.friend_leader, is_floater=False),
         _get_card_tactical_role(rec.rotation_a.slot1, is_slot1=True, team=all_team),
         f"🔗 {', '.join(rec.rotation_a.shared_links[:4])}"
         if rec.rotation_a.shared_links
-        else "Difensore principale",
+        else t("cli.briefing.main_defender"),
     )
     t_team.add_row(
         "",
-        "[bold yellow]Slot 2 (DPS)[/bold yellow]",
+        f"[bold yellow]{t('cli.briefing.slot2_dps')}[/bold yellow]",
         _get_card_badge(rec.rotation_a.slot2, rec.leader, rec.friend_leader, is_floater=False),
         _get_card_tactical_role(rec.rotation_a.slot2, is_slot1=False, team=all_team),
-        f"⭐ Sinergia: {rec.rotation_a.synergy_score:.1f} ({len(rec.rotation_a.shared_links)} link)",
+        t(
+            "cli.briefing.synergy_summary",
+            score=f"{rec.rotation_a.synergy_score:.1f}",
+            count=len(rec.rotation_a.shared_links),
+        ),
     )
 
     t_team.add_section()
 
     # Rotazione B
     t_team.add_row(
-        "Rotazione B",
-        "[bold red]Slot 1 (Tank)[/bold red]",
+        t("cli.briefing.rotation_b"),
+        f"[bold red]{t('cli.briefing.slot1_tank')}[/bold red]",
         _get_card_badge(rec.rotation_b.slot1, rec.leader, rec.friend_leader, is_floater=False),
         _get_card_tactical_role(rec.rotation_b.slot1, is_slot1=True, team=all_team),
         f"🔗 {', '.join(rec.rotation_b.shared_links[:4])}"
         if rec.rotation_b.shared_links
-        else "Difensore principale",
+        else t("cli.briefing.main_defender"),
     )
     t_team.add_row(
         "",
-        "[bold yellow]Slot 2 (DPS)[/bold yellow]",
+        f"[bold yellow]{t('cli.briefing.slot2_dps')}[/bold yellow]",
         _get_card_badge(rec.rotation_b.slot2, rec.leader, rec.friend_leader, is_floater=False),
         _get_card_tactical_role(rec.rotation_b.slot2, is_slot1=False, team=all_team),
-        f"⭐ Sinergia: {rec.rotation_b.synergy_score:.1f} ({len(rec.rotation_b.shared_links)} link)",
+        t(
+            "cli.briefing.synergy_summary",
+            score=f"{rec.rotation_b.synergy_score:.1f}",
+            count=len(rec.rotation_b.shared_links),
+        ),
     )
 
     t_team.add_section()
@@ -396,11 +432,11 @@ def render_team_presentation(
     # Floaters (Slot 3)
     for idx, fl in enumerate(rec.floaters, 1):
         t_team.add_row(
-            "Floaters" if idx == 1 else "",
+            t("cli.briefing.floaters") if idx == 1 else "",
             f"[dim]Slot 3 (#{idx})[/dim]",
             _get_card_badge(fl, rec.leader, rec.friend_leader, is_floater=True),
             _get_card_tactical_role(fl, is_slot1=False, team=all_team),
-            "Ruota ogni 3 turni (Support / Flex)",
+            t("cli.briefing.floater_note"),
         )
 
     c.print(t_team)
@@ -409,17 +445,25 @@ def render_team_presentation(
     items = get_recommended_support_items(max_items=4)
     if items:
         t_items = Table(
-            title="💊 Oggetti di Supporto Consigliati",
+            title=t("cli.briefing.support_items_title"),
             title_style="bold green",
             border_style="green",
             expand=True,
         )
         t_items.add_column(
-            "Priorità", justify="center", style="bold yellow", width=10, no_wrap=True
+            t("cli.briefing.col_priority"),
+            justify="center",
+            style="bold yellow",
+            width=10,
+            no_wrap=True,
         )
-        t_items.add_column("Oggetto", style="bold white", width=18, no_wrap=False)
-        t_items.add_column("Effetto Tattico", style="cyan", ratio=4, no_wrap=False)
-        t_items.add_column("Utilizzo Consigliato", style="dim", ratio=4, no_wrap=False)
+        t_items.add_column(t("cli.briefing.col_item"), style="bold white", width=18, no_wrap=False)
+        t_items.add_column(
+            t("cli.briefing.col_tactical_effect"), style="cyan", ratio=4, no_wrap=False
+        )
+        t_items.add_column(
+            t("cli.briefing.col_recommended_usage"), style="dim", ratio=4, no_wrap=False
+        )
         for it in items:
             t_items.add_row(
                 f"#{it.get('rank', 1)}",
@@ -432,15 +476,27 @@ def render_team_presentation(
     mem = get_recommended_support_memory(rec.all_cards)
     if mem:
         t_mem = Table(
-            title="🎞️ Support Memory Consigliata",
+            title=t("cli.briefing.support_memory_title"),
             title_style="bold magenta",
             border_style="magenta",
             expand=True,
         )
-        t_mem.add_column("Nome Memory", style="bold white", width=22, no_wrap=False)
-        t_mem.add_column("Durata", justify="center", style="bold cyan", width=12, no_wrap=True)
-        t_mem.add_column("Effetto Tattico", style="yellow", ratio=4, no_wrap=False)
-        t_mem.add_column("Condizione / Categoria", style="dim", ratio=4, no_wrap=False)
+        t_mem.add_column(
+            t("cli.briefing.col_memory_name"), style="bold white", width=22, no_wrap=False
+        )
+        t_mem.add_column(
+            t("cli.briefing.col_duration"),
+            justify="center",
+            style="bold cyan",
+            width=12,
+            no_wrap=True,
+        )
+        t_mem.add_column(
+            t("cli.briefing.col_tactical_effect"), style="yellow", ratio=4, no_wrap=False
+        )
+        t_mem.add_column(
+            t("cli.briefing.col_condition_category"), style="dim", ratio=4, no_wrap=False
+        )
         t_mem.add_row(
             str(mem.get("name", "")),
             str(mem.get("duration", "")),
@@ -452,14 +508,26 @@ def render_team_presentation(
     # 3. Top-5 Substitutes Shortlist with Dokkan Colors
     if shortlist:
         t_short = Table(
-            title="🔄 Top-5 Recommended Substitutes (Shortlist)",
+            title=t("cli.briefing.shortlist_title"),
             border_style="cyan",
             expand=True,
         )
-        t_short.add_column("Rank", style="bold cyan", justify="center", width=8, no_wrap=True)
-        t_short.add_column("Candidate Character", ratio=5, no_wrap=False)
-        t_short.add_column("Score", justify="right", style="yellow", width=10, no_wrap=True)
-        t_short.add_column("Key Strengths", style="dim", ratio=5, no_wrap=False)
+        t_short.add_column(
+            t("cli.briefing.col_rank"),
+            style="bold cyan",
+            justify="center",
+            width=8,
+            no_wrap=True,
+        )
+        t_short.add_column(t("cli.briefing.col_candidate"), ratio=5, no_wrap=False)
+        t_short.add_column(
+            t("cli.briefing.col_score"),
+            justify="right",
+            style="yellow",
+            width=10,
+            no_wrap=True,
+        )
+        t_short.add_column(t("cli.briefing.col_key_strengths"), style="dim", ratio=5, no_wrap=False)
         for idx, cand in enumerate(shortlist[:5], 1):
             reason_str = getattr(cand, "reasoning", "")
             if not reason_str and getattr(cand, "counter_points", None):
@@ -480,7 +548,7 @@ def render_team_presentation(
                 f"#{idx}",
                 c_name,
                 score_str,
-                reason_str or "Synergy pick",
+                reason_str or t("cli.briefing.synergy_pick"),
             )
         c.print(t_short)
 
@@ -516,14 +584,16 @@ def render_linking_partners(
         target_card, "name", str(target_card)
     )
     table = Table(
-        title=f"Top Linking Partners for {full_name}",
+        title=t("cli.briefing.partners_title", name=full_name),
         border_style="green",
         expand=True,
     )
-    table.add_column("Rank", style="bold cyan", width=8, no_wrap=True)
-    table.add_column("Partner Card", ratio=4, no_wrap=False)
-    table.add_column("Synergy", justify="right", style="yellow", width=10, no_wrap=True)
-    table.add_column("Shared Links", style="dim", ratio=4, no_wrap=False)
+    table.add_column(t("cli.briefing.col_rank"), style="bold cyan", width=8, no_wrap=True)
+    table.add_column(t("cli.briefing.col_partner_card"), ratio=4, no_wrap=False)
+    table.add_column(
+        t("cli.briefing.col_synergy"), justify="right", style="yellow", width=10, no_wrap=True
+    )
+    table.add_column(t("cli.briefing.col_shared_links"), style="dim", ratio=4, no_wrap=False)
 
     for idx, (p_card, score, shared) in enumerate(partners, 1):
         p_name = (

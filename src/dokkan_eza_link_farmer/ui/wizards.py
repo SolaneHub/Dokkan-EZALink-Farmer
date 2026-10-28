@@ -89,7 +89,7 @@ def _build_event_choices(events: list[dict[str, Any]], limit: int = 50) -> list[
         choices.append(
             questionary.Choice(title=f"{status_tag} {clean_t} (ID: {e.get('id')})", value=e)
         )
-    choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value=None))
+    choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value="cancel"))
     return choices
 
 
@@ -113,7 +113,7 @@ def _build_quest_stage_choices(
     """Builds questionary stage choices from event quests with difficulty indicators."""
     choices: list[Any] = []
     for idx, q in enumerate(quests, 1):
-        q_name = q.get("quest_name") or f"Stage {idx}"
+        q_name = (q.get("quest_name") or f"Stage {idx}").strip()
         stages_arr = q.get("stages", [])
         diff_names = [
             DIFFICULTY_NAMES.get(_extract_stage_difficulty(s), f"D{_extract_stage_difficulty(s)}")
@@ -122,9 +122,14 @@ def _build_quest_stage_choices(
         diff_summary = f" [{', '.join(diff_names)}]" if diff_names else ""
         sorted_stages = sorted(stages_arr, key=_extract_stage_difficulty, reverse=True)
         st_id = sorted_stages[0].get("stage_id") if sorted_stages else None
-        title = f"Stage {idx}: {q_name}{diff_summary}" + (
-            f" (ID: {st_id})" if st_id and not diff_summary else ""
-        )
+
+        id_suffix = f" (ID: {st_id})" if st_id and not diff_summary else ""
+        if q_name.lower() == f"stage {idx}".lower():
+            title = f"🎯 Stage {idx}{diff_summary}{id_suffix}"
+        elif q_name.lower().startswith(f"stage {idx}:"):
+            title = f"🎯 {q_name}{diff_summary}{id_suffix}"
+        else:
+            title = f"🎯 Stage {idx}: {q_name}{diff_summary}{id_suffix}"
         choices.append(
             questionary.Choice(
                 title=title,
@@ -149,7 +154,7 @@ def _build_quest_stage_choices(
                 },
             )
         )
-    choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value=None))
+    choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value="cancel"))
     return choices
 
 
@@ -163,12 +168,12 @@ def _build_difficulty_choices(stages: list[dict[str, Any]]) -> list[Any]:
         diff_label = DIFFICULTY_NAMES.get(diff_val, f"Difficulty {diff_val}")
         act = s.get("act", 0)
         s_id = s.get("stage_id")
-        prefix = "⭐ " if diff_val == max_diff else ""
+        prefix = "🔥 " if diff_val == max_diff else "⚡ "
         sta_str = f" (STA: {act})" if act else ""
         id_str = f" (ID: {s_id})" if s_id else ""
         title = f"{prefix}{diff_label}{sta_str}{id_str}"
         choices.append(questionary.Choice(title=title, value=s))
-    choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value=None))
+    choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value="cancel"))
     return choices
 
 
@@ -235,7 +240,7 @@ def handle_eza_interactive(engine: BotEngine, console: Console, args: list | Non
             break
 
     if target_lvl is not None:
-        console.print(f"[bold green]Starting EZA farming up to level {target_lvl}...[/bold green]")
+        console.print(f"[bold green]{t('cli.eza.started', level=target_lvl)}[/bold green]")
         engine.start_eza_farm(target_level=target_lvl)
         return
 
@@ -276,7 +281,9 @@ def handle_eza_interactive(engine: BotEngine, console: Console, args: list | Non
                 )
                 for e in events
             ]
-            choices_eza.append(questionary.Choice(title=t("cli.dokkandb.opt_cancel"), value=None))
+            choices_eza.append(
+                questionary.Choice(title=t("cli.dokkandb.opt_cancel"), value="cancel")
+            )
 
             chosen = questionary.select(
                 t("cli.dokkandb.select_prompt"),
@@ -285,7 +292,7 @@ def handle_eza_interactive(engine: BotEngine, console: Console, args: list | Non
                 use_arrow_keys=True,
                 use_jk_keys=False,
             ).ask()
-            if not chosen:
+            if not chosen or chosen == "cancel":
                 console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
                 return
 
@@ -382,8 +389,8 @@ def handle_link_interactive(engine: BotEngine, console: Console, args: list | No
                 runs = int(runs_str)
 
             rarity_choices = [
-                questionary.Choice(title="UR (Ultra Rare)", value="ur"),
-                questionary.Choice(title="LR (Legendary Rare)", value="lr"),
+                questionary.Choice(title="💎 UR (Ultra Rare)", value="ur"),
+                questionary.Choice(title="👑 LR (Legendary Rare)", value="lr"),
             ]
             selected_rarities = questionary.checkbox(
                 t("cli.link.rarity_prompt"), choices=rarity_choices
@@ -409,7 +416,9 @@ def handle_link_interactive(engine: BotEngine, console: Console, args: list | No
     rarity_label = " + ".join(rarity_tags) if rarity_tags else t("cli.link.rarity_all")
 
     console.print(f"[bold green]{t('cli.link.selected_stage', name=stage_name)}[/bold green]")
-    console.print(f"[dim]Runs: {runs_display} | {boost_label} | Rarity: {rarity_label}[/dim]")
+    console.print(
+        f"[dim]{t('cli.link.summary', runs=runs_display, boost=boost_label, rarity=rarity_label)}[/dim]"
+    )
 
     spirit_event = None
     if target_stage == "spirit_and_time":
@@ -596,7 +605,7 @@ def handle_challenge_interactive(
                 use_jk_keys=False,
             ).ask()
 
-        if not selected_event:
+        if not selected_event or selected_event == "cancel":
             console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
             return
 
@@ -635,7 +644,7 @@ def handle_challenge_interactive(
                         use_arrow_keys=True,
                         use_jk_keys=False,
                     ).ask()
-                    if not chosen_diff:
+                    if not chosen_diff or chosen_diff == "cancel":
                         console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
                         return
                     target_stage_id = chosen_diff.get("stage_id")
@@ -655,7 +664,7 @@ def handle_challenge_interactive(
                 use_arrow_keys=True,
                 use_jk_keys=False,
             ).ask()
-            if chosen_stage_dict is None:
+            if not chosen_stage_dict or chosen_stage_dict == "cancel":
                 console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
                 return
             target_stage_num = chosen_stage_dict.get("stage_num", 1)
@@ -676,7 +685,7 @@ def handle_challenge_interactive(
                     use_arrow_keys=True,
                     use_jk_keys=False,
                 ).ask()
-                if not chosen_diff:
+                if not chosen_diff or chosen_diff == "cancel":
                     console.print(f"[yellow]{t('cli.dokkandb.canceled')}[/yellow]")
                     return
                 target_stage_id = chosen_diff.get("stage_id")
@@ -739,7 +748,7 @@ def handle_challenge_interactive(
             try:
                 engine.connect()
             except Exception as e:
-                console.print(f"[yellow]Device connection: {e}[/yellow]")
+                console.print(f"[yellow]{t('cli.scan_box.connect_error', error=e)}[/yellow]")
 
         engine.start_challenge_farm(
             target_event=selected_event,
@@ -758,25 +767,23 @@ def handle_box_scan_interactive(
     log_file: str | None = None,
 ) -> None:
     """Interactive OCR Character Box Scanner to autonomously build config/box.json."""
-    with _ui_boundary(console, cancel_msg="Box scan cancelled."):
-        console.print("\n[bold cyan]📦 Autonomous Character Box Scanner (OCR)[/bold cyan]")
-        console.print(
-            "[dim]Scans your owned in-game cards, recognizes names & titles, and creates config/box.json.[/dim]\n"
-        )
+    with _ui_boundary(console, cancel_msg=t("cli.scan_box.cancelled")):
+        console.print(f"\n[bold cyan]{t('cli.scan_box.title')}[/bold cyan]")
+        console.print(f"[dim]{t('cli.scan_box.desc')}[/dim]\n")
 
         if not engine.adb.is_connected():
-            console.print("[yellow]Device not connected. Attempting auto-connection...[/yellow]")
+            console.print(f"[yellow]{t('cli.scan_box.device_not_connected')}[/yellow]")
             try:
                 serial = engine.connect()
-                console.print(f"[green]✓ Connected to {serial}![/green]")
+                console.print(f"[green]{t('cli.scan_box.connected', serial=serial)}[/green]")
             except Exception as e:
-                console.print(f"[bold red]Cannot connect to device: {e}[/bold red]")
+                console.print(f"[bold red]{t('cli.scan_box.connect_error', error=e)}[/bold red]")
                 return
 
         existing_ids = engine.dokkandb.get_user_box_card_ids()
         if existing_ids:
             console.print(
-                f"[green]Found existing box database with {len(existing_ids)} cards indexed.[/green]\n"
+                f"[green]{t('cli.scan_box.existing_cards', count=len(existing_ids))}[/green]\n"
             )
 
         max_cards: int | None = None
@@ -804,17 +811,17 @@ def handle_box_scan_interactive(
 
         if max_cards is None and not has_direct_flags and not args_list:
             choices = [
-                questionary.Choice("🚀 Full Box Scan (All owned UR/LR characters)", value=0),
-                questionary.Choice("⚡ Quick Scan (First 50 cards)", value=50),
-                questionary.Choice("🎯 Custom Card Limit", value=-1),
-                questionary.Choice("❌ Cancel", value=None),
+                questionary.Choice(t("cli.scan_box.opt_full"), value=0),
+                questionary.Choice(t("cli.scan_box.opt_quick"), value=50),
+                questionary.Choice(t("cli.scan_box.opt_custom"), value=-1),
+                questionary.Choice(t("cli.scan_box.opt_cancel"), value="cancel"),
             ]
-            mode = questionary.select("Select Box Scan scope:", choices=choices).ask()
-            if mode is None:
-                console.print("[yellow]Box scan cancelled.[/yellow]")
+            mode = questionary.select(t("cli.scan_box.select_scope"), choices=choices).ask()
+            if mode is None or mode == "cancel":
+                console.print(f"[yellow]{t('cli.scan_box.cancelled')}[/yellow]")
                 return
             elif mode == -1:
-                lim_str = Prompt.ask("Enter maximum cards to scan", default="100").strip()
+                lim_str = Prompt.ask(t("cli.scan_box.prompt_max_cards"), default="100").strip()
                 max_cards = int(lim_str) if lim_str.isdigit() else 100
             elif mode > 0:
                 max_cards = mode
@@ -822,9 +829,13 @@ def handle_box_scan_interactive(
             max_cards = 0
 
         target_log = custom_log if custom_log is not None else AppPaths.get_box_scan_log_path()
-        limit_text = f"up to {max_cards} cards" if max_cards else "all cards"
-        console.print(f"[bold green]Starting autonomous box scanner ({limit_text})...[/bold green]")
-        console.print(f"[dim]Debug log saved to: {target_log}[/dim]\n")
+        limit_text = (
+            t("cli.scan_box.limit_cards", count=max_cards)
+            if max_cards
+            else t("cli.scan_box.limit_all")
+        )
+        console.print(f"[bold green]{t('cli.scan_box.starting', limit=limit_text)}[/bold green]")
+        console.print(f"[dim]{t('cli.scan_box.debug_log_saved', path=target_log)}[/dim]\n")
 
         engine.start_box_scanner(
             output_file=AppPaths.get_user_box_path(),
@@ -836,37 +847,23 @@ def handle_box_scan_interactive(
 def select_challenge_boss_stage(
     engine: BotEngine, console: Console, active_only: bool = True
 ) -> Any:
-    """Interactively prompts the user to select an endgame stage from presets or DokkanDB."""
+    """Interactively prompts the user to select an endgame stage from DokkanDB."""
     with _ui_boundary(console):
-        from dokkan_eza_link_farmer.ai.boss_catalog import get_boss_stage, list_boss_stages
         from dokkan_eza_link_farmer.ai.models import BossStage
 
         console.print(f"[dim]{t('cli.challenge.loading')}[/dim]")
         events = engine.dokkandb.get_challenge_events(active_only=active_only)
+        if not events:
+            console.print(f"[yellow]{t('cli.challenge.no_events')}[/yellow]")
+            return None
 
-        choices = [
-            questionary.Choice(
-                "⭐ [Preset Catalog] Classic Bosses (Broly, Cell Max, Beast Gohan...)",
-                value="preset",
-            ),
-            questionary.Separator("── DokkanDB Challenge Events ──"),
-        ]
-        choices.extend(_build_event_choices(events, limit=50))
+        choices = _build_event_choices(events, limit=50)
 
         selected = questionary.select(
             t("cli.challenge.select_event"), choices=choices, use_arrow_keys=True, use_jk_keys=False
         ).ask()
-        if not selected:
+        if not selected or selected == "cancel":
             return None
-
-        if selected == "preset":
-            st_choices = [
-                questionary.Choice(title=f"{s.stage_name} ({s.event_name})", value=s.stage_id)
-                for s in list_boss_stages()
-            ]
-            st_choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value=None))
-            chosen = questionary.select("Select target boss stage:", choices=st_choices).ask()
-            return get_boss_stage(chosen) if chosen else None
 
         ev_id = int(selected.get("id") or 0)
         ev_name = (selected.get("name") or "Challenge").replace("\n", " ").strip()
@@ -877,7 +874,9 @@ def select_challenge_boss_stage(
             else []
         )
         if not quests:
-            console.print(f"[yellow]No stages found for event '{ev_name}' (ID: {ev_id}).[/yellow]")
+            console.print(
+                f"[yellow]{t('cli.challenge.no_stages_found', name=ev_name, id=ev_id)}[/yellow]"
+            )
             return None
 
         chosen_stage = questionary.select(
@@ -886,7 +885,7 @@ def select_challenge_boss_stage(
             use_arrow_keys=True,
             use_jk_keys=False,
         ).ask()
-        if not chosen_stage:
+        if not chosen_stage or chosen_stage == "cancel":
             return None
 
         stages_arr = chosen_stage.get("stages", [])
@@ -899,7 +898,7 @@ def select_challenge_boss_stage(
                 use_arrow_keys=True,
                 use_jk_keys=False,
             ).ask()
-            if not chosen_diff:
+            if not chosen_diff or chosen_diff == "cancel":
                 return None
             target_stage_id = chosen_diff.get("stage_id")
             target_diff = _extract_stage_difficulty(chosen_diff)
@@ -956,7 +955,7 @@ def prompt_stage_missions(stage: Any, dokkandb: Any, console: Console) -> Any | 
             stage_num = int(m.group(1))
 
         try:
-            with console.status("[dim]Fetching stage missions from DokkanDB...[/dim]"):
+            with console.status(f"[dim]{t('cli.challenge.fetching_missions')}[/dim]"):
                 raw_missions = dokkandb.get_event_missions(ev_id)
         except Exception:
             return None
@@ -973,7 +972,7 @@ def prompt_stage_missions(stage: Any, dokkandb: Any, console: Console) -> Any | 
 
         choices = [questionary.Choice(title=f"🎯 {m.display_title}", value=m) for m in restricted]
         selected = questionary.checkbox(
-            "Select stage missions to target (Space to toggle, Enter to confirm/skip):",
+            t("cli.challenge.prompt_missions"),
             choices=choices,
             use_arrow_keys=True,
             use_jk_keys=False,
@@ -984,8 +983,8 @@ def prompt_stage_missions(stage: Any, dokkandb: Any, console: Console) -> Any | 
         batch = MissionBundler.create_batch_from_selection(selected)
         console.print(
             Panel.fit(
-                f"[bold green]🎯 Mission Targeting Enabled:[/bold green] [bold yellow]{batch.summary}[/bold yellow]\n"
-                f"[dim]The AI Solver will strictly constrain team synthesis to satisfy these mission conditions.[/dim]",
+                f"[bold green]{t('cli.challenge.mission_targeting_enabled', summary=batch.summary)}[/bold green]\n"
+                f"[dim]{t('cli.challenge.mission_targeting_hint')}[/dim]",
                 border_style="green",
             )
         )
@@ -1015,20 +1014,20 @@ def ai_find_partners(engine: BotEngine, console: Console, query: str = "") -> No
 
         choices = [
             questionary.Choice(
-                title=f"{c.get('name')} - {c.get('subname', '')} (ID: {c.get('id')})",
+                title=f"🃏 {c.get('name')} - {c.get('subname', '')} (ID: {c.get('id')})",
                 value=c.get("id"),
             )
             for c in cards
         ]
-        choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value=None))
+        choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value="cancel"))
 
         chosen_id = questionary.select(t("cli.ai.select_leader"), choices=choices).ask()
-        if not chosen_id:
+        if not chosen_id or chosen_id == "cancel":
             return
 
         card_data = engine.dokkandb.get_card(int(chosen_id))
         if not card_data:
-            console.print("[red]Could not retrieve card details.[/red]")
+            console.print(f"[red]{t('cli.ai.could_not_load_card')}[/red]")
             return
 
         target_card = DokkanCard.from_dokkandb(card_data)
@@ -1065,7 +1064,7 @@ def ai_build_team_for_stage(
         shortlist = None
         try:
             with console.status(
-                "[bold cyan]Synthesizing optimal team with AI Solver & Advisor...", spinner="dots"
+                f"[bold cyan]{t('cli.ai.synthesizing_team')}[/bold cyan]", spinner="dots"
             ):
                 rec, shortlist = engine.team_builder.select_best_team_for_boss(
                     candidate_pool=candidate_pool,
@@ -1074,14 +1073,12 @@ def ai_build_team_for_stage(
                     mission_batch=mission_batch,
                 )
         except Exception as e:
-            console.print(
-                f"[yellow]Algorithmic solver notice: {e}. Building best synergy plan...[/yellow]"
-            )
+            console.print(f"[yellow]{t('cli.ai.solver_fallback', error=str(e))}[/yellow]")
             rec = engine.team_builder.build_team_plan(candidate_pool[:6], language=get_language())
 
         (on_render or render_team_presentation)(
             rec,
-            title=f"🔄 AI Recommended Tactical Rotations for {stage.stage_name}",
+            title=f"🔄 {t('cli.ai.rotations_for_stage', stage=stage.stage_name)}",
             shortlist=shortlist,
         )
 
@@ -1100,19 +1097,17 @@ def ai_build_team(
 
         if not query:
             build_mode = questionary.select(
-                "Select Team Building target:",
+                t("cli.ai.select_target"),
                 choices=[
                     questionary.Choice(
-                        "🎯 Build & Optimize Team for a Challenge Event (DokkanDB)",
+                        t("cli.ai.opt_challenge_target"),
                         value="challenge",
                     ),
-                    questionary.Choice(
-                        "👤 Build Team around a Specific Leader Character", value="leader"
-                    ),
-                    questionary.Choice(t("cli.ai.opt_cancel"), value=None),
+                    questionary.Choice(t("cli.ai.opt_leader_target"), value="leader"),
+                    questionary.Choice(t("cli.ai.opt_cancel"), value="cancel"),
                 ],
             ).ask()
-            if not build_mode:
+            if not build_mode or build_mode == "cancel":
                 return
 
             if build_mode == "challenge":
@@ -1143,20 +1138,20 @@ def ai_build_team(
 
         choices = [
             questionary.Choice(
-                title=f"{c.get('name')} - {c.get('subname', '')} (ID: {c.get('id')})",
+                title=f"🃏 {c.get('name')} - {c.get('subname', '')} (ID: {c.get('id')})",
                 value=c.get("id"),
             )
             for c in cards
         ]
-        choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value=None))
+        choices.append(questionary.Choice(title=t("cli.ai.opt_cancel"), value="cancel"))
 
         leader_id = questionary.select(t("cli.ai.select_leader"), choices=choices).ask()
-        if not leader_id:
+        if not leader_id or leader_id == "cancel":
             return
 
         leader_data = engine.dokkandb.get_card(int(leader_id))
         if not leader_data:
-            console.print("[red]Could not load card details.[/red]")
+            console.print(f"[red]{t('cli.ai.could_not_load_card')}[/red]")
             return
 
         leader_card = DokkanCard.from_dokkandb(leader_data)
@@ -1175,7 +1170,7 @@ def ai_build_team(
 
         team_cards = [leader_card] + sub_units[:5]
         rec = engine.team_builder.build_team_plan(team_cards, language=get_language())
-        (on_render or render_team_presentation)(rec, title="🔄 AI Recommended Tactical Rotations")
+        (on_render or render_team_presentation)(rec, title=f"🔄 {t('cli.ai.rotations_title')}")
 
 
 def ai_configure_model(
@@ -1201,9 +1196,7 @@ def ai_configure_model(
     engine.ai_client = DokkanAIClient(engine.ai_config)
     engine.team_builder = TeamBuilder(dokkandb=engine.dokkandb, ai_client=engine.ai_client)
 
-    console.print(
-        f"[bold green]✓ Modello AI impostato su {model_name} (Ottimizzato 100% GPU / zero-latency)[/bold green]"
-    )
+    console.print(f"[bold green]{t('cli.ai.model_configured', model=model_name)}[/bold green]")
     if on_status:
         on_status()
     else:
@@ -1232,16 +1225,14 @@ def handle_ai_interactive(
         if not action:
             choices = [
                 questionary.Choice(title=t("cli.ai.opt_build"), value="build"),
-                questionary.Choice(
-                    title="⚔️ Run AI Endgame Loop (Red Zone / SMB / Challenge)", value="endgame"
-                ),
+                questionary.Choice(title=t("cli.ai.opt_endgame"), value="endgame"),
                 questionary.Choice(title=t("cli.ai.opt_partner"), value="partner"),
                 questionary.Choice(title=t("cli.ai.opt_status"), value="status"),
                 questionary.Choice(title=t("cli.ai.opt_config"), value="config"),
-                questionary.Choice(title=t("cli.ai.opt_cancel"), value=None),
+                questionary.Choice(title=t("cli.ai.opt_cancel"), value="cancel"),
             ]
             action = questionary.select(t("cli.ai.menu_title"), choices=choices).ask()
-            if not action:
+            if not action or action == "cancel":
                 return
 
         if action in ("status", "check"):

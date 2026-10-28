@@ -303,8 +303,6 @@ class TerminalCLI:
         max_attempts: int | None = None,
     ) -> None:
         """Runs the autonomous AI Endgame Trial & Error loop on target stage."""
-        from dokkan_eza_link_farmer.ai.boss_catalog import list_boss_stages
-
         stage = (
             _resolve_boss_stage(self.engine.dokkandb, target_stage)
             if target_stage is not None
@@ -313,13 +311,8 @@ class TerminalCLI:
         if not stage:
             if target_stage is not None:
                 self.console.print(
-                    f"[bold red]Stage '{target_stage}' not found in catalog or DokkanDB.[/bold red]"
+                    f"[bold red]{t('cli.challenge.stage_not_found', stage=target_stage)}[/bold red]"
                 )
-                self.console.print("[yellow]Available catalog presets:[/yellow]")
-                for s in list_boss_stages():
-                    self.console.print(
-                        f"  • [cyan]{s.stage_id}[/cyan]: {s.event_name} - {s.stage_name}"
-                    )
             return
 
         mission_batch = self._prompt_stage_missions(stage)
@@ -346,24 +339,19 @@ class TerminalCLI:
         args = args or []
         force = "--force" in args or "-f" in args
         target_file = next((a for a in args if not a.startswith("-")), None)
-        mode_desc = (
-            "Refreshing details from DokkanDB (adaptive rate limiting & exponential backoff)"
-            if force
-            else "Syncing character box details using disk cache (instant)"
-        )
+        mode_desc = t("cli.enrich_box.mode_refresh") if force else t("cli.enrich_box.mode_cache")
         self.console.print(
-            f"[cyan]Enriching character box with deep card details (leader skills, categories, passives)...[/cyan]\n"
-            f"[dim]{mode_desc}...[/dim]"
+            f"[cyan]{t('cli.enrich_box.starting')}[/cyan]\n[dim]{mode_desc}...[/dim]"
         )
         try:
             enriched = DokkanSyncer().sync_box_details(
                 box_file=target_file, force=force, save_to_file=True
             )
             self.console.print(
-                f"[bold green]✓ Successfully enriched {len(enriched)} cards in box![/bold green]"
+                f"[bold green]{t('cli.enrich_box.success', count=len(enriched))}[/bold green]"
             )
         except Exception as e:
-            self.console.print(f"[bold red]Box enrichment failed: {e}[/bold red]")
+            self.console.print(f"[bold red]{t('cli.enrich_box.error', error=e)}[/bold red]")
 
     def _select_challenge_boss_stage(self, active_only: bool = True) -> Any:
         return wizards.select_challenge_boss_stage(
@@ -520,10 +508,7 @@ class TerminalCLI:
 
     def _dispatch_discord(self, args: list[str]) -> None:
         if importlib.util.find_spec("discord") is None:
-            self.console.print(
-                "[bold red]Per utilizzare il bot Discord, installa la dipendenza opzionale con: "
-                "uv pip install dokkan-eza-link-farmer[discord][/bold red]"
-            )
+            self.console.print(f"[bold red]{t('cli.discord.dependency_missing')}[/bold red]")
             return
 
         from dokkan_eza_link_farmer.integrations.discord_bot import (
