@@ -185,3 +185,54 @@ class TestScenarioFarmingIntegration:
         assert task.is_stopped()
         assert not task.is_running
         assert any("Tapped OK at" in log or "OK press" in log for log in runner.status_logs)
+
+    def test_scenario_stamina_depletion_and_recovery_stop(self) -> None:
+        """Simulates full flow: Home -> Quest -> Fight -> Stamina Empty -> Safe Stop.
+
+        Asserts invariants:
+        - Task terminates safely (task.is_running is False, task.is_stopped() is True).
+        - Completed runs is tracked accurately (runs_completed == 1).
+        - Zero unhandled crashes and zero real sleeps (execution time < 300ms).
+        """
+        import time
+
+        runner = AutomatedScenarioRunner()
+        config = runner.create_default_config()
+        config["link_leveling"]["rebuild_team_every_run"] = False
+        config["link_leveling"]["auto_swap_maxed_units"] = False
+        config["link_leveling"]["stamina_refill_mode"] = "none"
+
+        task = LinkLevelFarmTask(
+            adb=runner.adb,  # type: ignore[arg-type]
+            vision=runner.vision,
+            config=config,
+            runs=None,
+            target_stage="area_39_3",
+            on_status=runner.on_status_handler,
+        )
+
+        runner.set_initial_state(GameState.HOME_SCREEN)
+        sequence = [
+            GameState.MODE_SELECT,
+            GameState.QUEST_SELECT,
+            GameState.STAGE_SELECT,
+            GameState.FRIEND_SELECT,
+            GameState.TEAM_CONFIRM,
+            GameState.MAP_SCREEN,
+            GameState.BATTLE_SCREEN,
+            GameState.KO_SCREEN,
+            GameState.RESULTS_SCREEN,
+            GameState.STAMINA_EMPTY,
+        ]
+        runner.register_state_sequence(sequence)
+
+        t0 = time.perf_counter()
+        runner.run_task_until_complete(task)
+        elapsed_sec = time.perf_counter() - t0
+
+        # Invariant Assertions
+        assert not task.is_running
+        assert task.is_stopped()
+        assert task.runs_completed == 1
+        assert elapsed_sec < 0.3, f"Execution took too long: {elapsed_sec:.3f}s >= 0.300s"
+        assert any("Stamina depleted" in log for log in runner.status_logs)

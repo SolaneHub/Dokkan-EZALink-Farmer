@@ -19,14 +19,37 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 
+import json
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
 
 from tests.harness.fake_clock import VirtualClock
 from tests.harness.fake_dokkandb import FakeDokkanDBClient, fake_dokkandb_requests_get
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+MATRIX_PATH = PROJECT_ROOT / "data" / "cards_tactical_matrix.json"
+BENCHMARKS_PATH = PROJECT_ROOT / "data" / "damage_simulation_benchmarks.json"
+
+
+@pytest.fixture(scope="session")
+def session_tactical_matrix() -> dict[str, Any]:
+    """Loads cards_tactical_matrix.json once into memory for the entire test session."""
+    assert MATRIX_PATH.exists(), f"Matrix file missing at {MATRIX_PATH}"
+    with open(MATRIX_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@pytest.fixture(scope="session")
+def session_damage_benchmarks() -> dict[str, Any]:
+    """Loads damage_simulation_benchmarks.json once into memory for the entire test session."""
+    assert BENCHMARKS_PATH.exists(), f"Benchmarks file missing at {BENCHMARKS_PATH}"
+    with open(BENCHMARKS_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
 
 SLOW_MODULE_NAMES = {
     "test_e2e_farming_slow",

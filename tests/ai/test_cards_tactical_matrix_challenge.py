@@ -15,7 +15,6 @@ Validates:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -62,12 +61,10 @@ VALID_GUARD_TYPES = {
 VALID_RARITIES = {"LR", "UR", "SSR", "SR", "R"}
 
 
-@pytest.fixture(scope="module")
-def matrix_data() -> dict[str, Any]:
-    """Loads and provides data/cards_tactical_matrix.json."""
-    assert MATRIX_PATH.exists(), f"Matrix file missing at {MATRIX_PATH}"
-    with open(MATRIX_PATH, encoding="utf-8") as f:
-        return json.load(f)
+@pytest.fixture
+def matrix_data(session_tactical_matrix: dict[str, Any]) -> dict[str, Any]:
+    """Provides session-cached cards_tactical_matrix.json data."""
+    return session_tactical_matrix
 
 
 class TestTacticalMatrixIntegrity:

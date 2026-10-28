@@ -491,3 +491,347 @@ def test_team_builder_blackbox_pipeline(
     assert reconstructed.rotation_b.slot1.id == team_rec.rotation_b.slot1.id
     assert len(reconstructed.all_cards) == 6
     assert len(reconstructed.floaters) == 3
+
+
+def test_blackbox_extreme_boss_lethal_phase_survival() -> None:
+    """Black-box scenario: Extreme Boss with lethal Super Attack (4.000.000+ ATK).
+
+    Invariant Assertions:
+    - Generated team contains exactly 6 unique cards.
+    - Slot 1 of Rotation A and Rotation B strictly contain units with Guard or DR >= 60%.
+    - The assigned team leader confers at least 170% boost to all 6 units.
+    """
+    from dokkan_eza_link_farmer.ai.models import CardForm, LeaderSkillSpec, PassiveTags
+
+    boss = BossStage(
+        stage_id=9901,
+        event_id=901,
+        stage_name="Lethal Gauntlet Phase",
+        event_name="Red Zone: Supreme Challenge",
+        difficulty=10,
+        phases=[
+            BossPhase(
+                phase_index=1,
+                element=0,
+                element_name="AGL",
+                atk=2_500_000,
+                estimated_sa_damage=4_500_000,
+            ),
+        ],
+    )
+
+    lead_spec = LeaderSkillSpec(
+        main_category_ids=[17],
+        base_boost_pct=170.0,
+        extra_boost_pct=30.0,
+    )
+
+    # 40 cards pool: exactly 2 Slot 1 God tanks, 38 non-tank units
+    pool: list[DokkanCard] = []
+
+    # Tank 1: Guard + 60% DR (Category 17 Pure Saiyans)
+    pool.append(
+        DokkanCard(
+            id=101,
+            name="Anchor Tank Alpha",
+            categories=["Pure Saiyans"],
+            category_ids=[17],
+            leader_spec=lead_spec,
+            leader_skill='"Pure Saiyans" Ki +3, HP, ATK & DEF +170%',
+            passive_skill="Guards all attacks unconditionally; reduces damage received by 60%",
+            base_form=CardForm(
+                form_id=101,
+                form_name="Anchor Tank Alpha",
+                element=10,
+                passive_tags=PassiveTags(
+                    slot1_viable=True,
+                    has_guard=True,
+                    is_guard_permanent=True,
+                    is_guard_unconditional=True,
+                    dr_base_percent=60,
+                ),
+            ),
+        )
+    )
+
+    # Tank 2: Raw 70% DR (DR >= 60%)
+    pool.append(
+        DokkanCard(
+            id=102,
+            name="Anchor Tank Beta",
+            categories=["Pure Saiyans"],
+            category_ids=[17],
+            passive_skill="Reduces damage received by 70%",
+            base_form=CardForm(
+                form_id=102,
+                form_name="Anchor Tank Beta",
+                element=11,
+                passive_tags=PassiveTags(
+                    slot1_viable=True,
+                    dr_base_percent=70,
+                ),
+            ),
+        )
+    )
+
+    # 38 glass cannons / offensive floaters (DR < 60%, no Guard)
+    for i in range(103, 141):
+        pool.append(
+            DokkanCard(
+                id=i,
+                name=f"Pure Saiyan Warrior {i}",
+                categories=["Pure Saiyans"],
+                category_ids=[17],
+                passive_skill="ATK +180%, DEF +100%",
+                base_form=CardForm(
+                    form_id=i,
+                    form_name=f"Pure Saiyan Warrior {i}",
+                    element=12,
+                    passive_tags=PassiveTags(
+                        slot1_viable=False,
+                        has_guard=False,
+                        dr_base_percent=20,
+                    ),
+                ),
+            )
+        )
+
+    builder = TeamBuilder(dokkandb=FakeDokkanDBClient())
+    team_rec, _ = builder.select_best_team_for_boss(
+        candidate_pool=pool,
+        boss_stage=boss,
+        use_ai_advisor=False,
+    )
+
+    # Invariant 1: Exactly 6 unique titular cards
+    assert len(team_rec.all_cards) == 6
+    assert len({c.id for c in team_rec.all_cards}) == 6
+
+    # Invariant 2: Slot 1 of both rotations must have Guard or DR >= 60%
+    s1_a = team_rec.rotation_a.slot1
+    s1_b = team_rec.rotation_b.slot1
+    assert s1_a.has_guard or s1_a.damage_reduction_percent >= 60
+    assert s1_b.has_guard or s1_b.damage_reduction_percent >= 60
+
+    # Invariant 3: Leader boost >= 170% for all 6 units
+    assert team_rec.leader is not None
+    for member in team_rec.all_cards:
+        covered, boost, _ = member.is_covered_by_leader(team_rec.leader)
+        assert covered is True
+        assert boost >= 170.0
+
+
+def test_blackbox_box_constrained_mission_solver() -> None:
+    """Black-box scenario: Constrained 12-unit box with multi-category mission constraints.
+
+    Invariant Assertions:
+    - Solver converges on the best valid combination without unhandled crashes.
+    - Generated team contains exactly 6 unique cards.
+    - All multi-category mission quotas are fulfilled.
+    - All team cards receive leader skill coverage.
+    """
+    from dokkan_eza_link_farmer.ai.mission_solver import ChallengeMission, MissionBatch
+    from dokkan_eza_link_farmer.ai.models import CardForm, LeaderSkillSpec, PassiveTags
+
+    lead_spec = LeaderSkillSpec(
+        main_category_ids=[17, 18],
+        base_boost_pct=170.0,
+        extra_boost_pct=30.0,
+    )
+
+    # Tightly constrained box: 12 cards total
+    box: list[DokkanCard] = [
+        # Leader: Pure Saiyans + Super Saiyans
+        DokkanCard(
+            id=201,
+            name="Hybrid Lead Pure and Super",
+            categories=["Pure Saiyans", "Super Saiyans"],
+            category_ids=[17, 18],
+            leader_spec=lead_spec,
+            leader_skill='"Pure Saiyans" or "Super Saiyans" Ki +3, ATK & DEF +170%',
+            base_form=CardForm(
+                form_id=201,
+                form_name="Hybrid Lead Pure and Super",
+                element=10,
+                passive_tags=PassiveTags(has_guard=True, slot1_viable=True),
+            ),
+        ),
+        # 3 pure-only units
+        DokkanCard(
+            id=202,
+            name="Pure Fighter 1",
+            categories=["Pure Saiyans"],
+            category_ids=[17],
+            base_form=CardForm(
+                form_id=202,
+                form_name="Pure Fighter 1",
+                element=10,
+                passive_tags=PassiveTags(has_guard=True, slot1_viable=True),
+            ),
+        ),
+        DokkanCard(
+            id=203,
+            name="Pure Fighter 2",
+            categories=["Pure Saiyans"],
+            category_ids=[17],
+            base_form=CardForm(
+                form_id=203,
+                form_name="Pure Fighter 2",
+                element=11,
+                passive_tags=PassiveTags(dr_base_percent=50),
+            ),
+        ),
+        DokkanCard(
+            id=204,
+            name="Pure Fighter 3",
+            categories=["Pure Saiyans"],
+            category_ids=[17],
+            base_form=CardForm(
+                form_id=204,
+                form_name="Pure Fighter 3",
+                element=12,
+                passive_tags=PassiveTags(dr_base_percent=50),
+            ),
+        ),
+        # 2 super-only units
+        DokkanCard(
+            id=205,
+            name="Super Fighter 1",
+            categories=["Super Saiyans"],
+            category_ids=[18],
+            base_form=CardForm(
+                form_id=205,
+                form_name="Super Fighter 1",
+                element=13,
+                passive_tags=PassiveTags(dr_base_percent=40),
+            ),
+        ),
+        DokkanCard(
+            id=206,
+            name="Super Fighter 2",
+            categories=["Super Saiyans"],
+            category_ids=[18],
+            base_form=CardForm(
+                form_id=206,
+                form_name="Super Fighter 2",
+                element=14,
+                passive_tags=PassiveTags(dr_base_percent=40),
+            ),
+        ),
+        # 3 dual category units
+        DokkanCard(
+            id=207,
+            name="Dual Saiyan 1",
+            categories=["Pure Saiyans", "Super Saiyans"],
+            category_ids=[17, 18],
+            base_form=CardForm(
+                form_id=207,
+                form_name="Dual Saiyan 1",
+                element=10,
+                passive_tags=PassiveTags(dr_base_percent=40),
+            ),
+        ),
+        DokkanCard(
+            id=208,
+            name="Dual Saiyan 2",
+            categories=["Pure Saiyans", "Super Saiyans"],
+            category_ids=[17, 18],
+            base_form=CardForm(
+                form_id=208,
+                form_name="Dual Saiyan 2",
+                element=11,
+                passive_tags=PassiveTags(dr_base_percent=40),
+            ),
+        ),
+        DokkanCard(
+            id=209,
+            name="Dual Saiyan 3",
+            categories=["Pure Saiyans", "Super Saiyans"],
+            category_ids=[17, 18],
+            base_form=CardForm(
+                form_id=209,
+                form_name="Dual Saiyan 3",
+                element=12,
+                passive_tags=PassiveTags(dr_base_percent=40),
+            ),
+        ),
+        # 3 off-category units
+        DokkanCard(
+            id=210,
+            name="Hybrid Saiyan 1",
+            categories=["Hybrid Saiyans"],
+            category_ids=[19],
+            base_form=CardForm(
+                form_id=210,
+                form_name="Hybrid Saiyan 1",
+                element=13,
+                passive_tags=PassiveTags(dr_base_percent=30),
+            ),
+        ),
+        DokkanCard(
+            id=211,
+            name="Hybrid Saiyan 2",
+            categories=["Hybrid Saiyans"],
+            category_ids=[19],
+            base_form=CardForm(
+                form_id=211,
+                form_name="Hybrid Saiyan 2",
+                element=14,
+                passive_tags=PassiveTags(dr_base_percent=30),
+            ),
+        ),
+        DokkanCard(
+            id=212,
+            name="Realm of Gods 1",
+            categories=["Realm of Gods"],
+            category_ids=[20],
+            base_form=CardForm(
+                form_id=212,
+                form_name="Realm of Gods 1",
+                element=10,
+                passive_tags=PassiveTags(dr_base_percent=30),
+            ),
+        ),
+    ]
+
+    # Multi-category mission requirement: at least 3 Pure Saiyans and at least 3 Super Saiyans
+    mission_batch = MissionBatch(
+        missions=[
+            ChallengeMission(
+                id=1,
+                name="Pure Saiyans Mastery",
+                description="Clear with at least 3 Pure Saiyans",
+                categories=[(3, "Pure Saiyans")],
+            ),
+            ChallengeMission(
+                id=2,
+                name="Super Saiyans Mastery",
+                description="Clear with at least 3 Super Saiyans",
+                categories=[(3, "Super Saiyans")],
+            ),
+        ],
+        required_categories=[(3, "Pure Saiyans"), (3, "Super Saiyans")],
+    )
+
+    builder = TeamBuilder(dokkandb=FakeDokkanDBClient())
+    team_rec, _ = builder.select_best_team_for_boss(
+        candidate_pool=box,
+        mission_batch=mission_batch,
+        use_ai_advisor=False,
+    )
+
+    # Invariant 1: Exactly 6 unique titular cards
+    assert len(team_rec.all_cards) == 6
+    assert len({c.id for c in team_rec.all_cards}) == 6
+
+    # Invariant 2: Quota satisfaction for multiple categories
+    pure_count = sum(1 for c in team_rec.all_cards if "Pure Saiyans" in c.categories)
+    super_count = sum(1 for c in team_rec.all_cards if "Super Saiyans" in c.categories)
+    assert pure_count >= 3
+    assert super_count >= 3
+
+    # Invariant 3: Leader coverage for all team members
+    for member in team_rec.all_cards:
+        covered, boost, _ = member.is_covered_by_leader(team_rec.leader)
+        assert covered is True
+        assert boost >= 170.0

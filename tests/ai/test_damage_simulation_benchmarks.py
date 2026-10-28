@@ -17,7 +17,6 @@ Validates:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -34,11 +33,10 @@ BENCHMARKS_FILE = PROJECT_ROOT / "data" / "damage_simulation_benchmarks.json"
 MATRIX_FILE = PROJECT_ROOT / "data" / "cards_tactical_matrix.json"
 
 
-@pytest.fixture(scope="module")
-def benchmark_data() -> dict[str, Any]:
-    assert BENCHMARKS_FILE.exists(), f"Missing benchmarks file: {BENCHMARKS_FILE}"
-    with open(BENCHMARKS_FILE, encoding="utf-8") as f:
-        return json.load(f)
+@pytest.fixture
+def benchmark_data(session_damage_benchmarks: dict[str, Any]) -> dict[str, Any]:
+    """Provides session-cached damage_simulation_benchmarks.json data."""
+    return session_damage_benchmarks
 
 
 class TestBenchmarkSchemaAndMetadata:

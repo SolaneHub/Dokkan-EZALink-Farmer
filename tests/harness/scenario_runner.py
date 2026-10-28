@@ -168,6 +168,15 @@ class AutomatedScenarioRunner:
             {"map_auto_on": (int(w * 0.15), int(h * 0.10), 1.0)},
         )
 
+        # STAMINA_EMPTY
+        self._state_frames[GameState.STAMINA_EMPTY] = self._create_fast_frame(
+            GameState.STAMINA_EMPTY,
+            {
+                "popup_stamina_empty": (int(w * 0.50), int(h * 0.40), 1.0),
+                "cancel_button": (int(w * 0.50), int(h * 0.785), 1.0),
+            },
+        )
+
         # STAGE_SELECT
         self._state_frames[GameState.STAGE_SELECT] = self._create_fast_frame(
             GameState.STAGE_SELECT,
@@ -178,6 +187,12 @@ class AutomatedScenarioRunner:
         self._state_frames[GameState.RESULTS_SCREEN] = self._create_fast_frame(
             GameState.RESULTS_SCREEN,
             {"header_clear": (int(w * 0.50), int(h * 0.15), 1.0)},
+        )
+
+        # QUEST_SELECT
+        self._state_frames[GameState.QUEST_SELECT] = self._create_fast_frame(
+            GameState.QUEST_SELECT,
+            {"badge_area_39": (int(w * 0.50), int(h * 0.40), 1.0)},
         )
 
         # RESULTS_ATTEMPT_AGAIN
