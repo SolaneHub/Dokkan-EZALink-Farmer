@@ -1,5 +1,15 @@
 # Changelog
 
+## [v2.1.1] - 2026-10-28
+
+### Fixed
+- **Character Box Filter Automation (`automation.scanner.filter_manager`, `automation.vision`)**: Robust detection of sort/filter buttons adapting dynamically to screen aspect ratios (16:9 vs modern tall displays) and green back button anchors. Added explicit modal presence verification avoiding blind misclicks.
+- **Support Catalog Type Safety (`ai.support_catalog`)**: Fixed Pyright static analysis errors by validating item identifier types before querying dictionary descriptors.
+
+### Added
+- **Bilingual Tactical Briefings & Stage Intel (`ai.formatters`, `ai.team_builder`, `ui.briefing`)**: Full localization (Italian and English) for Rich rotation tables, slot roles, defensive badges, and multi-phase enemy telemetry tables.
+- **Interactive Challenge Event Browser (`ui.wizards`, `assets/locales`)**: Dynamic querying of DokkanDB challenge quests with standardized cancellation handling across all interactive CLI menus.
+
 ## [v2.1.0] - 2026-10-28
 
 ### Added
