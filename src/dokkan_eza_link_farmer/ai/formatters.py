@@ -352,7 +352,10 @@ def format_team_summary_table(
 
 
 def render_team_summary_table_rich(
-    team_cards: list[DokkanCard], leader: DokkanCard | None = None, boss_stage: Any = None
+    team_cards: list[DokkanCard],
+    leader: DokkanCard | None = None,
+    boss_stage: Any = None,
+    language: str | None = None,
 ) -> Any:
     """Renders a rich.table.Table summary for the 6 team slots with Dokkan type colors:
 
@@ -360,27 +363,37 @@ def render_team_summary_table_rich(
     - Type (Super AGL, Extreme STR, etc. colored with Dokkan typing color)
     - Character (full name styled with Dokkan typing color)
     - Leader Boost (200%, 170%, etc.)
-    - Ruolo (Slot 1 Tank, Stacker, Floater)
-    - Tag Difensivi (Guard, DR %, Dodge %)
+    - Ruolo / Role (Slot 1 Tank, Stacker, Floater)
+    - Tag Difensivi / Defensive Tags (Guard, DR %, Dodge %)
     """
     from rich.table import Table
     from rich.text import Text
 
     from dokkan_eza_link_farmer.ai.solver import DokkanConstraintSolver
     from dokkan_eza_link_farmer.ai.synergy import optimize_rotations_for_team
+    from dokkan_eza_link_farmer.core.i18n import get_language
 
+    lang = language or get_language()
     lead = leader or (team_cards[0] if team_cards else None)
     t = Table(
         title="🛡️ Dokkan AI Optimal 6-Card Team Formation",
         border_style="green",
         expand=True,
     )
-    t.add_column("Slot", style="bold cyan", justify="center", width=6, no_wrap=True)
-    t.add_column("Type", justify="center", width=13, no_wrap=True)
-    t.add_column("Character", ratio=5, no_wrap=False)
-    t.add_column("Leader Boost", justify="center", width=13, no_wrap=True)
-    t.add_column("Ruolo", justify="center", width=16, no_wrap=False)
-    t.add_column("Tag Difensivi", ratio=3, no_wrap=False)
+    if lang == "it":
+        t.add_column("Slot", style="bold cyan", justify="center", width=6, no_wrap=True)
+        t.add_column("Classe / Tipo", justify="center", width=13, no_wrap=True)
+        t.add_column("Personaggio", ratio=5, no_wrap=False)
+        t.add_column("Boost Leader", justify="center", width=13, no_wrap=True)
+        t.add_column("Ruolo", justify="center", width=16, no_wrap=False)
+        t.add_column("Tag Difensivi", ratio=3, no_wrap=False)
+    else:
+        t.add_column("Slot", style="bold cyan", justify="center", width=6, no_wrap=True)
+        t.add_column("Type", justify="center", width=13, no_wrap=True)
+        t.add_column("Character", ratio=5, no_wrap=False)
+        t.add_column("Leader Boost", justify="center", width=13, no_wrap=True)
+        t.add_column("Role", justify="center", width=16, no_wrap=False)
+        t.add_column("Defensive Tags", ratio=3, no_wrap=False)
 
     if not team_cards:
         return t
@@ -793,25 +806,39 @@ def format_stage_tactical_briefing(boss_stage: Any, language: str = "it") -> str
     return "\n".join(lines)
 
 
-def render_stage_intel_rich(boss_stage: Any) -> Any:
+def render_stage_intel_rich(boss_stage: Any, language: str | None = None) -> Any:
     """Renders a rich table of complete stage intelligence: Battles, HP, ATK, Actions, Immunities, and Stacking."""
     from rich.panel import Panel
     from rich.table import Table
     from rich.text import Text
 
+    from dokkan_eza_link_farmer.core.i18n import get_language
+
+    lang = language or get_language()
     total_battles = getattr(boss_stage, "total_battles", 1)
     is_multi_battle = getattr(boss_stage, "is_multi_battle", False)
     phases = getattr(boss_stage, "phases", [])
 
-    title = f"🎯 Stage Intelligence: {boss_stage.event_name} - {boss_stage.stage_name} ({total_battles} Battagli{'e' if total_battles > 1 else 'a'})"
-    t = Table(show_header=True, header_style="bold magenta", expand=True)
-    t.add_column("Fase", style="bold cyan", width=12, no_wrap=True)
-    t.add_column("Boss Nemico", style="bold", ratio=4, no_wrap=False)
-    t.add_column("HP", justify="right", style="green", width=7, no_wrap=True)
-    t.add_column("ATK / Super", justify="right", style="yellow", width=13, no_wrap=True)
-    t.add_column("Azioni", justify="center", width=7, no_wrap=True)
-    t.add_column("Gimmick & Immunità", style="white", ratio=4, no_wrap=False)
-    t.add_column("Stacking DEF", justify="center", width=12, no_wrap=False)
+    if lang == "it":
+        title = f"🎯 Stage Intelligence: {boss_stage.event_name} - {boss_stage.stage_name} ({total_battles} Battagli{'e' if total_battles > 1 else 'a'})"
+        t = Table(title=title, show_header=True, header_style="bold magenta", expand=True)
+        t.add_column("Fase", style="bold cyan", width=12, no_wrap=True)
+        t.add_column("Boss Nemico", style="bold", ratio=4, no_wrap=False)
+        t.add_column("HP", justify="right", style="green", width=7, no_wrap=True)
+        t.add_column("ATK / Super", justify="right", style="yellow", width=13, no_wrap=True)
+        t.add_column("Azioni", justify="center", width=7, no_wrap=True)
+        t.add_column("Gimmick & Immunità", style="white", ratio=4, no_wrap=False)
+        t.add_column("Stacking DEF", justify="center", width=12, no_wrap=False)
+    else:
+        title = f"🎯 Stage Intelligence: {boss_stage.event_name} - {boss_stage.stage_name} ({total_battles} Battle{'s' if total_battles > 1 else ''})"
+        t = Table(title=title, show_header=True, header_style="bold magenta", expand=True)
+        t.add_column("Phase", style="bold cyan", width=12, no_wrap=True)
+        t.add_column("Boss Enemy", style="bold", ratio=4, no_wrap=False)
+        t.add_column("HP", justify="right", style="green", width=7, no_wrap=True)
+        t.add_column("ATK / Super", justify="right", style="yellow", width=13, no_wrap=True)
+        t.add_column("Actions", justify="center", width=7, no_wrap=True)
+        t.add_column("Gimmicks & Immunities", style="white", ratio=4, no_wrap=False)
+        t.add_column("Stacking DEF", justify="center", width=12, no_wrap=False)
 
     for p in phases:
         phase_label = f"B{getattr(p, 'battle_index', 1)} - R{getattr(p, 'round_index', 1)} (F{getattr(p, 'phase_index', 1)})"
@@ -835,7 +862,8 @@ def render_stage_intel_rich(boss_stage: Any) -> Any:
         if is_multi:
             e_cnt = getattr(p, "enemy_count", len(getattr(p, "bosses", [])))
             boss_text = Text()
-            boss_text.append(f"👥 {e_cnt} Nemici ({elem_name})\n", style="bold cyan")
+            enemies_label = "Nemici" if lang == "it" else "Enemies"
+            boss_text.append(f"👥 {e_cnt} {enemies_label} ({elem_name})\n", style="bold cyan")
             for idx, b in enumerate(getattr(p, "bosses", [])):
                 b_color = (
                     "green"
@@ -952,6 +980,7 @@ def generate_deterministic_tactical_guide(
     leader: DokkanCard,
     friend: DokkanCard,
     boss_stage: Any = None,
+    language: str = "it",
 ) -> str:
     """Generates the clean algorithmic fallback guide adhering to standard tactical structure."""
 
@@ -963,32 +992,56 @@ def generate_deterministic_tactical_guide(
             badge = " [Leader]"
         return f"{c.name}{badge}"
 
+    is_it = language == "it"
+
     def _slot2_desc(c: DokkanCard, shared_links_count: int) -> str:
         stacks = getattr(c, "has_stacking_def", False) or bool(
             c.base_form and c.base_form.sa_tags and c.base_form.sa_tags.stacks_def
         )
         on_hit = getattr(c, "has_on_hit_defense", False)
-        if stacks and on_hit:
-            return f"in Slot 2 attacca prima con Super Attack (attivando il boost DEF post-super e accumulando stack difensivi), assorbendo poi in sicurezza i colpi successivi per caricare i bonus on-hit ({shared_links_count} link attivi)"
-        elif stacks:
-            return f"in Slot 2 lancia la Super Attack per accumulare DEF (stacking) turno dopo turno e massimizzare i danni ({shared_links_count} link attivi)"
-        elif on_hit:
-            return f"in Slot 2 attacca per prima sfruttando i bonus post-super, per poi assorbire i colpi in sicurezza e attivare le abilità on-hit ({shared_links_count} link attivi)"
+        if is_it:
+            if stacks and on_hit:
+                return f"in Slot 2 attacca prima con Super Attack (attivando il boost DEF post-super e accumulando stack difensivi), assorbendo poi in sicurezza i colpi successivi per caricare i bonus on-hit ({shared_links_count} link attivi)"
+            elif stacks:
+                return f"in Slot 2 lancia la Super Attack per accumulare DEF (stacking) turno dopo turno e massimizzare i danni ({shared_links_count} link attivi)"
+            elif on_hit:
+                return f"in Slot 2 attacca per prima sfruttando i bonus post-super, per poi assorbire i colpi in sicurezza e attivare le abilità on-hit ({shared_links_count} link attivi)"
+            else:
+                return f"in Slot 2 attiva {shared_links_count} link e guida la fase offensiva"
         else:
-            return f"in Slot 2 attiva {shared_links_count} link e guida la fase offensiva"
+            if stacks and on_hit:
+                return f"in Slot 2 attacks first with Super Attack (triggering post-super DEF boost and stacking DEF), then safely absorbs subsequent attacks to build on-hit buffs ({shared_links_count} active links)"
+            elif stacks:
+                return f"in Slot 2 launches Super Attack to stack DEF turn after turn and maximize damage ({shared_links_count} active links)"
+            elif on_hit:
+                return f"in Slot 2 attacks first to leverage post-super buffs, then safely takes hits to trigger on-hit abilities ({shared_links_count} active links)"
+            else:
+                return (
+                    f"in Slot 2 activates {shared_links_count} links and drives the offensive phase"
+                )
 
     warnings_section = ""
     on_hit_units = [
         c for c in (rot_a.slot1, rot_b.slot1) if getattr(c, "has_on_hit_defense", False)
     ]
     if on_hit_units:
-        warn_lines = [
-            f"- ⚠️ **{_name_with_badge(c)}**: attiva parte delle sue difese o riduzione SOLO dopo aver ricevuto colpi. Fai molta attenzione se il nemico attacca con una Super Attack prima che l'unità sia pronta (rischio oneshot); proteggila con Whis o invertila con Slot 2 se il primo colpo è letale."
-            for c in on_hit_units
-        ]
-        warnings_section = (
-            "\n\n### ⚠️ Avvisi Critici di Sopravvivenza (Difesa On-Hit)\n" + "\n".join(warn_lines)
-        )
+        if is_it:
+            warn_lines = [
+                f"- ⚠️ **{_name_with_badge(c)}**: attiva parte delle sue difese o riduzione SOLO dopo aver ricevuto colpi. Fai molta attenzione se il nemico attacca con una Super Attack prima che l'unità sia pronta (rischio oneshot); proteggila con Whis o invertila con Slot 2 se il primo colpo è letale."
+                for c in on_hit_units
+            ]
+            warnings_section = (
+                "\n\n### ⚠️ Avvisi Critici di Sopravvivenza (Difesa On-Hit)\n"
+                + "\n".join(warn_lines)
+            )
+        else:
+            warn_lines = [
+                f"- ⚠️ **{_name_with_badge(c)}**: activates part of defenses/DR ONLY after taking hits. Be cautious if the enemy attacks with a Super Attack before this unit is prepared (oneshot risk); protect with Whis or swap with Slot 2 if the first hit is lethal."
+                for c in on_hit_units
+            ]
+            warnings_section = "\n\n### ⚠️ Critical Survival Alerts (On-Hit Defense)\n" + "\n".join(
+                warn_lines
+            )
 
     cond_warn_lines = []
     if boss_stage:
@@ -1003,26 +1056,40 @@ def generate_deterministic_tactical_guide(
                 if not all_match:
                     req_cats = ", ".join(getattr(u, "enemy_conditional_categories", []))
                     failing_str = ", ".join(str(p) for p in failing)
-                    cond_warn_lines.append(
-                        f"- 🛑 **{_name_with_badge(u)}**: La sua riduzione del danno/guardia richiede nemici di categoria ({req_cats}). Nelle Fasi {failing_str} il boss non appartiene a tale categoria: la carta perde ogni difesa (0% DR) ed è soggetta a oneshot immediato!"
-                    )
+                    if is_it:
+                        cond_warn_lines.append(
+                            f"- 🛑 **{_name_with_badge(u)}**: La sua riduzione del danno/guardia richiede nemici di categoria ({req_cats}). Nelle Fasi {failing_str} il boss non appartiene a tale categoria: la carta perde ogni difesa (0% DR) ed è soggetta a oneshot immediato!"
+                        )
+                    else:
+                        cond_warn_lines.append(
+                            f"- 🛑 **{_name_with_badge(u)}**: damage reduction/guard requires enemies of category ({req_cats}). In Phase {failing_str} the boss does not belong to this category: unit loses all defense (0% DR) and faces immediate oneshot!"
+                        )
     if cond_warn_lines:
-        warnings_section += (
-            "\n\n### 🛑 Allerta Critica Categoria Nemica (Rischio Oneshot)\n"
-            + "\n".join(cond_warn_lines)
+        header = (
+            "### 🛑 Allerta Critica Categoria Nemica (Rischio Oneshot)"
+            if is_it
+            else "### 🛑 Critical Enemy Category Alert (Oneshot Risk)"
         )
+        warnings_section += f"\n\n{header}\n" + "\n".join(cond_warn_lines)
 
     slot1_floater_warn_lines = []
     for fl in floaters:
         if getattr(fl, "has_slot_1_only_guard", False) or getattr(fl, "has_slot_1_only_dr", False):
-            slot1_floater_warn_lines.append(
-                f"- 🛑 **{_name_with_badge(fl)}**: La sua guardia o riduzione del danno si attiva SOLO come 1° attaccante del turno ('As the 1st attacker in a turn'). Essendo in **Slot 3 (Floater)**, la guardia/DR è COMPLETAMENTE DISATTIVATA (0% guardia, 0% DR)! Subirà danno pieno e rischia il oneshot istantaneo se riceve attacchi in Slot 3!"
-            )
+            if is_it:
+                slot1_floater_warn_lines.append(
+                    f"- 🛑 **{_name_with_badge(fl)}**: La sua guardia o riduzione del danno si attiva SOLO come 1° attaccante del turno ('As the 1st attacker in a turn'). Essendo in **Slot 3 (Floater)**, la guardia/DR è COMPLETAMENTE DISATTIVATA (0% guardia, 0% DR)! Subirà danno pieno e rischia il oneshot istantaneo se riceve attacchi in Slot 3!"
+                )
+            else:
+                slot1_floater_warn_lines.append(
+                    f"- 🛑 **{_name_with_badge(fl)}**: guard or damage reduction activates ONLY as the 1st attacker of the turn ('As the 1st attacker in a turn'). Placed in **Slot 3 (Floater)**, guard/DR is COMPLETELY DISABLED (0% guard, 0% DR)! Unit will take full damage and risks an instant oneshot!"
+                )
     if slot1_floater_warn_lines:
-        warnings_section += (
-            "\n\n### 🛑 Allerta Critica Floater con Meccanica Slot 1 (Rischio Oneshot Assoluto)\n"
-            + "\n".join(slot1_floater_warn_lines)
+        header = (
+            "### 🛑 Allerta Critica Floater con Meccanica Slot 1 (Rischio Oneshot Assoluto)"
+            if is_it
+            else "### 🛑 Critical Floater with Slot 1 Mechanics Alert (Absolute Oneshot Risk)"
         )
+        warnings_section += f"\n\n{header}\n" + "\n".join(slot1_floater_warn_lines)
 
     pre_attack_warn_lines = []
     all_team_units = [rot_a.slot1, rot_a.slot2, rot_b.slot1, rot_b.slot2] + list(floaters)
@@ -1032,29 +1099,53 @@ def generate_deterministic_tactical_guide(
             continue
         seen_pa_ids.add(u.id)
         if getattr(u, "has_pre_attack_only_dr", False) and not getattr(u, "is_dr_permanent", False):
-            ki_txt = (
-                f" con {u.pre_attack_dr_ki_req}+ Ki"
-                if getattr(u, "pre_attack_dr_ki_req", None)
-                else ""
-            )
-            pre_attack_warn_lines.append(
-                f"- 🛑 **{_name_with_badge(u)}**: La sua riduzione danno ({u.damage_reduction_percent}%) si attiva SOLO prima di attaccare{ki_txt}. Dopo aver lanciato l'attacco, la riduzione CESSA (0% DR)! Attacchi nemici successivi (post-attacco) infliggeranno danno pieno e letale!"
-            )
+            if is_it:
+                ki_txt = (
+                    f" con {u.pre_attack_dr_ki_req}+ Ki"
+                    if getattr(u, "pre_attack_dr_ki_req", None)
+                    else ""
+                )
+                pre_attack_warn_lines.append(
+                    f"- 🛑 **{_name_with_badge(u)}**: La sua riduzione danno ({u.damage_reduction_percent}%) si attiva SOLO prima di attaccare{ki_txt}. Dopo aver lanciato l'attacco, la riduzione CESSA (0% DR)! Attacchi nemici successivi (post-attacco) infliggeranno danno pieno e letale!"
+                )
+            else:
+                ki_txt = (
+                    f" with {u.pre_attack_dr_ki_req}+ Ki"
+                    if getattr(u, "pre_attack_dr_ki_req", None)
+                    else ""
+                )
+                pre_attack_warn_lines.append(
+                    f"- 🛑 **{_name_with_badge(u)}**: damage reduction ({u.damage_reduction_percent}%) activates ONLY before attacking{ki_txt}. After attacking, reduction CEASES (0% DR)! Subsequent enemy attacks (post-attack) will deal full lethal damage!"
+                )
     if pre_attack_warn_lines:
-        warnings_section += (
-            "\n\n### 🛑 Allerta Critica Difesa Pre-Attacco (0% DR Post-Attacco)\n"
-            + "\n".join(pre_attack_warn_lines)
+        header = (
+            "### 🛑 Allerta Critica Difesa Pre-Attacco (0% DR Post-Attacco)"
+            if is_it
+            else "### 🛑 Critical Pre-Attack Defense Alert (0% DR Post-Attack)"
         )
+        warnings_section += f"\n\n{header}\n" + "\n".join(pre_attack_warn_lines)
 
+    if is_it:
+        return (
+            f"### 🛡️ Piano Tattico Deterministico - Rotazioni\n"
+            f"- **Rotazione A**: Mantieni **{_name_with_badge(rot_a.slot1)}** in Slot 1 come difensore primario (assorbe i colpi pre-attacco). **{_name_with_badge(rot_a.slot2)}** {_slot2_desc(rot_a.slot2, len(rot_a.shared_links))}.\n"
+            f"- **Rotazione B**: Mantieni **{_name_with_badge(rot_b.slot1)}** in Slot 1 come difensore primario. **{_name_with_badge(rot_b.slot2)}** {_slot2_desc(rot_b.slot2, len(rot_b.shared_links))}.\n"
+            f"- **Floaters (Slot 3)**: Fai ruotare **{', '.join(_name_with_badge(f) for f in floaters)}** in Slot 3 per Ki support, gestione orbi e rotazione difensiva.\n\n"
+            f"### 💊 Gestione Oggetti di Supporto\n"
+            f"- **Whis**: Attivalo nei turni ad alto rischio o contro la Super Attack nemica per ridurre il danno del 40% per 2 turni.\n"
+            f"- **Ghost Usher**: Usalo se il floater in Slot 3 subisce troppi attacchi o per saltare un turno critico del boss.\n"
+            f"- **Princess Snake**: Usalo per recuperare il 55% di HP e ottenere il 30% di riduzione danno nei turni di emergenza."
+            f"{warnings_section}"
+        )
     return (
-        f"### 🛡️ Piano Tattico Deterministico - Rotazioni\n"
-        f"- **Rotazione A**: Mantieni **{_name_with_badge(rot_a.slot1)}** in Slot 1 come difensore primario (assorbe i colpi pre-attacco). **{_name_with_badge(rot_a.slot2)}** {_slot2_desc(rot_a.slot2, len(rot_a.shared_links))}.\n"
-        f"- **Rotazione B**: Mantieni **{_name_with_badge(rot_b.slot1)}** in Slot 1 come difensore primario. **{_name_with_badge(rot_b.slot2)}** {_slot2_desc(rot_b.slot2, len(rot_b.shared_links))}.\n"
-        f"- **Floaters (Slot 3)**: Fai ruotare **{', '.join(_name_with_badge(f) for f in floaters)}** in Slot 3 per Ki support, gestione orbi e rotazione difensiva.\n\n"
-        f"### 💊 Gestione Oggetti di Supporto\n"
-        f"- **Whis**: Attivalo nei turni ad alto rischio o contro la Super Attack nemica per ridurre il danno del 40% per 2 turni.\n"
-        f"- **Ghost Usher**: Usalo se il floater in Slot 3 subisce troppi attacchi o per saltare un turno critico del boss.\n"
-        f"- **Princess Snake**: Usalo per recuperare il 55% di HP e ottenere il 30% di riduzione danno nei turni di emergenza."
+        f"### 🛡️ Deterministic Tactical Plan - Rotations\n"
+        f"- **Rotation A**: Keep **{_name_with_badge(rot_a.slot1)}** in Slot 1 as primary defender (absorbs pre-attack hits). **{_name_with_badge(rot_a.slot2)}** {_slot2_desc(rot_a.slot2, len(rot_a.shared_links))}.\n"
+        f"- **Rotation B**: Keep **{_name_with_badge(rot_b.slot1)}** in Slot 1 as primary defender. **{_name_with_badge(rot_b.slot2)}** {_slot2_desc(rot_b.slot2, len(rot_b.shared_links))}.\n"
+        f"- **Floaters (Slot 3)**: Rotate **{', '.join(_name_with_badge(f) for f in floaters)}** in Slot 3 for Ki support, orb changing, and rotation defense.\n\n"
+        f"### 💊 Support Items Usage\n"
+        f"- **Whis**: Activate on dangerous turns or against enemy Super Attack to reduce damage by 40% for 2 turns.\n"
+        f"- **Ghost Usher**: Use if Slot 3 floater takes too many hits or to skip a critical boss phase.\n"
+        f"- **Princess Snake**: Use to recover 55% HP and gain 30% damage reduction in emergencies."
         f"{warnings_section}"
     )
 

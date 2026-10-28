@@ -256,10 +256,23 @@ class TeamBuilder:
             )
             return f"{self.format_card_for_strategy(c)}{badge}"
 
+        is_it = language == "it"
         summary_lines = [
-            f"- Leader Skill attiva: {leader.full_name} ({leader.leader_skill})",
-            f"- Rotazione A: Slot 1 [{_label_card(rot_a.slot1)}] + Slot 2 [{_label_card(rot_a.slot2)}] (Link: {', '.join(rot_a.shared_links)})",
-            f"- Rotazione B: Slot 1 [{_label_card(rot_b.slot1)}] + Slot 2 [{_label_card(rot_b.slot2)}] (Link: {', '.join(rot_b.shared_links)})",
+            (
+                f"- Leader Skill attiva: {leader.full_name} ({leader.leader_skill})"
+                if is_it
+                else f"- Active Leader Skill: {leader.full_name} ({leader.leader_skill})"
+            ),
+            (
+                f"- Rotazione A: Slot 1 [{_label_card(rot_a.slot1)}] + Slot 2 [{_label_card(rot_a.slot2)}] (Link: {', '.join(rot_a.shared_links)})"
+                if is_it
+                else f"- Rotation A: Slot 1 [{_label_card(rot_a.slot1)}] + Slot 2 [{_label_card(rot_a.slot2)}] (Links: {', '.join(rot_a.shared_links)})"
+            ),
+            (
+                f"- Rotazione B: Slot 1 [{_label_card(rot_b.slot1)}] + Slot 2 [{_label_card(rot_b.slot2)}] (Link: {', '.join(rot_b.shared_links)})"
+                if is_it
+                else f"- Rotation B: Slot 1 [{_label_card(rot_b.slot1)}] + Slot 2 [{_label_card(rot_b.slot2)}] (Links: {', '.join(rot_b.shared_links)})"
+            ),
             f"- Floaters (Slot 3): {', '.join(_label_card(f) for f in floaters)}",
         ]
         summary_text = "\n".join(summary_lines)
@@ -285,6 +298,7 @@ class TeamBuilder:
                 leader=leader,
                 friend=friend,
                 boss_stage=boss_stage,
+                language=language,
             )
 
         return TeamRecommendation(

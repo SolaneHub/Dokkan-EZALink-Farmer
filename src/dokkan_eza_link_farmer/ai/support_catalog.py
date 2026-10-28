@@ -190,13 +190,73 @@ CURATED_PERMANENT_MEMORIES: list[dict[str, Any]] = [
 def get_recommended_support_items(
     boss_stage: Any | None = None,
     max_items: int = 4,
+    language: str | None = None,
 ) -> list[dict[str, Any]]:
     """
     Returns the top recommended support items ranked strictly from strongest to weakest.
     Maximum items allowed: 4.
     """
     _ = boss_stage
-    return TIER_1_SUPPORT_ITEMS[:max_items]
+    from dokkan_eza_link_farmer.core.i18n import get_language
+
+    lang = language or get_language()
+    if lang == "it":
+        return [
+            {
+                "rank": it["rank"],
+                "id": it["id"],
+                "name": it["name"],
+                "effect": it["effect"],
+                "rarity": it["rarity"],
+                "tactical_timing": it["tactical_timing"],
+                "usage": it["tactical_timing"],
+            }
+            for it in TIER_1_SUPPORT_ITEMS[:max_items]
+        ]
+
+    # English descriptions
+    en_desc = {
+        30505: (
+            "Damage received reduced by 40% for 2 turns",
+            "Use during high-pressure turns or against lethal AoE / Super Attacks.",
+        ),
+        1700: (
+            "Delays all enemy attacks for 1 turn",
+            "Emergency lifesaver: use when HP is critical (< 40%) or starting rotations lack solid defense.",
+        ),
+        31502: (
+            "Damage received reduced by 35% for 2 turns",
+            "Great for chaining damage reduction with Whis for 4 consecutive safe turns.",
+        ),
+        32301: (
+            "Recovers 55% HP and reduces damage received by 30% for 1 turn",
+            "Dual-utility: emergency heal combined with damage mitigation in the same turn.",
+        ),
+        32102: (
+            "Recovers 70% HP and allies' DEF +50% for 2 turns",
+            "Top pick for teams relying on raw defensive stats and massive healing.",
+        ),
+    }
+
+    result = []
+    for it in TIER_1_SUPPORT_ITEMS[:max_items]:
+        item_id = it.get("id")
+        eff, timing = (en_desc.get(item_id) if isinstance(item_id, int) else None) or (
+            it["effect"],
+            it["tactical_timing"],
+        )
+        result.append(
+            {
+                "rank": it["rank"],
+                "id": it["id"],
+                "name": it["name"],
+                "effect": eff,
+                "rarity": it["rarity"],
+                "tactical_timing": timing,
+                "usage": timing,
+            }
+        )
+    return result
 
 
 def fetch_all_support_memories(force_refresh: bool = False) -> list[dict[str, Any]]:
@@ -245,14 +305,36 @@ def fetch_all_support_memories(force_refresh: bool = False) -> list[dict[str, An
 def get_recommended_support_memory(
     team_cards: list[DokkanCard],
     boss_stage: Any | None = None,
+    language: str | None = None,
 ) -> dict[str, Any]:
     """
     Recommends the best Support Memory prioritizing those that last for the entire battle duration
     ("in battle" / "rest of battle") matching the dominant categories of the synthesized team.
     """
     _ = boss_stage
+    from dokkan_eza_link_farmer.core.i18n import get_language
+
+    lang = language or get_language()
     if not team_cards:
-        return CURATED_PERMANENT_MEMORIES[-1]
+        universal = CURATED_PERMANENT_MEMORIES[-1]
+        return {
+            "id": universal.get("id"),
+            "name": universal.get("name"),
+            "effect": universal.get("effect"),
+            "duration": (
+                "Tutta la durata della battaglia (Permanente)"
+                if lang == "it"
+                else "Entire battle duration (Permanente)"
+            ),
+            "matched_category": (
+                "Universale (Tutti gli alleati)" if lang == "it" else "Universal (All allies)"
+            ),
+            "tactical_rationale": (
+                "Garantisce un aumento statistico costante per tutta la durata della battaglia."
+                if lang == "it"
+                else "Provides a continuous stat increase for the entire battle."
+            ),
+        }
 
     # Gather category frequencies across all cards in the team
     cat_counts: dict[str, int] = {}
@@ -286,16 +368,27 @@ def get_recommended_support_memory(
 
     if best_memory:
         target_cats = best_memory.get("categories", [])
-        cat_str = ", ".join(target_cats) if target_cats else "Tutte le categorie"
+        cat_str = (
+            ", ".join(target_cats)
+            if target_cats
+            else ("Tutte le categorie" if lang == "it" else "All categories")
+        )
+        rationale = (
+            f"Potenzia permanentemente ({cat_str}) per tutta la durata del combattimento."
+            if lang == "it"
+            else f"Permanently buffs ({cat_str}) for the entire fight."
+        )
         return {
             "id": best_memory.get("id"),
             "name": best_memory.get("name"),
             "effect": best_memory.get("effect"),
-            "duration": best_memory.get("duration", "Tutta la durata della battaglia (Permanente)"),
-            "matched_category": cat_str,
-            "tactical_rationale": (
-                f"Potenzia permanentemente ({cat_str}) per tutta la durata del combattimento."
+            "duration": (
+                "Tutta la durata della battaglia (Permanente)"
+                if lang == "it"
+                else "Entire battle duration (Permanente)"
             ),
+            "matched_category": cat_str,
+            "tactical_rationale": rationale,
         }
 
     # Fallback to universal permanent memory
@@ -304,7 +397,17 @@ def get_recommended_support_memory(
         "id": universal.get("id"),
         "name": universal.get("name"),
         "effect": universal.get("effect"),
-        "duration": universal.get("duration"),
-        "matched_category": "Universale (Tutti gli alleati)",
-        "tactical_rationale": "Garantisce un aumento statistico costante per tutta la durata della battaglia.",
+        "duration": (
+            "Tutta la durata della battaglia (Permanente)"
+            if lang == "it"
+            else "Entire battle duration (Permanente)"
+        ),
+        "matched_category": (
+            "Universale (Tutti gli alleati)" if lang == "it" else "Universal (All allies)"
+        ),
+        "tactical_rationale": (
+            "Garantisce un aumento statistico costante per tutta la durata della battaglia."
+            if lang == "it"
+            else "Provides a continuous stat increase for the entire battle."
+        ),
     }
