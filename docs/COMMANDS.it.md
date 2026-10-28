@@ -51,7 +51,7 @@ Puoi passare argomenti diretti all'eseguibile per eseguire compiti specifici sen
 | `--stage` | `[stage_id\|run]` | Esegue lo stage target per l'Endgame AI (es. `10101`, `rz_broly`) oppure lo stage ripetuto per farming |
 | `--ur` | *nessuno* | Filtra il box dei personaggi per rarità UR durante il Link Level farming (cumulabile con `--lr`) |
 | `--lr` | *nessuno* | Filtra il box dei personaggi per rarità LR durante il Link Level farming (cumulabile con `--ur`) |
-| `--scan-box` | `[max_cards]` | Esegue la scansione autonoma del box tramite RapidOCR on-device, sincronizza e arricchisce i dati da DokkanDB, salvando in `~/.dokkan-farmer/cache/user_box.json` e registrando i log di debug in `~/.dokkan-farmer/box_scan.log` |
+| `--scan-box` | `[max_cards]` | Esegue la scansione autonoma del box tramite RapidOCR on-device, sincronizza e arricchisce i dati da DokkanDB, salvando in `~/.dokkan-farmer/user_box.json` e registrando i log di debug in `~/.dokkan-farmer/box_scan.log` |
 | `--ai-run` | `[stage_id]` | Avvia il loop autonomo di Trial & Error con memoria episodica contro i boss di Red Zone e Blue Zone (default: `10101` Broly) |
 | `--challenge` | `[nome_evento]`| Analizza le missioni dell'evento con l'AI e genera la composizione ottimale del team attingendo da `config/box.json` |
 | `--boost` / `--no-boost` | *nessuno* | Attiva (`--boost`) o disattiva forzatamente (`--no-boost`) l'uso delle cariche Boost durante il Link Level farming |
@@ -117,7 +117,7 @@ Eseguire il file senza parametri avvia la console interattiva Rich con log color
 | `eza` | `eza [livello\|auto]` | Apre il menu interattivo DokkanDB (frecce e ricerca) o avvia la scalata fino a 999 |
 | `link` | `link [run] [--ur] [--lr] [--boost]` | Apre il menu a tendina interattivo per la scelta dello stage (Area 39 Stage 3, Area 35 Stage 1, Stanza dello Spirito e del Tempo). Supporta i flag cumulabili `--ur` e `--lr`. Riavvia istantaneamente tramite "Attempt Again" e controlla i filtri solo alla Run 1 |
 | `stage` / `farm` | `stage [run] [--boost]` | Ripete il clear dello stage selezionato manualmente nel gioco finché non finisce la stamina (o per N run). Utilizza "Attempt Again" per riavviare istantaneamente e termina in automatico non appena la stamina si esaurisce |
-| `scan-box` | `scan-box [max]` | Scansiona il box di carte a cicli di scorrimento continui, estraendo titoli, stelle rainbow, copie e salvando in `~/.dokkan-farmer/cache/user_box.json` con log di debug in `~/.dokkan-farmer/box_scan.log` |
+| `scan-box` | `scan-box [max]` | Scansiona il box di carte a cicli di scorrimento continui, estraendo titoli, stelle rainbow, copie e salvando in `~/.dokkan-farmer/user_box.json` con log di debug in `~/.dokkan-farmer/box_scan.log` |
 | `ai-run` | `ai-run [stage_id]` | Avvia il loop autonomo Trial & Error con telemetria di combattimento contro i boss di Red Zone e Blue Zone (es. `10101`, `20101`, `rz_broly`) |
 | `challenge` / `ai-team` | `challenge [evento]` | Sintetizza la squadra e le rotazioni ottimali per le missioni tramite AI dal box scansionato |
 | `discord` | `discord [setup\|start]` | Avvia il setup guidato interattivo (`discord setup`) o avvia il bot in ascolto (`discord start`) |
@@ -136,7 +136,7 @@ Eseguire il file senza parametri avvia la console interattiva Rich con log color
 Dokkan-EZALink-Farmer integra un motore di intelligenza artificiale locale (Ollama DeepSeek-R1 / Qwen) con un Risolutore di Vincoli Matematici e una memoria episodica per affrontare e superare in completa autonomia gli stage più difficili di Dokkan Battle:
 
 ### 1. Scansione del Box (`scan-box`):
-Esegue la scansione visiva del box tramite OCR on-device, interroga DokkanDB per arricchire abilità passive, skill leader e link skill, salvando l'inventario in `~/.dokkan-farmer/cache/user_box.json` e memorizzando costantemente i log di debug in `~/.dokkan-farmer/box_scan.log`.
+Esegue la scansione visiva del box tramite OCR on-device, interroga DokkanDB per arricchire abilità passive, skill leader e link skill, salvando l'inventario in `~/.dokkan-farmer/user_box.json` e memorizzando costantemente i log di debug in `~/.dokkan-farmer/box_scan.log`.
 ```bash
 dokkan-farmer scan-box
 ```

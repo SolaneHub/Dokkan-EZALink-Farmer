@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib.util
 import io
 import sys
 import time
@@ -16,7 +17,7 @@ if sys.platform == "win32":
 from dokkan_eza_link_farmer import __version__
 from dokkan_eza_link_farmer.core.bot_engine import BotEngine
 from dokkan_eza_link_farmer.core.i18n import set_language
-from dokkan_eza_link_farmer.core.system_tools import SingleInstanceMutex
+from dokkan_eza_link_farmer.core.system_tools import AppPaths, SingleInstanceMutex
 from dokkan_eza_link_farmer.core.updater import check_for_updates
 from dokkan_eza_link_farmer.ui.cli import TerminalCLI
 
@@ -146,13 +147,13 @@ def main() -> None:
     parser.add_argument(
         "--scan-box",
         action="store_true",
-        help="Directly start autonomous Character Box scanner to build ~/.dokkan-farmer/cache/user_box.json",
+        help=f"Directly start autonomous Character Box scanner to build {AppPaths.get_user_box_path()}",
     )
     parser.add_argument(
         "--log-file",
         type=str,
         default=None,
-        help="Optional debug log file destination (defaults to ~/.dokkan-farmer/box_scan.log for box scans)",
+        help=f"Optional debug log file destination (defaults to {AppPaths.get_box_scan_log_path()} for box scans)",
     )
     parser.add_argument(
         "subcommand",
@@ -217,6 +218,13 @@ def main() -> None:
 
     try:
         if args.discord:
+            if importlib.util.find_spec("discord") is None:
+                print(
+                    "Per utilizzare il bot Discord, installa la dipendenza opzionale con: "
+                    "uv pip install dokkan-eza-link-farmer[discord]"
+                )
+                sys.exit(1)
+
             print("[Startup] Discord Bot mode selected...")
             try:
                 engine.connect()

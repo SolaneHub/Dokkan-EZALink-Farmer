@@ -51,7 +51,7 @@ You can pass arguments directly to the executable to perform specific tasks with
 | `--stage` | `[stage_id\|runs]` | Sets target stage for AI Endgame run (e.g. `10101`, `rz_broly`) or runs repeated farming |
 | `--ur` | *none* | Filters character box for UR rarity unmaxed cards during Link Level farming (can combine with `--lr`) |
 | `--lr` | *none* | Filters character box for LR rarity unmaxed cards during Link Level farming (can combine with `--ur`) |
-| `--scan-box` | `[max_cards]` | Autonomously scans character box using on-device RapidOCR, enriches metadata via DokkanDB, and saves to `~/.dokkan-farmer/cache/user_box.json` (debug logs in `~/.dokkan-farmer/box_scan.log`) |
+| `--scan-box` | `[max_cards]` | Autonomously scans character box using on-device RapidOCR, enriches metadata via DokkanDB, and saves to `~/.dokkan-farmer/user_box.json` (debug logs in `~/.dokkan-farmer/box_scan.log`) |
 | `--ai-run` | `[stage_id]` | Starts autonomous Trial & Error loop with episodic memory against Red Zone and Blue Zone challenge bosses (default: `10101` Broly) |
 | `--challenge` | `[event_name]` | Analyzes challenge event missions using AI and builds optimal team compositions from `config/box.json` |
 | `--boost` / `--no-boost` | *none* | Enables (`--boost`) or disables (`--no-boost`) using Boost energy charges during Link Level farming |
@@ -114,7 +114,7 @@ Running the executable without extra arguments enters the interactive Rich termi
 | `eza` | `eza [level\|auto]` | Opens interactive DokkanDB selector (arrow keys & search) or starts directly if specified |
 | `link` | `link [runs] [--ur] [--lr] [--boost]` | Opens interactive stage selection dropdown (Area 39 Stage 3, Area 35 Stage 1, Chamber of Spirit and Time). Supports cumulative `--ur` and `--lr` rarity flags. Loops directly via "Attempt Again" and configures box filters on Run 1 only |
 | `stage` / `farm` | `stage [runs] [--boost]` | Repeatedly clears manually selected stage in-game until stamina runs out (or for N runs). Re-runs stage using "Attempt Again" and automatically exits when stamina is depleted |
-| `scan-box` | `scan-box [max]` | Scans character box in automated swipe cycles, detecting titles, rainbow stars, copies, and saves to `~/.dokkan-farmer/cache/user_box.json` (debug logs in `~/.dokkan-farmer/box_scan.log`) |
+| `scan-box` | `scan-box [max]` | Scans character box in automated swipe cycles, detecting titles, rainbow stars, copies, and saves to `~/.dokkan-farmer/user_box.json` (debug logs in `~/.dokkan-farmer/box_scan.log`) |
 | `ai-run` | `ai-run [stage_id]` | Starts autonomous Trial & Error loop with combat telemetry against Red Zone and Blue Zone challenge bosses (e.g. `10101`, `20101`, `rz_broly`) |
 | `challenge` / `ai-team` | `challenge [event]` | Synthesizes optimal team compositions and rotations for event missions using AI and scanned box |
 | `discord` | `discord [setup\|start]` | Starts the interactive configuration wizard (`discord setup`) or runs the bot listener (`discord start`) |
@@ -133,7 +133,7 @@ Running the executable without extra arguments enters the interactive Rich termi
 Dokkan-EZALink-Farmer integrates a local LLM inference engine (Ollama DeepSeek-R1 / Qwen) with mathematical constraint solving and episodic memory to autonomously conquer Dokkan Battle's hardest endgame stages:
 
 ### 1. Character Box Scan (`scan-box`):
-Performs on-device RapidOCR scans of your character box, queries DokkanDB to enrich passives, leader skills, and link skills, and saves the inventory to `~/.dokkan-farmer/cache/user_box.json` while continuously capturing debug logs in `~/.dokkan-farmer/box_scan.log`.
+Performs on-device RapidOCR scans of your character box, queries DokkanDB to enrich passives, leader skills, and link skills, and saves the inventory to `~/.dokkan-farmer/user_box.json` while continuously capturing debug logs in `~/.dokkan-farmer/box_scan.log`.
 ```bash
 dokkan-farmer scan-box
 ```

@@ -461,7 +461,6 @@ name = "dokkan-eza-link-farmer"
 version = "2.0.0"
 source = { editable = "." }
 dependencies = [
-    { name = "discord-py" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -474,6 +473,11 @@ dependencies = [
     { name = "rich" },
 ]
 
+[package.optional-dependencies]
+discord = [
+    { name = "discord-py" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pyinstaller" },
@@ -484,7 +488,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "discord-py", specifier = ">=2.3.0" },
+    { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0" },
     { name = "numpy", specifier = ">=2.0.0" },
     { name = "opencv-python-headless", specifier = ">=4.8.0" },
     { name = "pillow", specifier = ">=10.0.0" },
@@ -494,6 +498,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.28.0" },
     { name = "rich", specifier = ">=13.0.0" },
 ]
+provides-extras = ["discord"]
 
 [package.metadata.requires-dev]
 dev = [

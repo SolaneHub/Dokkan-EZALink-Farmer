@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import io
 import logging
 import sys
@@ -339,7 +340,7 @@ class TerminalCLI:
         briefing.render_endgame_result(res, console=self.console)
 
     def handle_enrich_box(self, args: list | None = None) -> None:
-        """Enriches ~/.dokkan-farmer/cache/user_box.json or config/box.json with DokkanDB deep data."""
+        """Enriches user box (from AppPaths or config/box.json) with DokkanDB deep data."""
         from dokkan_eza_link_farmer.ai.syncer import DokkanSyncer
 
         args = args or []
@@ -518,6 +519,13 @@ class TerminalCLI:
             )
 
     def _dispatch_discord(self, args: list[str]) -> None:
+        if importlib.util.find_spec("discord") is None:
+            self.console.print(
+                "[bold red]Per utilizzare il bot Discord, installa la dipendenza opzionale con: "
+                "uv pip install dokkan-eza-link-farmer[discord][/bold red]"
+            )
+            return
+
         from dokkan_eza_link_farmer.integrations.discord_bot import (
             run_discord_bot,
             setup_discord_interactive,
