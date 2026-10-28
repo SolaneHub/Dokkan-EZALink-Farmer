@@ -6,6 +6,8 @@ import json
 import os
 from typing import TYPE_CHECKING, Any
 
+from dokkan_eza_link_farmer.core.system_tools import AppPaths
+
 if TYPE_CHECKING:
     from dokkan_eza_link_farmer.ai.models import DokkanCard
 
@@ -18,19 +20,25 @@ def _get_global_category_map() -> dict[int, str]:
         return _GLOBAL_CATEGORIES_CACHE
 
     cat_map: dict[int, str] = {}
-    cache_file = os.path.join(
-        os.path.expanduser("~"), ".dokkan-farmer", "cache", "dokkandb_categories.json"
-    )
-    if os.path.exists(cache_file):
-        try:
-            with open(cache_file, encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    for item in data:
-                        if isinstance(item, dict) and "id" in item and "name" in item:
-                            cat_map[int(item["id"])] = str(item["name"])
-        except Exception:
-            pass
+    cache_dir = AppPaths.get_cache_dir()
+    possible_cache_files = [
+        os.path.join(cache_dir, "dokkandb_categories.json"),
+        os.path.join(cache_dir, "dokkandb_categories_glb.json"),
+        os.path.join("data", "dokkandb_categories.json"),
+    ]
+    for cache_file in possible_cache_files:
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict) and "id" in item and "name" in item:
+                                cat_map[int(item["id"])] = str(item["name"])
+                        if cat_map:
+                            break
+            except Exception:
+                pass
 
     _GLOBAL_CATEGORIES_CACHE = cat_map
     return cat_map

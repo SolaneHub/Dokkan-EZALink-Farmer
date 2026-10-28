@@ -29,6 +29,7 @@ from dokkan_eza_link_farmer.ai.card_models import (
     parse_dodge_percentage_from_text,
 )
 from dokkan_eza_link_farmer.ai.client import DokkanAIClient
+from dokkan_eza_link_farmer.ai.damage_engine import calculate_damage_taken
 from dokkan_eza_link_farmer.ai.llm_advisor import (
     AIConfig,
     AIModelFamily,
@@ -144,6 +145,7 @@ __all__ = [
     "BossStage",
     "BoxScanner",
     "BoxScannerTask",
+    "calculate_damage_taken",
     "CandidateEvaluation",
     "CardForm",
     "ChallengeMission",

@@ -23,36 +23,20 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from dokkan_eza_link_farmer.ai.damage_engine import (
+    ELEMENT_ADVANTAGE,
+    ELEMENT_DISADVANTAGE,
+    calculate_damage_taken,
+    check_type_matchup,
+)
 from dokkan_eza_link_farmer.ai.models import (
     BossStage,
     DokkanCard,
 )
+from dokkan_eza_link_farmer.core.system_tools import AppPaths
 from dokkan_eza_link_farmer.integrations.dokkandb_client import DokkanDBClient
 
 logger = logging.getLogger(__name__)
-
-# Dokkan cyclic type effectiveness mapping: Base type ID % 10 (0: AGL, 1: TEQ, 2: INT, 3: STR, 4: PHY)
-# Attacker element beats defender element:
-# AGL (0) beats STR (3)
-# STR (3) beats PHY (4)
-# PHY (4) beats INT (2)
-# INT (2) beats TEQ (1)
-# TEQ (1) beats AGL (0)
-ELEMENT_ADVANTAGE: dict[int, int] = {
-    0: 3,  # AGL > STR
-    3: 4,  # STR > PHY
-    4: 2,  # PHY > INT
-    2: 1,  # INT > TEQ
-    1: 0,  # TEQ > AGL
-}
-
-ELEMENT_DISADVANTAGE: dict[int, int] = {
-    0: 1,  # AGL < TEQ
-    1: 2,  # TEQ < INT
-    2: 4,  # INT < PHY
-    3: 0,  # STR < AGL
-    4: 3,  # PHY < STR
-}
 
 SAME_NAME_BASE_PENALTY: float = 25.0
 MIN_SLOT1_REQUIRED: int = 2
@@ -68,10 +52,11 @@ def _get_global_category_map() -> dict[int, str]:
         return _GLOBAL_CATEGORIES_CACHE
 
     cat_map: dict[int, str] = {}
-    cache_dir = os.path.join(os.path.expanduser("~"), ".dokkan-farmer", "cache")
+    cache_dir = AppPaths.get_cache_dir()
     possible_cache_files = [
         os.path.join(cache_dir, "dokkandb_categories_glb.json"),
         os.path.join(cache_dir, "dokkandb_categories.json"),
+        os.path.join("data", "dokkandb_categories.json"),
     ]
     for cache_file in possible_cache_files:
         if os.path.exists(cache_file):
@@ -186,8 +171,7 @@ class DokkanConstraintSolver:
 
     @staticmethod
     def check_type_matchup(attacker_element: int, defender_element: int) -> int:
-        """
-        Determines Dokkan Battle cyclic type effectiveness:
+        """Determines Dokkan Battle cyclic type effectiveness:
         AGL (0) > STR (3) > PHY (4) > INT (2) > TEQ (1) > AGL (0)
 
         Returns:
@@ -195,60 +179,30 @@ class DokkanConstraintSolver:
             -1: Attacker has type disadvantage
              0: Neutral matchup
         """
-        attacker = attacker_element % 10
-        defender = defender_element % 10
-
-        if ELEMENT_ADVANTAGE.get(attacker) == defender:
-            return 1
-        if ELEMENT_DISADVANTAGE.get(attacker) == defender:
-            return -1
-        return 0
+        return check_type_matchup(attacker_element, defender_element)
 
     @staticmethod
     def calculate_damage_taken(
         enemy_atk: int,
         type_matchup: int = 0,
         has_passive_guard: bool = False,
-        dr_pct: int = 0,
-        def_stat: int = 0,
+        dr_pct: int | float = 0,
+        def_stat: int | float = 0,
         is_super_vs_extreme: bool = True,
         variance: float = 1.0,
     ) -> int:
         """Calculates exact Dokkan Battle incoming damage using the official order of operations:
         Damage = {[(Enemy ATK * Variance * Type Modifier) * (1 - DR%)] - Ally DEF} * Guard Reduction
-
-        Order of Operations & Mechanics:
-        1. Type Modifier:
-           - Passive Guard: Always 0.8 regardless of enemy typing or class.
-           - Natural Advantage (Natural Guard): 0.9 (Super vs Extreme) or 1.0 (Same Class).
-           - Neutral: 1.15 (Super vs Extreme) or 1.0 (Same Class).
-           - Disadvantage: 1.5 (Super vs Extreme) or 1.25 (Same Class).
-        2. Damage Reduction (DR%):
-           - Multiplied BEFORE Ally DEF subtraction: compresses raw incoming boss attack.
-        3. Ally DEF Subtraction:
-           - Post-DEF = max(0, damage_before_def - def_stat).
-        4. Guard Reduction:
-           - If Passive Guard OR Natural Type Advantage: Guard Reduction = 0.5 (halving remainder).
-           - Else: Guard Reduction = 1.0.
-           - Final Damage = int(Post-DEF * Guard Reduction).
         """
-        if has_passive_guard:
-            type_mod = 0.8
-            guard_reduction = 0.5
-        elif type_matchup > 0:
-            type_mod = 0.9 if is_super_vs_extreme else 1.0
-            guard_reduction = 0.5
-        elif type_matchup < 0:
-            type_mod = 1.5 if is_super_vs_extreme else 1.25
-            guard_reduction = 1.0
-        else:
-            type_mod = 1.15 if is_super_vs_extreme else 1.0
-            guard_reduction = 1.0
-
-        effective_dr = max(0.0, min(1.0, float(dr_pct) / 100.0))
-        damage_before_def = enemy_atk * variance * type_mod * (1.0 - effective_dr)
-        damage_after_def = max(0.0, damage_before_def - float(max(0, def_stat)))
-        return int(damage_after_def * guard_reduction)
+        return calculate_damage_taken(
+            enemy_atk=enemy_atk,
+            type_matchup=type_matchup,
+            has_passive_guard=has_passive_guard,
+            dr_pct=dr_pct,
+            def_stat=def_stat,
+            is_super_vs_extreme=is_super_vs_extreme,
+            variance=variance,
+        )
 
     @staticmethod
     def is_slot1_viable(
@@ -1894,3 +1848,18 @@ class DokkanConstraintSolver:
             solver_logs=logs,
             mission_batch=mission_batch,
         )
+
+
+__all__ = [
+    "ELEMENT_ADVANTAGE",
+    "ELEMENT_DISADVANTAGE",
+    "DokkanConstraintSolver",
+    "CandidateEvaluation",
+    "ConstraintSolverResult",
+    "SAME_NAME_BASE_PENALTY",
+    "MIN_SLOT1_REQUIRED",
+    "MIN_LEADER_BOOST_PCT",
+    "get_base_form_name",
+    "calculate_damage_taken",
+    "check_type_matchup",
+]

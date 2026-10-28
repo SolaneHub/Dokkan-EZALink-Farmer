@@ -5,7 +5,7 @@ Provides:
 - CombatRingBuffer maintaining a rolling FIFO buffer of the last 3-4 pre-KO frames.
 - Culprit attribution with direct slot detection, friend leader immunity (Slot 7),
   and distributed vulnerability sharing (0.33 each or elemental-weighted).
-- EpisodicMemory with atomic persistence in ~/.dokkan-farmer/cache/ai_memory.json:
+- EpisodicMemory with atomic persistence via AppPaths.get_ai_memory_path():
   * Rule 1: Boss HP < 20% in Final Phase -> InstantRetry (Tactical RNG).
   * Rule 2: 3 consecutive defeats on Turns 1-2 -> Leader Demotion to 2nd best leader in box.
   * Rule 3: Surgical single-card replacement of unit with maximum death_penalty,
@@ -35,10 +35,12 @@ from dokkan_eza_link_farmer.ai.models import (
 from dokkan_eza_link_farmer.ai.solver import (
     DokkanConstraintSolver,
 )
+from dokkan_eza_link_farmer.core.system_tools import AppPaths
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MEMORY_CACHE_PATH = os.path.expanduser("~/.dokkan-farmer/cache/ai_memory.json")
+DEFAULT_MEMORY_CACHE_PATH = AppPaths.get_ai_memory_path()
+_DEFAULT_IMPORT_MEMORY_PATH = DEFAULT_MEMORY_CACHE_PATH
 
 # Global flag to control extended memory telemetry tracking.
 # In standard farming runs (EZA 999, Link Leveling), extended frame recording in CombatTelemetryTracker is frozen.
@@ -348,11 +350,24 @@ class EpisodicMemory:
     """
     Episodic memory tracking stage attempts, defeats, culprit death penalties,
     consecutive early defeat streaks, and executing the 3-tier post-defeat decision tree.
-    Persisted atomically in ~/.dokkan-farmer/cache/ai_memory.json.
+    Persisted atomically in AppPaths.get_ai_memory_path().
     """
 
     def __init__(self, cache_path: str | Path | None = None, ephemeral: bool = False) -> None:
-        self.cache_path = Path(cache_path or DEFAULT_MEMORY_CACHE_PATH)
+        if cache_path is not None:
+            resolved = Path(cache_path)
+        elif os.path.abspath(str(DEFAULT_MEMORY_CACHE_PATH)) != os.path.abspath(
+            str(_DEFAULT_IMPORT_MEMORY_PATH)
+        ):
+            resolved = Path(DEFAULT_MEMORY_CACHE_PATH)
+        else:
+            canonical_path = Path(AppPaths.get_ai_memory_path())
+            legacy_cache = Path(AppPaths.get_cache_dir()) / "ai_memory.json"
+            if not canonical_path.exists() and legacy_cache.exists():
+                resolved = legacy_cache
+            else:
+                resolved = canonical_path
+        self.cache_path = resolved
         self.ephemeral = ephemeral
         self._data: dict[str, Any] = {"updated_at": "", "stages": {}}
         self.load()

@@ -3,7 +3,7 @@
   "metadata": {
     "version": "1.0.0",
     "target_release": "10th_anniversary",
-    "generated_at": "2026-10-27T23:38:13.912346+00:00",
+    "generated_at": "2026-10-28T12:49:02.322065+00:00",
     "formula_specification": {
       "expression": "Damage = floor(max(0, ((Enemy_ATK * Variance * Type_Mod) * (1 - DR%)) - Ally_DEF) * Guard_Reduction)",
       "order_of_operations": [

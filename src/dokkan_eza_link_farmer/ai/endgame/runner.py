@@ -27,7 +27,6 @@ from typing import Any
 from dokkan_eza_link_farmer.ai.boss_catalog import get_boss_stage
 from dokkan_eza_link_farmer.ai.client import DokkanAIClient
 from dokkan_eza_link_farmer.ai.endgame.telemetry import (
-    DEFAULT_MEMORY_CACHE_PATH,
     CombatFrame,
     CombatRingBuffer,
     CombatTelemetryTracker,
@@ -48,7 +47,6 @@ from dokkan_eza_link_farmer.ai.team_builder import (
     format_team_summary_table,
 )
 from dokkan_eza_link_farmer.automation.game_state import StateDetector
-from dokkan_eza_link_farmer.automation.tasks.box_scanner import DEFAULT_USER_BOX_PATH
 from dokkan_eza_link_farmer.automation.tasks.challenge_task import ChallengeTask
 from dokkan_eza_link_farmer.automation.team_formation import apply_team_in_game
 from dokkan_eza_link_farmer.automation.vision import Vision
@@ -133,6 +131,7 @@ class EndgameRunner:
         force_solve: bool = False,
         mission_batch: Any | None = None,
         battle_simulator: BattleSimulatorFn | None = None,
+        enable_telemetry: bool = False,
         on_status: Callable[[str], None] | None = None,
         on_run_complete: Callable[[int, int], None] | None = None,
     ):
@@ -148,12 +147,35 @@ class EndgameRunner:
             solver=self.solver,
         )
 
-        self.memory_path = Path(memory_path or DEFAULT_MEMORY_CACHE_PATH)
-        self.user_box_path = Path(user_box_path or DEFAULT_USER_BOX_PATH)
-        self.memory = memory or EpisodicMemory(cache_path=self.memory_path, ephemeral=dry_run)
+        self.enable_telemetry = enable_telemetry
+
+        from dokkan_eza_link_farmer.core.system_tools import AppPaths
+
+        resolved_memory = memory_path or AppPaths.get_ai_memory_path()
+        if (
+            memory_path is None
+            and not Path(resolved_memory).exists()
+            and (Path(AppPaths.get_cache_dir()) / "ai_memory.json").exists()
+        ):
+            resolved_memory = Path(AppPaths.get_cache_dir()) / "ai_memory.json"
+        self.memory_path = Path(resolved_memory)
+
+        resolved_user_box = user_box_path or AppPaths.get_user_box_path()
+        if (
+            user_box_path is None
+            and not Path(resolved_user_box).exists()
+            and (Path(AppPaths.get_cache_dir()) / "user_box.json").exists()
+        ):
+            resolved_user_box = Path(AppPaths.get_cache_dir()) / "user_box.json"
+        self.user_box_path = Path(resolved_user_box)
+        ephemeral_flag = dry_run or not enable_telemetry
+        self.memory = memory or EpisodicMemory(
+            cache_path=self.memory_path, ephemeral=ephemeral_flag
+        )
         self.telemetry_tracker = telemetry_tracker or CombatTelemetryTracker(
-            ring_buffer=CombatRingBuffer(capacity=4),
+            ring_buffer=CombatRingBuffer(capacity=4 if enable_telemetry else 1),
             episodic_memory=self.memory,
+            debug_telemetry=enable_telemetry,
         )
 
         self.boss_stage = boss_stage
@@ -222,8 +244,9 @@ class EndgameRunner:
                         f"[Step A] Detected un-enriched cards in {resolved_path}. Running automatic Box Enrichment..."
                     )
                     from dokkan_eza_link_farmer.ai.syncer import DokkanSyncer
+                    from dokkan_eza_link_farmer.core.system_tools import AppPaths
 
-                    syncer = DokkanSyncer(cache_dir=str(self.user_box_path.parent))
+                    syncer = DokkanSyncer(cache_dir=AppPaths.get_cache_dir())
                     loaded_cards = syncer.sync_box_details(
                         box_file=str(resolved_path),
                         save_to_file=True,
@@ -532,9 +555,9 @@ class EndgameRunner:
                 winning_team=self.current_team,
                 boss_stage=stage,
             )
-            if self.dry_run:
+            if self.dry_run or not self.enable_telemetry:
                 self.log(
-                    "[Step D] [Dry-Run] Simulated victory; skipped saving Winning Team to disk."
+                    "[Step D] Telemetry disabled or dry-run; skipped saving Winning Team to disk."
                 )
             else:
                 self.log(

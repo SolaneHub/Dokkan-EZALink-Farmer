@@ -303,13 +303,10 @@ class BotEngine:
             self.emit_log(t("tasks.task_already_running"))
             return False
 
-        from dokkan_eza_link_farmer.automation.tasks.box_scanner import (
-            DEFAULT_BOX_SCAN_LOG_PATH,
-            DEFAULT_USER_BOX_PATH,
-        )
+        from dokkan_eza_link_farmer.core.system_tools import AppPaths
 
-        target_out = output_file if output_file is not None else DEFAULT_USER_BOX_PATH
-        target_log = log_file if log_file is not None else DEFAULT_BOX_SCAN_LOG_PATH
+        target_out = output_file if output_file is not None else AppPaths.get_user_box_path()
+        target_log = log_file if log_file is not None else AppPaths.get_box_scan_log_path()
         self.current_task = BoxScannerTask(
             self.adb,
             self.vision,
@@ -331,6 +328,7 @@ class BotEngine:
         dry_run: bool = False,
         force_solve: bool = False,
         mission_batch: Any | None = None,
+        enable_telemetry: bool = False,
     ) -> bool:
         """Starts autonomous AI Endgame Trial & Error runner task in background."""
         if self.is_task_running():
@@ -368,6 +366,7 @@ class BotEngine:
             dry_run=dry_run,
             force_solve=force_solve,
             mission_batch=mission_batch,
+            enable_telemetry=enable_telemetry,
             on_status=self.emit_log,
             on_run_complete=self.emit_run,
         )
@@ -386,6 +385,7 @@ class BotEngine:
         dry_run: bool = False,
         force_solve: bool = False,
         mission_batch: Any | None = None,
+        enable_telemetry: bool = False,
     ) -> Any:
         """Runs AI Endgame Trial & Error synchronously (for direct CLI execution)."""
         from dokkan_eza_link_farmer.ai.boss_catalog import get_boss_stage
@@ -414,6 +414,7 @@ class BotEngine:
             dry_run=dry_run,
             force_solve=force_solve,
             mission_batch=mission_batch,
+            enable_telemetry=enable_telemetry,
             on_status=self.emit_log,
             on_run_complete=self.emit_run,
         )

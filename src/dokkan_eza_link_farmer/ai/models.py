@@ -25,6 +25,7 @@ from dokkan_eza_link_farmer.ai.card_models import (
     TeamRecommendation,
     parse_dodge_percentage_from_text,
 )
+from dokkan_eza_link_farmer.ai.damage_engine import calculate_damage_taken
 from dokkan_eza_link_farmer.ai.llm_advisor import (
     AIConfig,
     AIModelFamily,
@@ -36,6 +37,7 @@ __all__ = [
     "AIModelFamily",
     "SupportedAIModel",
     "AIConfig",
+    "calculate_damage_taken",
     "PassiveTags",
     "TeamConditionalBuff",
     "SATags",
