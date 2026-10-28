@@ -99,7 +99,7 @@ class DiscordBotClient(commands.Bot):
             channel = self.get_channel(target_channel_id)
             if isinstance(channel, discord.abc.Messageable):
                 self._main_channel = channel
-                await self._main_channel.send(t("discord.bot_ready"))
+                await channel.send(t("discord.bot_ready"))
 
     async def _register_slash_commands(self):
         @self.tree.command(name="status", description="Shows current status of the bot and device")
