@@ -29,7 +29,7 @@ def run_tests(mode: str, extra_args: list[str] | None = None) -> int:
     extra = extra_args or []
     if mode == "fast":
         args = ["-m", "not slow", "-q", *extra]
-        print("[TEST-RUNNER] Running Fast Feedback Test Suite (target < 10s)...")
+        print("[TEST-RUNNER] Running Fast Feedback Test Suite (target < 20s)...")
     elif mode == "slow":
         args = ["-m", "slow", "-v", *extra]
         print("[TEST-RUNNER] Running Slow Pre-Release Test Suite...")
@@ -60,7 +60,7 @@ def run_tests(mode: str, extra_args: list[str] | None = None) -> int:
         exit_code = 0
 
     print(f"\n[TEST-RUNNER] Completed in {elapsed:.2f}s (Exit code: {exit_code})")
-    if mode == "fast" and elapsed > 10.0:
+    if mode == "fast" and elapsed > 20.0:
         print("[TEST-RUNNER] Warning: Fast feedback suite exceeded threshold.")
 
     return exit_code

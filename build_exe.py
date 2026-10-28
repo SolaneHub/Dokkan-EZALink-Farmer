@@ -58,6 +58,8 @@ def build():
         "--hidden-import",
         "dokkan_eza_link_farmer.ai.solver",
         "--hidden-import",
+        "dokkan_eza_link_farmer.ai.damage_engine",
+        "--hidden-import",
         "dokkan_eza_link_farmer.ai.syncer",
         "--hidden-import",
         "dokkan_eza_link_farmer.ai.formatters",

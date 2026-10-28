@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import contextlib
+import importlib.util
 import io
 import os
 import shutil
@@ -134,9 +135,20 @@ def build(onefile: bool = False):
         "rich.text",
         "--hidden-import",
         "rich.prompt",
+        "--collect-all",
+        "rapidocr_onnxruntime",
         "--hidden-import",
-        "discord",
+        "dokkan_eza_link_farmer.ai",
+        "--hidden-import",
+        "dokkan_eza_link_farmer.ai.damage_engine",
+        "--hidden-import",
+        "dokkan_eza_link_farmer.automation.tasks.box_scanner",
+        "--hidden-import",
+        "dokkan_eza_link_farmer.automation.tasks.challenge_task",
     ]
+
+    if importlib.util.find_spec("discord") is not None:
+        cmd.extend(["--hidden-import", "discord"])
 
     if onefile:
         cmd.append("--onefile")
