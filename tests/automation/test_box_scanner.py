@@ -197,3 +197,76 @@ class TestDokkanSyncerInMemory:
                 assert card is not None
                 assert card["id"] == 5002
                 assert card["name"] == "Cached Vegeta"
+
+
+class TestBoxFilterVerification:
+    """Validates Character Box filter enforcement and safe modal interaction."""
+
+    def test_filters_already_active_skips_click(self) -> None:
+        from dokkan_eza_link_farmer.automation.scanner.filter_manager import (
+            verify_and_enforce_filters,
+        )
+
+        task = MagicMock()
+        task.adb.screencap.return_value = np.zeros((2400, 1080, 3), dtype=np.uint8)
+        task.adb.get_screen_size.return_value = (1080, 2400)
+        task.vision.find_template.side_effect = lambda _s, t, **_kw: (
+            (850, 1825, 0.99) if "tag_" in t else None
+        )
+
+        res = verify_and_enforce_filters(task)
+        assert res is True
+        task.adb.tap.assert_not_called()
+
+    def test_filter_popup_fails_to_open_aborts_without_misclick(self) -> None:
+        from dokkan_eza_link_farmer.automation.scanner.filter_manager import (
+            verify_and_enforce_filters,
+        )
+
+        task = MagicMock()
+        task.adb.screencap.return_value = np.zeros((2400, 1080, 3), dtype=np.uint8)
+        task.adb.get_screen_size.return_value = (1080, 2400)
+        task.vision.find_template.return_value = None
+        task.vision.find_yellow_sort_button.return_value = (850, 1825)
+        task.vision.is_filter_dialog_open.return_value = False
+
+        res = verify_and_enforce_filters(task)
+        assert res is False
+        for call_args in task.adb.tap.call_args_list:
+            x, y = call_args[0][0], call_args[0][1]
+            assert (x, y) == (850, 1825)
+
+    def test_filter_popup_opens_and_enforces_ur_lr(self) -> None:
+        from dokkan_eza_link_farmer.automation.scanner.filter_manager import (
+            verify_and_enforce_filters,
+        )
+
+        task = MagicMock()
+        task.adb.screencap.return_value = np.zeros((2400, 1080, 3), dtype=np.uint8)
+        task.adb.get_screen_size.return_value = (1080, 2400)
+        task.vision.find_yellow_sort_button.return_value = (850, 1825)
+        task.vision.is_filter_dialog_open.return_value = True
+
+        def mock_find_template(_s, name, **_kw):
+            if "button_ok" in name:
+                return (540, 2020, 0.95)
+            if "btn_ur_unselected" in name:
+                return (755, 1530, 0.95)
+            if "btn_lr_unselected" in name:
+                return (910, 1530, 0.95)
+            return None
+
+        task.vision.find_template.side_effect = mock_find_template
+        task.vision.is_filter_ur_selected.return_value = False
+        task.vision.is_filter_lr_selected.return_value = False
+        task.vision.is_filter_released_selected.return_value = True
+        task.vision.get_filter_ur_coords.return_value = (755, 1530)
+        task.vision.get_filter_lr_coords.return_value = (910, 1530)
+
+        res = verify_and_enforce_filters(task)
+        assert res is True
+        tapped_coords = [(c[0][0], c[0][1]) for c in task.adb.tap.call_args_list]
+        assert (850, 1825) in tapped_coords
+        assert (755, 1530) in tapped_coords
+        assert (910, 1530) in tapped_coords
+        assert (540, 2020) in tapped_coords
