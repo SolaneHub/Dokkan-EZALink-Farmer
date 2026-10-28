@@ -1,21 +1,33 @@
 # Changelog
 
+## [v2.1.0] - 2026-10-28
+
+### Added
+- **Centralized System Architecture & AppPaths (`core.system_tools`, `core.bot_engine`)**: Centralized single source of truth for runtime directories (`~/.dokkan-farmer/`) and state files with dynamic `DOKKAN_FARMER_HOME` configuration override and seamless fallback for portable PyInstaller distribution.
+- **Decoupled Pure Damage Engine (`ai.damage_engine`, `ai.solver`)**: Extracted mathematical formula and Dokkan cyclic type effectiveness into high-performance zero-overhead calculation engine capable of over 1.9M calculations/sec.
+- **Mathematical Solver Micro-Benchmark (`tools/bench_solver.py`)**: Introduced standalone micro-benchmark CLI asserting sub-15ms solver latency (measured ~7.7ms) and damage simulation throughput targets.
+- **Expanded Invariant Verification & Black-Box Test Harness (`tests/`)**: Over 500 tests including lethal boss phase survival (4.5M+ Super Attacks), multi-category mission satisfaction quotas, and stamina depletion recovery stops.
+- **Modular Optional Dependencies (`pyproject.toml`)**: Decoupled `discord.py` into optional extra (`[project.optional-dependencies]`) for lightweight installation, with automated runtime prompts and full CI/CD test coverage.
+
+### Changed
+- **CLI & Localization Alignment**: Updated Italian and English command references and localization bundles (`COMMANDS.md`, `COMMANDS.it.md`, `locales/en.yaml`, `locales/it.yaml`) with canonical `user_box.json` and optional installation commands.
+- **PyInstaller Bundling**: Integrated `rapidocr_onnxruntime` and modular damage engine hidden imports into distribution build specs.
+
 ## [v2.0.0] - 2026-10-28
 
 ### Added
-- **AI Tactical Engine Overhaul (i.solver, i.synergy)**: Realistic multi-slot combat damage simulation taking pre-attack vs post-attack defense into account. Cards suffering lethal unmitigated damage (>700k against 2.5M-3.5M boss Super Attacks) are strictly disqualified from Slot 1.
-- **Post-10th Anniversary Mechanics & Tactical Dictionary (i.passive_parser, i.dokkandb_parser, i.card_heuristics)**:
+- **AI Tactical Engine Overhaul (`ai.solver`, `ai.synergy`)**: Realistic multi-slot combat damage simulation taking pre-attack vs post-attack defense into account. Cards suffering lethal unmitigated damage (>700k against 2.5M-3.5M boss Super Attacks) are strictly disqualified from Slot 1.
+- **Post-10th Anniversary Mechanics & Tactical Dictionary (`ai.passive_parser`, `ai.dokkandb_parser`, `ai.card_heuristics`)**:
   - Full passive skill deconstruction extracting unconditional vs timed guard, pre-attack-only damage reduction, on-hit damage reduction, and Ki-dependent defensive thresholds.
   - Evaluation of active skills, standbys, domain fields, and transformation timelines.
-  - Offline dataset and extraction tools (data/dokkan_cards_post_10th_anniversary.json, data/dokkan_tactical_dictionary.json, data/cards_tactical_matrix.json, data/damage_simulation_benchmarks.json).
-- **Tactical Rich Briefing & Terminal UI (ui.formatters, ui.briefing, ui.cli)**:
+  - Offline dataset and extraction tools (`data/dokkan_cards_post_10th_anniversary.json`, `data/dokkan_tactical_dictionary.json`, `data/cards_tactical_matrix.json`, `data/damage_simulation_benchmarks.json`).
+- **Tactical Rich Briefing & Terminal UI (`ui.formatters`, `ui.briefing`, `ui.cli`)**:
   - Enhanced Rich tables detailing rotation assignments (Slot 1 Tank vs Slot 2 DPS vs Floater).
   - Clear visual warnings for lethal floater vulnerabilities and pre-attack-only damage reduction dependencies.
-  - Fully updated English and Italian localization bundles (locales/en.yaml, locales/it.yaml).
-- **Unified Quality Gate CLI (scripts/quality_gate.py)**:
-  - Standardized developer toolchain executing 
-uff (lint & format), pyright (strict static typing), and pytest across dual-granularity tiers (--fast sub-20s, --full comprehensive pre-release matrix).
-  - PyInstaller configuration (uild_exe.py) updated with hidden imports for all new AI tactical modules.
+  - Fully updated English and Italian localization bundles (`locales/en.yaml`, `locales/it.yaml`).
+- **Unified Quality Gate CLI (`scripts/quality_gate.py`)**:
+  - Standardized developer toolchain executing `ruff` (lint & format), `pyright` (strict static typing), and `pytest` across dual-granularity tiers (--fast sub-20s, --full comprehensive pre-release matrix).
+  - PyInstaller configuration (`build_exe.py`) updated with hidden imports for all new AI tactical modules.
 
 ## [v1.9.0] - 2026-10-25
 
