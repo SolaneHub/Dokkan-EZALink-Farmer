@@ -9,6 +9,10 @@ import shutil
 from datetime import datetime, timezone
 from typing import Any
 
+from dokkan_eza_link_farmer.ai.art_variants import (
+    get_canonical_card_id,
+    is_art_variant,
+)
 from dokkan_eza_link_farmer.core.system_tools import AppPaths
 
 logger = logging.getLogger(__name__)
@@ -136,6 +140,13 @@ def save_box(
                             ec["is_eza"] = orig.get("is_eza", False)
                             ec["is_seza"] = orig.get("is_seza", False)
                             ec["potential_percent"] = orig.get("potential_percent", 0)
+                            ec["hidden_potential"] = orig.get(
+                                "hidden_potential", orig.get("potential_percent", 0)
+                            )
+                            ec["canonical_id"] = orig.get(
+                                "canonical_id", get_canonical_card_id(cid)
+                            )
+                            ec["is_art_variant"] = orig.get("is_art_variant", is_art_variant(cid))
                             if "scanned_at" in orig:
                                 ec["scanned_at"] = orig["scanned_at"]
                             ec.setdefault("leader_skill", orig.get("leader_skill", ""))

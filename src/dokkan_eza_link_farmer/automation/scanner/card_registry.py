@@ -9,6 +9,11 @@ from typing import Any
 
 import numpy as np
 
+from dokkan_eza_link_farmer.ai.art_variants import (
+    get_canonical_card_id,
+    is_art_variant,
+)
+from dokkan_eza_link_farmer.ai.card_models import snap_potential_percentage
 from dokkan_eza_link_farmer.automation.scanner.detail_evaluator import detect_rainbow_star
 from dokkan_eza_link_farmer.automation.scanner.session_context import ScanSessionContext
 
@@ -54,8 +59,12 @@ def register_card(
         is_rainbow = detect_rainbow_star(crop) if crop is not None else False
     if potential_percent is None:
         potential_percent = 100 if is_rainbow else 0
-    elif potential_percent == 100:
-        is_rainbow = True
+    else:
+        potential_percent = snap_potential_percentage(potential_percent)
+        if potential_percent == 100:
+            is_rainbow = True
+        elif is_rainbow:
+            potential_percent = 100
     if is_rainbow and potential_percent == 0:
         potential_percent = 100
 
@@ -94,7 +103,7 @@ def register_card(
             ctx.recently_scanned_positions[cid] = (cy, cx)
             return True
 
-    if cid not in ctx.scanned_cards:
+    if cid not in ctx.seen_ids:
         existing = ctx.scanned_cards.get(cid, {})
         card_record = dict(existing)
         card_record.update(
@@ -110,6 +119,9 @@ def register_card(
                 "is_eza": is_eza,
                 "is_seza": is_seza,
                 "potential_percent": potential_percent,
+                "hidden_potential": potential_percent,
+                "canonical_id": get_canonical_card_id(cid),
+                "is_art_variant": is_art_variant(cid),
                 "copies": 1,
                 "swipe_page": swipe_page,
                 "grid_slot": grid_slot,
@@ -157,6 +169,17 @@ def register_card(
             )
             return False
         ctx.scanned_cards[cid]["copies"] = ctx.scanned_cards[cid].get("copies", 1) + 1
+        if potential_percent is not None:
+            snapped_pct = snap_potential_percentage(potential_percent)
+            if snapped_pct > ctx.scanned_cards[cid].get("potential_percent", 0):
+                ctx.scanned_cards[cid]["potential_percent"] = snapped_pct
+                ctx.scanned_cards[cid]["hidden_potential"] = snapped_pct
+                if snapped_pct == 100:
+                    ctx.scanned_cards[cid]["rainbow"] = True
+                    ctx.scanned_cards[cid]["is_rainbow"] = True
+                else:
+                    ctx.scanned_cards[cid]["rainbow"] = is_rainbow
+                    ctx.scanned_cards[cid]["is_rainbow"] = is_rainbow
         ctx.last_registered_card_id = cid
         ctx.recently_scanned_positions[cid] = (cy, cx)
         log(

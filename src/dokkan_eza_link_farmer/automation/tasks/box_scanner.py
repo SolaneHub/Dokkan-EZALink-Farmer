@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
 import numpy as np
 
+from dokkan_eza_link_farmer.ai.art_variants import (
+    discover_art_variants_from_catalog,
+)
 from dokkan_eza_link_farmer.ai.syncer import DokkanSyncer
 from dokkan_eza_link_farmer.automation.scanner import (
     _DEFAULT_IMPORT_CACHE_BOX,
@@ -18,6 +22,7 @@ from dokkan_eza_link_farmer.automation.scanner import (
     advance_to_next_card,
     compute_screen_diff,
     detect_rainbow_star,
+    ensure_detail_page_3,
     extract_banner_text,
     extract_element_badge,
     extract_level_and_sa,
@@ -81,6 +86,14 @@ class BoxScannerTask(BaseTask):
     TITLE_CROP_Y = (0.058, 0.375)
     TITLE_CROP_X = (0.777, 0.926)
 
+    def get_back_button_coords(self) -> tuple[int, int]:
+        """Dynamically computes the Back button tap coordinates for the current resolution."""
+        w, h = self.adb.get_screen_size() if self.adb else (1080, 2400)
+        aspect = h / float(w)
+        if aspect < 1.95:
+            return int(w * 0.139), int(h * 0.958)
+        return int(w * 0.139), int(h * 0.858)
+
     @staticmethod
     def _compute_screen_diff(
         img1: np.ndarray | None,
@@ -101,8 +114,10 @@ class BoxScannerTask(BaseTask):
         output_file: str | None = None,
         max_cards_to_scan: int | None = None,
         log_file: str | None = None,
+        fresh_scan: bool = False,
     ):
         super().__init__(adb, vision, config, on_status, on_run_complete)
+        self.fresh_scan = fresh_scan or bool(config.get("fresh_scan", False))
         self.dokkandb = dokkandb or DokkanDBClient()
         db_cache = getattr(self.dokkandb, "cache_dir", None)
         syncer_cache = db_cache if isinstance(db_cache, str) else None
@@ -136,7 +151,11 @@ class BoxScannerTask(BaseTask):
         self._catalog: list[dict[str, Any]] = []
         self._subname_index: dict[str, Any] = {}
         self.session_ctx = ScanSessionContext()
-        self._load_existing_box()
+        if not self.fresh_scan:
+            self._load_existing_box()
+        else:
+            self.scanned_cards = {}
+            logger.info("⚡ Fresh scan enabled: existing box discarded, scanning from scratch.")
 
     @property
     def _id_index(self) -> dict[int, dict[str, Any]]:
@@ -250,17 +269,19 @@ class BoxScannerTask(BaseTask):
         if not self._catalog:
             self._catalog = self.dokkandb.get_cards_catalog()
         self.log(f"Indexed {len(self._catalog)} cards from DokkanDB catalog.")
+        discover_art_variants_from_catalog(self._catalog)
         matcher = CatalogMatcher(self._catalog)
         self._id_index = matcher._id_index
         self.session_ctx.catalog_index = self._id_index
         for norm, cands in matcher._subname_index.items():
             if cands:
-                self._subname_index[norm] = cands[0]
+                self._subname_index[norm] = list(cands)
 
     def _match_card_by_text(self, recognized_text: str) -> dict[str, Any] | None:
         matcher = CatalogMatcher()
         matcher._subname_index = {
-            k: [v] if isinstance(v, dict) else v for k, v in self._subname_index.items()
+            k: list(v) if isinstance(v, (list, set)) else [v]
+            for k, v in self._subname_index.items()
         }
         matcher._id_index = self._id_index
         return matcher.match_card_by_text(recognized_text)
@@ -274,7 +295,8 @@ class BoxScannerTask(BaseTask):
     ) -> tuple[dict[str, Any] | None, float]:
         matcher = CatalogMatcher()
         matcher._subname_index = {
-            k: [v] if isinstance(v, dict) else v for k, v in self._subname_index.items()
+            k: list(v) if isinstance(v, (list, set)) else [v]
+            for k, v in self._subname_index.items()
         }
         matcher._id_index = self._id_index
         return match_card_candidate(
@@ -371,6 +393,7 @@ class BoxScannerTask(BaseTask):
         logger.info(
             f"Max cards to scan: {self.max_cards_to_scan if self.max_cards_to_scan else 'unlimited'}"
         )
+        logger.info(f"Fresh scan (from scratch): {self.fresh_scan}")
         logger.info(f"Include SSR: {self.include_ssr}")
         logger.info("=" * 70)
 
@@ -381,41 +404,73 @@ class BoxScannerTask(BaseTask):
             )
 
             self._init_catalog()
-            self.ensure_box_filters()
 
             w, h = self.adb.get_screen_size()
             self.log(f"Device resolution: {w}x{h}. Initializing detail scanning pipeline...")
 
             initial_screen = self.adb.screencap()
+            total_detected = None
             if not self._is_card_details_screen(initial_screen):
+                self.ensure_box_filters()
                 self.scroll_to_top()
+                top_screen = self.adb.screencap()
+                total_detected = read_counter_total_cards(top_screen, ocr=self._ocr)
+                if total_detected:
+                    self.log(f"Detected total cards to scan from counter: {total_detected}")
+                aspect = h / float(w)
                 slot1_x = int(w * (110 / 1080.0))
-                slot1_y = int(h * (604 / 2400.0))
+                slot1_y = int(h * 0.20) if aspect < 1.95 else int(h * (604 / 2400.0))
                 self.log(f"Opening first card details at ({slot1_x}, {slot1_y})...")
-                self.adb.tap(slot1_x, slot1_y, delay_after=1.5)
+                self.adb.tap(slot1_x, slot1_y, delay_after=0.8)
+                t_open = time.time()
                 current_screen = self.adb.screencap()
+                while (
+                    not self._is_card_details_screen(current_screen) and time.time() - t_open < 3.0
+                ):
+                    time.sleep(0.4)
+                    current_screen = self.adb.screencap()
+
                 if not self._is_card_details_screen(current_screen):
                     self.log("Retrying opening card details...")
-                    self.adb.tap(slot1_x, slot1_y, delay_after=1.5)
+                    self.adb.tap(slot1_x, slot1_y, delay_after=2.0)
                     current_screen = self.adb.screencap()
             else:
                 current_screen = initial_screen
 
+            # Ensure Character Details Screen 3 (Hidden Potential Activation % view) is active starting from the first card
+            current_screen = ensure_detail_page_3(self.adb, current_screen, log_fn=self.log)
+
             if self.session_ctx.scanned_cards is None:
                 self.session_ctx.scanned_cards = {}
+            self.session_ctx.seen_ids.clear()
             self.session_ctx.recently_scanned_positions.clear()
             self.session_ctx.last_registered_card_id = None
 
-            total_detected = read_counter_total_cards(current_screen, ocr=self._ocr)
-            if total_detected:
-                self.log(f"Detected total cards to scan from counter: {total_detected}")
+            if total_detected is None and not self._is_card_details_screen(current_screen):
+                total_detected = read_counter_total_cards(current_screen, ocr=self._ocr)
+                if total_detected:
+                    self.log(f"Detected total cards to scan from counter: {total_detected}")
 
             target_limit = self.max_cards_to_scan or total_detected or 9999
             scanned_count = 0
+            first_scanned_card_id: int | None = None
+            consecutive_seen_skips = 0
 
             while not self.is_stopped() and scanned_count < target_limit:
                 cand, score, is_rainbow, is_eza, pot_pct = scan_detail_screen(self, current_screen)
                 card_id = int(cand.get("id") or cand.get("card_id") or 0) if cand else None
+
+                # Wrap-around cycle detection: if we see the initial card again after a substantial scan
+                if (
+                    first_scanned_card_id is not None
+                    and card_id == first_scanned_card_id
+                    and scanned_count >= 15
+                ):
+                    self.log(
+                        f"Detected wrap-around to initial card [{card_id}] after scanning {scanned_count} cards. "
+                        "Character box scan complete!"
+                    )
+                    break
 
                 registered = self._register_card(
                     cand,
@@ -428,14 +483,26 @@ class BoxScannerTask(BaseTask):
                     potential_percent=pot_pct,
                 )
                 if registered:
+                    if first_scanned_card_id is None and card_id:
+                        first_scanned_card_id = card_id
                     scanned_count += 1
+                    consecutive_seen_skips = 0
+                else:
+                    if card_id and self.session_ctx.is_card_seen(card_id):
+                        consecutive_seen_skips += 1
+                        if consecutive_seen_skips >= 4 and scanned_count >= 15:
+                            self.log(
+                                f"Detected {consecutive_seen_skips} consecutive already-seen cards. "
+                                f"Character box completed a full cycle ({scanned_count} cards scanned). End of box reached."
+                            )
+                            break
 
-                total_instances = sum(int(c.get("copies", 1)) for c in self.scanned_cards.values())
-                if self.max_cards_to_scan and total_instances >= self.max_cards_to_scan:
+                if self.max_cards_to_scan and scanned_count >= self.max_cards_to_scan:
                     self.log(f"Reached target scan limit of {self.max_cards_to_scan} cards.")
                     break
 
                 if scanned_count >= target_limit:
+                    self.log(f"Reached target scan limit of {target_limit} cards.")
                     break
 
                 current_screen, advanced = advance_to_next_card(

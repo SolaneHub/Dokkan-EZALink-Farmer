@@ -6,9 +6,32 @@ import difflib
 import logging
 import re
 from collections import defaultdict
+from datetime import datetime
 from typing import Any
 
+from dokkan_eza_link_farmer.ai.art_variants import (
+    discover_art_variants_from_catalog,
+    is_art_variant,
+)
+
 logger = logging.getLogger(__name__)
+
+
+def get_card_release_timestamp(card: dict[str, Any]) -> float:
+    """Extracts numeric unix timestamp of card release date for Dokkan in-game release sorting.
+
+    Dokkan Battle character box sorted by Release Date orders newest cards first (descending).
+    """
+    ts_str = str(
+        card.get("open_at") or card.get("open_at_card") or card.get("open_at_eza") or ""
+    ).strip()
+    if not ts_str:
+        return 0.0
+    try:
+        dt = datetime.fromisoformat(ts_str.replace("Z", ""))
+        return dt.timestamp()
+    except Exception:
+        return 0.0
 
 
 def normalize_title(text: str | None) -> str:
@@ -34,6 +57,7 @@ class CatalogMatcher:
         self._catalog.extend(catalog)
         self._subname_index.clear()
         self._id_index.clear()
+        discover_art_variants_from_catalog(self._catalog)
 
         for card in self._catalog:
             self.index_single_card(card)
@@ -81,7 +105,13 @@ class CatalogMatcher:
             norm = normalize_title(sub)
             if not any(int(c.get("id", 0)) == cid_int for c in self._subname_index[norm]):
                 self._subname_index[norm].append(card_entry)
-                self._subname_index[norm].sort(key=lambda c: int(c.get("id", 0)), reverse=True)
+                self._subname_index[norm].sort(
+                    key=lambda c: (
+                        1 if is_art_variant(int(c.get("id", 0))) else 0,
+                        -get_card_release_timestamp(c),
+                        -int(c.get("id", 0)),
+                    )
+                )
 
     def match_card_candidate(
         self,
@@ -128,14 +158,14 @@ class CatalogMatcher:
             norm_name = normalize_title(name)
             combined_norm = norm_sub + norm_name
 
-            if norm_sub and norm_query == norm_sub:
-                score = 0.98
-            elif combined_norm and norm_query == combined_norm:
-                score = 0.96
+            if (norm_sub and norm_query == norm_sub) or (
+                combined_norm and norm_query == combined_norm
+            ):
+                score = 0.99
             elif norm_sub and norm_sub in norm_query:
-                score = 0.95
+                score = 0.98 if norm_name and norm_name in norm_query else 0.95
             elif combined_norm and combined_norm in norm_query:
-                score = 0.93
+                score = 0.95
             else:
                 score_sub = (
                     difflib.SequenceMatcher(None, norm_query, norm_sub).ratio() if norm_sub else 0.0
@@ -152,8 +182,9 @@ class CatalogMatcher:
                     l_match = sm.find_longest_match(0, len(norm_query), 0, len(norm_sub))
                     if l_match.size >= max(8, int(len(norm_sub) * 0.65)):
                         sub_cov = l_match.size / len(norm_sub)
-                        if sub_cov >= 0.70:
-                            score = max(score, min(0.95, 0.82 + 0.16 * sub_cov))
+                        query_cov = l_match.size / len(norm_query)
+                        if sub_cov >= 0.70 and query_cov >= 0.40:
+                            score = max(score, min(0.88, 0.75 + 0.15 * sub_cov))
 
             if score >= 0.50:
                 scored_candidates.append((card, score))
@@ -162,32 +193,54 @@ class CatalogMatcher:
             return None, 0.0
 
         max_score = max(s for _, s in scored_candidates)
-        threshold = max_score - 0.02 if max_score < 0.85 else max(0.85, max_score - 0.02)
-        top_cands = [c for c, s in scored_candidates if s >= threshold]
+        # Only group true ties (e.g. variants sharing identical titles/names or within 0.005)
+        threshold = max_score - 0.005
+        top_cands = [(c, s) for c, s in scored_candidates if s >= threshold]
 
         if not top_cands:
             best_c, best_s = max(scored_candidates, key=lambda it: it[1])
             return best_c, best_s
 
         if len(top_cands) == 1:
-            return top_cands[0], max_score
+            return top_cands[0][0], max_score
 
         # Multi-ID Variant Resolution
-        if last_registered_card_id is not None and last_registered_card_id in [
-            int(c.get("id", 0)) for c in top_cands
-        ]:
-            adj = next(c for c in top_cands if int(c.get("id", 0)) == last_registered_card_id)
-            return adj, max_score
-
         seen_set = session_seen_ids or set()
-        unseen_cands = [c for c in top_cands if int(c.get("id", 0)) not in seen_set]
+        unseen_cands = [cs for cs in top_cands if int(cs[0].get("id", 0)) not in seen_set]
 
         if unseen_cands:
-            unseen_cands.sort(key=lambda c: int(c.get("id", 0)), reverse=True)
-            return unseen_cands[0], max_score
+            # Prefer higher confidence score, then canonical base card over art variant,
+            # then release date descending (newest card first, matching Dokkan in-game Released sort),
+            # then higher card ID descending
+            unseen_cands.sort(
+                key=lambda cs: (
+                    -cs[1],
+                    1 if is_art_variant(int(cs[0].get("id", 0))) else 0,
+                    -get_card_release_timestamp(cs[0]),
+                    -int(cs[0].get("id", 0)),
+                )
+            )
+            return unseen_cands[0][0], max_score
 
-        top_cands.sort(key=lambda c: int(c.get("id", 0)), reverse=True)
-        return top_cands[0], max_score
+        # If all candidate variants have already been seen in this session,
+        # check if this is an adjacent duplicate copy of last_registered_card_id
+        if last_registered_card_id is not None and last_registered_card_id in [
+            int(cs[0].get("id", 0)) for cs in top_cands
+        ]:
+            adj = next(
+                cs[0] for cs in top_cands if int(cs[0].get("id", 0)) == last_registered_card_id
+            )
+            return adj, max_score
+
+        top_cands.sort(
+            key=lambda cs: (
+                -cs[1],
+                1 if is_art_variant(int(cs[0].get("id", 0))) else 0,
+                -get_card_release_timestamp(cs[0]),
+                -int(cs[0].get("id", 0)),
+            )
+        )
+        return top_cands[0][0], max_score
 
     def match_card_by_text(self, recognized_text: str) -> dict[str, Any] | None:
         """Matches card by subname or title text with growth button stripping and fuzzy matching."""
@@ -269,6 +322,7 @@ __all__ = [
     "_match_card_candidate",
     "_match_card_by_text",
     "_normalize_title",
+    "get_card_release_timestamp",
     "index_single_card",
     "match_card_by_text",
     "match_card_candidate",

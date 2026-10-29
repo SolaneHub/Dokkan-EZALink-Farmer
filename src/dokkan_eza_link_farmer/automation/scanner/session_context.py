@@ -20,5 +20,11 @@ class ScanSessionContext:
     catalog_index: dict[int, dict[str, Any]] = field(default_factory=dict)
     last_registered_card_id: int | None = None
 
+    def is_card_seen(self, card_id: int | None) -> bool:
+        """Returns True if the card_id has been seen in this session."""
+        if not card_id:
+            return False
+        return card_id in self.seen_ids
+
 
 __all__ = ["ScanSessionContext"]

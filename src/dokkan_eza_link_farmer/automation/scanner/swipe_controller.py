@@ -16,6 +16,13 @@ COUNTER_CROP_Y: tuple[float, float] = (0.74, 0.79)
 COUNTER_CROP_X: tuple[float, float] = (0.35, 0.65)
 
 
+def get_counter_crop_y(aspect: float) -> tuple[float, float]:
+    """Counter ROI Y range dynamically scaled by aspect ratio."""
+    if aspect < 1.95:
+        return (0.80, 0.85)
+    return (0.74, 0.79)
+
+
 def compute_screen_diff(
     img1: np.ndarray | None,
     img2: np.ndarray | None,
@@ -51,8 +58,10 @@ def read_counter_total_cards(screen_img: np.ndarray | None, ocr: Any = None) -> 
     ):
         return None
     h, w = screen_img.shape[:2]
+    aspect = h / float(w)
+    counter_y = get_counter_crop_y(aspect)
     crop = screen_img[
-        int(h * COUNTER_CROP_Y[0]) : int(h * COUNTER_CROP_Y[1]),
+        int(h * counter_y[0]) : int(h * counter_y[1]),
         int(w * COUNTER_CROP_X[0]) : int(w * COUNTER_CROP_X[1]),
     ]
     if crop.size == 0:
@@ -74,8 +83,9 @@ def is_card_details_screen(screen_img: np.ndarray | None, ocr: Any = None) -> bo
     if screen_img is None or not isinstance(screen_img, np.ndarray) or screen_img.size == 0:
         return False
     h, w = screen_img.shape[:2]
+    aspect = h / float(w)
     if ocr:
-        top_crop = screen_img[int(h * 0.08) : int(h * 0.18), :]
+        top_crop = screen_img[: int(h * 0.20), :]
         try:
             results, _ = ocr(top_crop)
             if results:
@@ -88,9 +98,14 @@ def is_card_details_screen(screen_img: np.ndarray | None, ocr: Any = None) -> bo
         except Exception as exc:
             logger.debug(f"OCR details check error: {exc}")
 
-    back_crop = screen_img[int(h * 0.84) : int(h * 0.88), int(w * 0.05) : int(w * 0.22)]
+    if aspect < 1.95:
+        back_crop = screen_img[int(h * 0.93) : int(h * 0.98), int(w * 0.05) : int(w * 0.22)]
+        stat_crop = screen_img[int(h * 0.70) : int(h * 0.76), int(w * 0.35) : int(w * 0.65)]
+    else:
+        back_crop = screen_img[int(h * 0.84) : int(h * 0.88), int(w * 0.05) : int(w * 0.22)]
+        stat_crop = screen_img[int(h * 0.64) : int(h * 0.68), int(w * 0.35) : int(w * 0.65)]
+
     back_green = np.count_nonzero((back_crop[:, :, 1] > 100) & (back_crop[:, :, 2] < 120))
-    stat_crop = screen_img[int(h * 0.64) : int(h * 0.68), int(w * 0.35) : int(w * 0.65)]
     orange_px = np.count_nonzero(
         (stat_crop[:, :, 0] < 60) & (stat_crop[:, :, 1] > 60) & (stat_crop[:, :, 2] > 180)
     )
@@ -104,50 +119,94 @@ def is_right_arrow_visible(screen_img: np.ndarray | None) -> bool:
     h, w = screen_img.shape[:2]
     roi = screen_img[
         int(h * (1010 / 2400.0)) : int(h * (1120 / 2400.0)),
-        int(w * (1010 / 1080.0)) : int(w * (1075 / 1080.0)),
+        int(w * (980 / 1080.0)) : int(w * (1060 / 1080.0)),
     ]
     if roi.size == 0:
         return False
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-    return bool(np.count_nonzero(gray > 220) > 1500 or np.mean(gray) > 175.0)
+    return bool(np.count_nonzero(gray > 180) > 200 or np.mean(gray) > 75.0)
 
 
 def advance_to_next_card(
     task: Any,
     current_screen: np.ndarray,
     current_card_id: int | None = None,
-    max_wait: float = 6.0,
+    max_wait: float = 8.0,
 ) -> tuple[np.ndarray, bool]:
     """Advances to the next card in Character Details via arrow tap and verification."""
     w, h = task.adb.get_screen_size()
-    arrow_x, arrow_y = int(w * (1040 / 1080.0)), int(h * (1050 / 2400.0))
+    arrow_x, arrow_y = int(w * (1015 / 1080.0)), int(h * (1065 / 2400.0))
+    art_roi = (int(h * 0.25), int(h * 0.60), int(w * 0.15), int(w * 0.85))
     stat_roi = (int(h * 0.64), int(h * 0.70), int(w * 0.05), int(w * 0.90))
     start_t = time.time()
     sc = current_screen
-    for _ in range(5):
+    for attempt in range(4):
         if time.time() - start_t >= max_wait:
+            logger.info(f"[ADVANCE] Timed out after {time.time() - start_t:.1f}s")
             break
+
         pulse_wait = 0.0
-        while not is_right_arrow_visible(sc) and pulse_wait < 1.8:
-            time.sleep(0.25)
-            pulse_wait += 0.25
+        while not is_right_arrow_visible(sc) and pulse_wait < 1.0:
+            time.sleep(0.2)
+            pulse_wait += 0.2
             sc = task.adb.screencap()
-        task.adb.tap(arrow_x, arrow_y, delay_after=1.1)
+
+        if not is_right_arrow_visible(sc):
+            logger.info("[ADVANCE] Right arrow not visible, breaking.")
+            break
+
+        logger.info(
+            f"[ADVANCE] Attempt {attempt + 1}: Tapping chevron at ({arrow_x}, {arrow_y})..."
+        )
+        task.adb.tap(arrow_x, arrow_y, delay_after=1.6)
         next_screen = task.adb.screencap()
-        if current_card_id is not None:
-            t_next = task._extract_banner_text(next_screen)
-            c_next, e_next = task._extract_element_badge(next_screen)
-            cand_next, _ = task._match_card_candidate(
-                t_next, detected_class=c_next, detected_elem=e_next
-            )
-            next_cid = int(cand_next.get("id") or 0) if cand_next else None
-            if next_cid is not None and next_cid != current_card_id:
+        diff_art = compute_screen_diff(sc, next_screen, roi=art_roi)
+        diff_stat = compute_screen_diff(sc, next_screen, roi=stat_roi)
+
+        if diff_art < 8.0 and diff_stat < 7.0:
+            time.sleep(0.6)
+            next_screen = task.adb.screencap()
+            diff_art = compute_screen_diff(sc, next_screen, roi=art_roi)
+            diff_stat = compute_screen_diff(sc, next_screen, roi=stat_roi)
+
+        t_next = task._extract_banner_text(next_screen)
+        c_next, e_next = task._extract_element_badge(next_screen)
+        cand_next, _ = task._match_card_candidate(
+            t_next, detected_class=c_next, detected_elem=e_next
+        )
+        next_cid = int(cand_next.get("id") or 0) if cand_next else None
+        logger.info(
+            f"[ADVANCE] Attempt {attempt + 1} result: diff_art={diff_art:.1f}, "
+            f"diff_stat={diff_stat:.1f}, next_cid={next_cid} ({cand_next.get('name') if cand_next else None})"
+        )
+
+        if diff_art >= 8.0 or diff_stat >= 7.0:
+            if current_card_id is not None:
+                if next_cid is not None and next_cid != current_card_id:
+                    logger.info(
+                        f"[ADVANCE] Successfully changed card from {current_card_id} to {next_cid}"
+                    )
+                    return next_screen, True
+                if next_cid is None and (diff_art >= 12.0 or diff_stat >= 8.0):
+                    logger.info(
+                        "[ADVANCE] Successfully changed card by diff (candidate unidentified)"
+                    )
+                    return next_screen, True
+                if next_cid == current_card_id and (diff_art >= 25.0 or diff_stat >= 15.0):
+                    logger.info(
+                        f"[ADVANCE] Successfully changed duplicate copy of card {current_card_id}"
+                    )
+                    return next_screen, True
+            else:
                 return next_screen, True
-        else:
-            if compute_screen_diff(sc, next_screen, roi=stat_roi) >= 7.0:
-                return next_screen, True
+
+        logger.info(
+            f"[ADVANCE] Attempt {attempt + 1} did not advance (diff too low or same cid). Retrying..."
+        )
         time.sleep(0.3)
         sc = next_screen
+
+    logger.info("[ADVANCE] Failed to advance to next card after all attempts.")
     return sc, False
 
 
@@ -170,11 +229,12 @@ def scroll_to_top(task: Any) -> None:
         )
         after = task.adb.screencap()
         if is_card_details_screen(after, ocr=task._ocr):
-            task.adb.tap(
-                int(w * task.BACK_BUTTON_RATIO[0]),
-                int(h * task.BACK_BUTTON_RATIO[1]),
-                delay_after=0.5,
-            )
+            if hasattr(task, "get_back_button_coords"):
+                bx, by = task.get_back_button_coords()
+            else:
+                bx = int(w * task.BACK_BUTTON_RATIO[0])
+                by = int(h * task.BACK_BUTTON_RATIO[1])
+            task.adb.tap(bx, by, delay_after=0.5)
             after = task.adb.screencap()
         diff = compute_screen_diff(before, after, roi=(int(h * 0.25), int(h * 0.70), 0, int(w)))
         if diff < 10.0:

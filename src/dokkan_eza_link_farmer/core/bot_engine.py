@@ -297,6 +297,7 @@ class BotEngine:
         output_file: str | None = None,
         max_cards_to_scan: int | None = None,
         log_file: str | None = None,
+        fresh_scan: bool = False,
     ) -> bool:
         """Starts autonomous Character Box scanner with DokkanDB enrichment and debug logging."""
         if self.is_task_running():
@@ -315,6 +316,7 @@ class BotEngine:
             output_file=target_out,
             max_cards_to_scan=max_cards_to_scan,
             log_file=target_log,
+            fresh_scan=fresh_scan,
             on_status=self.emit_log,
             on_run_complete=self.emit_run,
         )
@@ -422,8 +424,9 @@ class BotEngine:
 
     def stop_task(self):
         """Stops active automation task."""
-        if self.current_task and self.current_task.is_running:
+        if self.current_task:
             self.current_task.stop()
+            self.current_task.is_running = False
             self.emit_log(t("tasks.stopping_task"))
         else:
             self.emit_log(t("tasks.no_task_running"))
@@ -442,7 +445,7 @@ class BotEngine:
 
     def is_task_running(self) -> bool:
         """Returns True if a task is currently executing."""
-        return self.current_task is not None and self.current_task.is_running
+        return bool(self.current_task is not None and self.current_task.is_running)
 
     def get_status_summary(self) -> dict[str, Any]:
         """Provides status dictionary for UI and Discord reporting."""
@@ -461,5 +464,6 @@ class BotEngine:
     def _start_task_thread(self):
         """Spawns daemon thread for running task loop."""
         if self.current_task is not None:
+            self.current_task.is_running = True
             self._task_thread = threading.Thread(target=self.current_task.run, daemon=True)
             self._task_thread.start()

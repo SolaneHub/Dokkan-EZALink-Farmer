@@ -31,7 +31,9 @@ from dokkan_eza_link_farmer.automation.scanner.catalog_matcher import (
 )
 from dokkan_eza_link_farmer.automation.scanner.detail_evaluator import (
     DetailEvaluator,
+    detect_current_card_detail_page,
     detect_rainbow_star,
+    ensure_detail_page_3,
     extract_element_badge,
     extract_level_and_sa,
     extract_potential_and_rainbow,
@@ -63,7 +65,9 @@ __all__ = [
     "ScanSessionContext",
     "advance_to_next_card",
     "compute_screen_diff",
+    "detect_current_card_detail_page",
     "detect_rainbow_star",
+    "ensure_detail_page_3",
     "extract_banner_text",
     "extract_banner_tokens",
     "extract_element_badge",
