@@ -123,6 +123,51 @@ class TestCardDeduplicationAndAntiCollision:
         assert scanner._register_card(card_a, score=0.89, crop=crop, cy=600.0, cx=755) is False
         assert scanner.scanned_cards[1001]["copies"] == 2
 
+    def test_wrap_around_cycle_detection_stops_scan(self) -> None:
+        scanner = BoxScannerTask(
+            adb=MagicMock(), vision=MagicMock(), config={"pure_grid_mode": False}, fresh_scan=True
+        )
+        scanner.adb.get_screen_size = MagicMock(return_value=(1080, 1920))
+        scanner.adb.screencap = MagicMock(return_value=np.zeros((1920, 1080, 3), dtype=np.uint8))
+        scanner._ocr = MagicMock()
+        scanner._ocr.return_value = ([], 0.0)
+
+        # Mock scan_detail_screen to return 20 distinct cards, then loop back to card 1000
+        cards_sequence = [
+            ({"id": 1000 + i, "name": f"Card {i}", "rarity": 4}, 0.95, False, False, 100)
+            for i in range(20)
+        ]
+        cards_sequence.append(
+            ({"id": 1000, "name": "Card 0", "rarity": 4}, 0.95, False, False, 100)
+        )
+
+        seq_iter = iter(cards_sequence)
+
+        def mock_scan(*_args, **_kwargs):
+            return next(seq_iter)
+
+        with (
+            patch(
+                "dokkan_eza_link_farmer.automation.tasks.box_scanner.scan_detail_screen",
+                side_effect=mock_scan,
+            ),
+            patch(
+                "dokkan_eza_link_farmer.automation.tasks.box_scanner.advance_to_next_card",
+                return_value=(np.zeros((1920, 1080, 3), dtype=np.uint8), True),
+            ),
+            patch.object(scanner, "_is_card_details_screen", return_value=True),
+            patch(
+                "dokkan_eza_link_farmer.automation.tasks.box_scanner.ensure_detail_page_3",
+                return_value=np.zeros((1920, 1080, 3), dtype=np.uint8),
+            ),
+            patch.object(scanner, "_save_box"),
+        ):
+            scanner.run()
+
+        # Should have scanned exactly 20 cards and stopped at wrap-around to card 1000
+        assert len(scanner.scanned_cards) == 20
+        assert scanner.is_running is False
+
 
 class TestDokkanSyncerInMemory:
     """Validates in-memory DokkanSyncer synchronization and caching."""
@@ -270,3 +315,113 @@ class TestBoxFilterVerification:
         assert (755, 1530) in tapped_coords
         assert (910, 1530) in tapped_coords
         assert (540, 2020) in tapped_coords
+
+
+class TestFreshScanFlag:
+    """Validates the --fresh scan flag across BoxScannerTask, engine, and wizards."""
+
+    def test_box_scanner_fresh_scan_discards_existing_box(self) -> None:
+        with tempfile.NamedTemporaryFile("w+", suffix=".json", delete=False) as tf:
+            payload = {
+                "total_cards": 2,
+                "unique_cards": 2,
+                "cards": [
+                    {"id": 1001, "name": "Goku A"},
+                    {"id": 2002, "name": "Vegeta B"},
+                ],
+            }
+            json.dump(payload, tf)
+            tf_path = tf.name
+
+        try:
+            # 1. Normal incremental scan: loads existing box
+            scanner_incr = BoxScannerTask(
+                adb=MagicMock(),
+                vision=MagicMock(),
+                config={},
+                output_file=tf_path,
+                fresh_scan=False,
+            )
+            assert 1001 in scanner_incr.scanned_cards
+            assert len(scanner_incr.scanned_cards) == 2
+
+            # 2. Fresh scan: discards existing box, starts from 0
+            scanner_fresh = BoxScannerTask(
+                adb=MagicMock(),
+                vision=MagicMock(),
+                config={},
+                output_file=tf_path,
+                fresh_scan=True,
+            )
+            assert len(scanner_fresh.scanned_cards) == 0
+            assert scanner_fresh.fresh_scan is True
+        finally:
+            if os.path.exists(tf_path):
+                os.remove(tf_path)
+
+    def test_wizards_parses_fresh_flags(self) -> None:
+        from io import StringIO
+
+        from rich.console import Console
+
+        from dokkan_eza_link_farmer.ui.wizards import handle_box_scan_interactive
+
+        for flag in ("--fresh", "--clean", "--reset", "-f", "--from-scratch"):
+            engine = MagicMock()
+            engine.adb.is_connected.return_value = True
+            engine.dokkandb.get_user_box_card_ids.return_value = [1001, 1002]
+            console = Console(file=StringIO())
+
+            handle_box_scan_interactive(engine, console, args=["scan-box", flag, "20"])
+            assert engine.start_box_scanner.called
+            call_kw = engine.start_box_scanner.call_args[1]
+            assert call_kw.get("fresh_scan") is True
+            assert call_kw.get("max_cards_to_scan") == 20
+
+
+class TestDynamicResolutionScaling:
+    """Validates dynamic coordinates scaling across 16:9 (1080x1920) and 20:9 (1080x2400)."""
+
+    def test_dynamic_crop_and_coordinate_helpers(self) -> None:
+        from dokkan_eza_link_farmer.automation.scanner.detail_evaluator import (
+            get_badge_crop_y,
+            get_detail_arrow_l_coords,
+            get_detail_arrow_r_coords,
+            get_detail_dots_y_ratio,
+            get_level_crop_y,
+            get_potential_page3_crop_y,
+            get_sa_crop_y,
+        )
+        from dokkan_eza_link_farmer.automation.scanner.swipe_controller import get_counter_crop_y
+
+        # Standard 16:9 (1080x1920)
+        aspect_16_9 = 1920 / 1080.0  # 1.7778
+        assert get_badge_crop_y(aspect_16_9) == (0.130, 0.200)
+        assert get_level_crop_y(aspect_16_9) == (0.765, 0.815)
+        assert get_sa_crop_y(aspect_16_9) == (0.880, 0.925)
+        assert get_potential_page3_crop_y(aspect_16_9) == (0.650, 0.710)
+        assert get_counter_crop_y(aspect_16_9) == (0.80, 0.85)
+        assert abs(get_detail_dots_y_ratio(aspect_16_9) - (1840 / 1920.0)) < 1e-4
+
+        rx_16_9, ry_16_9 = get_detail_arrow_r_coords(1080, 1920)
+        lx_16_9, ly_16_9 = get_detail_arrow_l_coords(1080, 1920)
+        assert rx_16_9 == 687
+        assert ry_16_9 == 1840
+        assert lx_16_9 == 364
+        assert ly_16_9 == 1840
+
+        # Tall 20:9 (1080x2400)
+        aspect_20_9 = 2400 / 1080.0  # 2.2222
+        assert get_badge_crop_y(aspect_20_9) == (0.205, 0.255)
+        assert get_level_crop_y(aspect_20_9) == (0.710, 0.755)
+        assert get_sa_crop_y(aspect_20_9) == (0.805, 0.840)
+        assert get_potential_page3_crop_y(aspect_20_9) == (0.615, 0.670)
+        assert get_counter_crop_y(aspect_20_9) == (0.74, 0.79)
+        assert abs(get_detail_dots_y_ratio(aspect_20_9) - (2078 / 2400.0)) < 1e-4
+
+        rx_20_9, ry_20_9 = get_detail_arrow_r_coords(1080, 2400)
+        lx_20_9, ly_20_9 = get_detail_arrow_l_coords(1080, 2400)
+        assert rx_20_9 == 687
+        assert ry_20_9 == 2080
+        assert lx_20_9 == 364
+        assert ly_20_9 == 2080

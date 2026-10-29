@@ -1504,6 +1504,7 @@ class TestDiscordBotIsolation:
 
     def test_discord_callbacks_swallow_exceptions_safely(self) -> None:
         """No exception from discord background notification callbacks can crash automation."""
+        pytest.importorskip("discord")
         from dokkan_eza_link_farmer.integrations.discord_bot import DiscordBotClient
 
         mock_engine = MagicMock()
