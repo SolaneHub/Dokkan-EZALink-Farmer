@@ -6,6 +6,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from dokkan_eza_link_farmer.ai.art_variants import (
+    get_canonical_card_id,
+    is_art_variant,
+)
 from dokkan_eza_link_farmer.ai.boss_models import (
     TYPE_NAMES,
     BossStage,
@@ -44,6 +48,26 @@ def _safe_bool(val: Any, default: bool = False) -> bool:
     if isinstance(val, str):
         return val.strip().lower() in ("true", "1")
     return bool(val)
+
+
+CANONICAL_POTENTIAL_PERCENTAGES: tuple[int, ...] = (0, 55, 69, 79, 90, 100)
+
+
+def snap_potential_percentage(raw_pct: Any) -> int:
+    """
+    Snaps a raw potential percentage to Dokkan's canonical milestones:
+    0% (no potential), 55% (free dupe), 69% (1 dupe), 79% (2 dupes), 90% (3 dupes), 100% (rainbow).
+    """
+    if raw_pct is None:
+        return 0
+    try:
+        val = int(raw_pct)
+    except (ValueError, TypeError):
+        return 0
+    if val in CANONICAL_POTENTIAL_PERCENTAGES:
+        return val
+    clamped = max(0, min(100, val))
+    return min(CANONICAL_POTENTIAL_PERCENTAGES, key=lambda p: abs(p - clamped))
 
 
 def parse_dodge_percentage_from_text(text: str) -> int:
@@ -485,21 +509,35 @@ class DokkanCard:
     active_skill_name: str = ""
     active_skill_condition: str = ""
     active_skill_effect: str = ""
+    canonical_id: int | None = None
+    is_art_variant: bool = False
     base_form: CardForm | None = None
     transformations: list[CardForm] = field(default_factory=list)
 
     def __post_init__(self) -> None:
+        # Sync canonical_id and is_art_variant
+        if self.canonical_id is None:
+            self.canonical_id = get_canonical_card_id(self.id)
+        if not self.is_art_variant:
+            self.is_art_variant = is_art_variant(self.id)
+
         # Sync has_eza and is_eza flags
         if self.is_eza or self.is_seza:
             self.has_eza = True
         elif self.has_eza:
             self.is_eza = True
 
+        # Quantize potential percent to canonical steps: 0, 55, 69, 79, 90, 100
+        self.potential_percent = snap_potential_percentage(self.potential_percent)
+
         # Sync rainbow status and potential percent
         if self.is_rainbow and self.potential_percent == 0:
             self.potential_percent = 100
         elif self.potential_percent >= 100:
+            self.potential_percent = 100
             self.is_rainbow = True
+        elif self.is_rainbow and self.potential_percent < 100:
+            self.potential_percent = 100
 
         # Resolve element_name and card_class if not populated
         if not self.element_name:
@@ -540,6 +578,13 @@ class DokkanCard:
     @property
     def card_id(self) -> int:
         return self.id
+
+    @property
+    def canonical_identity(self) -> int:
+        """Returns the canonical gameplay ID (resolving art variants to their base card ID)."""
+        return (
+            self.canonical_id if self.canonical_id is not None else get_canonical_card_id(self.id)
+        )
 
     @property
     def full_name(self) -> str:
@@ -1190,6 +1235,8 @@ class DokkanCard:
             "active_skill_name": self.active_skill_name,
             "active_skill_condition": self.active_skill_condition,
             "active_skill_effect": self.active_skill_effect,
+            "canonical_id": self.canonical_identity,
+            "is_art_variant": self.is_art_variant,
             "base_form": self.base_form.to_dict() if self.base_form else None,
             "transformations": [t.to_dict() for t in self.transformations],
         }
@@ -1250,11 +1297,10 @@ class DokkanCard:
                 else data.get("rainbow"),
                 False,
             ),
-            potential_percent=_safe_int(
+            potential_percent=snap_potential_percentage(
                 data.get("potential_percent")
                 if data.get("potential_percent") is not None
-                else data.get("potential_percentage"),
-                0,
+                else data.get("potential_percentage")
             ),
             swipe_page=_safe_int(data.get("swipe_page"), 0),
             grid_slot=_safe_int(data.get("grid_slot"), 0),
@@ -1266,6 +1312,17 @@ class DokkanCard:
             active_skill_name=_safe_str(data.get("active_skill_name"), ""),
             active_skill_condition=_safe_str(data.get("active_skill_condition"), ""),
             active_skill_effect=_safe_str(data.get("active_skill_effect"), ""),
+            canonical_id=(
+                _safe_int(data.get("canonical_id"))
+                if data.get("canonical_id") is not None
+                else None
+            ),
+            is_art_variant=_safe_bool(
+                data.get("is_art_variant")
+                if data.get("is_art_variant") is not None
+                else is_art_variant(cid),
+                False,
+            ),
             base_form=base_form,
             transformations=transformations,
         )
@@ -1352,6 +1409,7 @@ class TeamRecommendation:
 
 
 __all__ = [
+    "CANONICAL_POTENTIAL_PERCENTAGES",
     "CardForm",
     "DokkanCard",
     "LeaderSkillSpec",
@@ -1362,4 +1420,5 @@ __all__ = [
     "TeamRecommendation",
     "TYPE_NAMES",
     "parse_dodge_percentage_from_text",
+    "snap_potential_percentage",
 ]

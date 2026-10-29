@@ -241,9 +241,14 @@ def evaluate_kit_power(card: Any) -> tuple[float, dict[str, Any]]:
     if self.has_eza:
         tier_score += 4.0
         breakdown["eza"] = 4.0
-    if self.is_rainbow:
-        tier_score += 4.0
-        breakdown["rainbow"] = 4.0
+    pot_pct = getattr(self, "potential_percent", 100 if self.is_rainbow else 0)
+    if self.is_rainbow or pot_pct > 0:
+        pot_bonus = (pot_pct / 100.0) * 4.0 if pot_pct > 0 else (4.0 if self.is_rainbow else 0.0)
+        tier_score += pot_bonus
+        if self.is_rainbow:
+            breakdown["rainbow"] = 4.0
+        elif pot_bonus > 0:
+            breakdown["potential"] = round(pot_bonus, 2)
 
     total_score = def_score + mech_score + util_score + atk_score + tier_score
     return total_score, breakdown

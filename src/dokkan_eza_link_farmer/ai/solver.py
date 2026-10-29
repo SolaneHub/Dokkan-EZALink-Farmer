@@ -23,6 +23,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from dokkan_eza_link_farmer.ai.art_variants import (
+    get_canonical_card_id,
+)
 from dokkan_eza_link_farmer.ai.damage_engine import (
     ELEMENT_ADVANTAGE,
     ELEMENT_DISADVANTAGE,
@@ -1377,11 +1380,22 @@ class DokkanConstraintSolver:
         """
         logs: list[str] = []
 
-        # Deduplicate pool by card.id to ensure uniqueness
+        # Deduplicate pool by canonical identity (treating art variants and base cards as the same card)
         unique_map: dict[int, DokkanCard] = {}
         for card in candidate_pool:
-            if card.id not in unique_map:
-                unique_map[card.id] = card
+            key = getattr(card, "canonical_identity", get_canonical_card_id(card.id))
+            if key not in unique_map:
+                unique_map[key] = card
+            else:
+                existing = unique_map[key]
+                card_pot = getattr(card, "potential_percent", 0)
+                ex_pot = getattr(existing, "potential_percent", 0)
+                card_rb = getattr(card, "is_rainbow", False)
+                ex_rb = getattr(existing, "is_rainbow", False)
+                card_eza = getattr(card, "is_eza", False) or getattr(card, "is_seza", False)
+                ex_eza = getattr(existing, "is_eza", False) or getattr(existing, "is_seza", False)
+                if (card_rb and not ex_rb) or (card_pot > ex_pot) or (card_eza and not ex_eza):
+                    unique_map[key] = card
         unique_pool = list(unique_map.values())
 
         if len(unique_pool) < 6:
@@ -1721,10 +1735,17 @@ class DokkanConstraintSolver:
 
             candidate_subset = remaining_candidates
 
-            # Exclude duplicate character names on the team (strictly illegal in Dokkan Battle)
+            # Exclude duplicate character names and duplicate canonical identities on the team (strictly illegal in Dokkan Battle)
             current_base_names = {get_base_form_name(tc) for tc in team_cards}
+            current_canonical_ids = {
+                getattr(tc, "canonical_identity", get_canonical_card_id(tc.id)) for tc in team_cards
+            }
             non_duplicate_cands = [
-                c for c in candidate_subset if get_base_form_name(c) not in current_base_names
+                c
+                for c in candidate_subset
+                if get_base_form_name(c) not in current_base_names
+                and getattr(c, "canonical_identity", get_canonical_card_id(c.id))
+                not in current_canonical_ids
             ]
             if len(non_duplicate_cands) >= slots_left:
                 candidate_subset = non_duplicate_cands
@@ -1807,7 +1828,15 @@ class DokkanConstraintSolver:
             scored_cands.sort(key=lambda item: item[1].score, reverse=True)
             best_card, best_ev = scored_cands[0]
             team_cards.append(best_card)
-            remaining_candidates.remove(best_card)
+            best_canon_id = getattr(
+                best_card, "canonical_identity", get_canonical_card_id(best_card.id)
+            )
+            remaining_candidates = [
+                c
+                for c in remaining_candidates
+                if c.id != best_card.id
+                and getattr(c, "canonical_identity", get_canonical_card_id(c.id)) != best_canon_id
+            ]
             logs.append(
                 f"Added Slot {len(team_cards)}: {best_card.full_name} (Score: {best_ev.score:.1f}, S1: {best_ev.base_slot1_viable})"
             )
@@ -1829,16 +1858,31 @@ class DokkanConstraintSolver:
                 )
 
         # 5. Top-5 Shortlist Generation strictly from covered candidates
-        team_ids = {c.id for c in team_cards}
-        shortlist_candidates = [c for c in covered_cards if c.id not in team_ids]
+        team_canon_ids = {
+            getattr(c, "canonical_identity", get_canonical_card_id(c.id)) for c in team_cards
+        }
+        shortlist_candidates = [
+            c
+            for c in covered_cards
+            if getattr(c, "canonical_identity", get_canonical_card_id(c.id)) not in team_canon_ids
+        ]
         shortlist_evals: list[CandidateEvaluation] = []
         for cand in shortlist_candidates:
             ev = self.evaluate_card(cand, leader, boss_stage, selected_team=team_cards)
             shortlist_evals.append(ev)
 
         shortlist_evals.sort(key=lambda ev: ev.score, reverse=True)
-        viable_shortlist = [ev for ev in shortlist_evals if ev.score > -90.0]
-        shortlist = viable_shortlist[:5] if viable_shortlist else shortlist_evals[:5]
+        # Guarantee at most 1 representative per canonical identity in shortlist
+        deduped_shortlist: list[CandidateEvaluation] = []
+        seen_shortlist_canon: set[int] = set()
+        for ev in shortlist_evals:
+            cid_canon = getattr(ev.card, "canonical_identity", get_canonical_card_id(ev.card.id))
+            if cid_canon not in seen_shortlist_canon:
+                seen_shortlist_canon.add(cid_canon)
+                deduped_shortlist.append(ev)
+
+        viable_shortlist = [ev for ev in deduped_shortlist if ev.score > -90.0]
+        shortlist = viable_shortlist[:5] if viable_shortlist else deduped_shortlist[:5]
 
         return ConstraintSolverResult(
             leader=leader,

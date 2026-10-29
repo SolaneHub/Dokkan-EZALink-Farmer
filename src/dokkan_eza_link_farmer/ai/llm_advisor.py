@@ -33,11 +33,29 @@ class AIModelFamily(str, Enum):
     """Supported AI model architectures."""
 
     QWEN = "qwen"
+    LLAMA = "llama"
+    GEMMA = "gemma"
+    PHI = "phi"
+
+    @classmethod
+    def from_model_name(cls, model_name: str) -> AIModelFamily:
+        low = str(model_name or "").lower()
+        if "llama" in low:
+            return cls.LLAMA
+        if "gemma" in low:
+            return cls.GEMMA
+        if "phi" in low:
+            return cls.PHI
+        return cls.QWEN
 
 
 class SupportedAIModel(str, Enum):
-    """The single officially supported universal model for local AI inference (RTX 3060 Ti / 8GB VRAM)."""
+    """Officially supported models for local AI inference (Apple Silicon / 8GB VRAM)."""
 
+    LLAMA_3_2_3B = "llama3.2:3b"
+    QWEN_2_5_3B = "qwen2.5:3b"
+    GEMMA_2_2B = "gemma2:2b"
+    PHI_4_MINI = "phi4-mini"
     QWEN_3_5_4B = "qwen3.5:4b"
 
     @classmethod
@@ -45,8 +63,25 @@ class SupportedAIModel(str, Enum):
         return [m.value for m in cls]
 
     @classmethod
-    def normalize(cls, _raw: str = "") -> str:
-        """Strictly validates and maps input to the supported qwen3.5:4b model."""
+    def normalize(cls, raw: str = "") -> str:
+        """Validates and maps input to one of the supported local models."""
+        cleaned = (raw or "").strip().lower()
+        if not cleaned:
+            return cls.LLAMA_3_2_3B.value
+        for m in cls:
+            if cleaned == m.value or cleaned == m.value.split(":")[0]:
+                return m.value
+        if "llama3.2" in cleaned or "llama" in cleaned:
+            return cls.LLAMA_3_2_3B.value
+        if "qwen2.5" in cleaned or "qwen2" in cleaned:
+            return cls.QWEN_2_5_3B.value
+        if "gemma" in cleaned:
+            return cls.GEMMA_2_2B.value
+        if "phi" in cleaned:
+            return cls.PHI_4_MINI.value
+        if "qwen3.5" in cleaned or "qwen" in cleaned:
+            return cls.QWEN_3_5_4B.value
+        # Default fallback for unknown strings (e.g. gpt-4o-unknown in tests)
         return cls.QWEN_3_5_4B.value
 
 
@@ -57,11 +92,11 @@ class AIConfig:
     enabled: bool = False
     provider: str = "ollama"
     base_url: str = "http://localhost:11434/v1"
-    model_family: AIModelFamily = AIModelFamily.QWEN
-    model_name: str = SupportedAIModel.QWEN_3_5_4B.value
+    model_family: AIModelFamily = AIModelFamily.LLAMA
+    model_name: str = SupportedAIModel.LLAMA_3_2_3B.value
     api_key: str = "ollama"
     temperature: float = 0.6
-    timeout_seconds: float = 75.0
+    timeout_seconds: float = 120.0
     max_attempts: int = 10
     confidence_threshold: float = 0.72
 
@@ -87,10 +122,16 @@ class AIConfig:
             return cls()
 
         raw_model = str(
-            data.get("ollama_model") or data.get("model_name") or SupportedAIModel.QWEN_3_5_4B.value
+            data.get("ollama_model")
+            or data.get("model_name")
+            or SupportedAIModel.LLAMA_3_2_3B.value
         )
         model_name = SupportedAIModel.normalize(raw_model)
-        family = AIModelFamily.QWEN
+        family_raw = data.get("model_family")
+        if family_raw and str(family_raw).lower() in [f.value for f in AIModelFamily]:
+            family = AIModelFamily(str(family_raw).lower())
+        else:
+            family = AIModelFamily.from_model_name(model_name)
 
         raw_url = str(data.get("ollama_url") or data.get("base_url") or "http://localhost:11434/v1")
         if raw_url and not raw_url.endswith("/v1") and not raw_url.endswith("/v1/"):

@@ -14,6 +14,7 @@ from dokkan_eza_link_farmer.ai.boss_models import (
     parse_difficulty_code,
 )
 from dokkan_eza_link_farmer.ai.card_models import (
+    CANONICAL_POTENTIAL_PERCENTAGES,
     TYPE_NAMES,
     CardForm,
     DokkanCard,
@@ -24,6 +25,7 @@ from dokkan_eza_link_farmer.ai.card_models import (
     TeamConditionalBuff,
     TeamRecommendation,
     parse_dodge_percentage_from_text,
+    snap_potential_percentage,
 )
 from dokkan_eza_link_farmer.ai.damage_engine import calculate_damage_taken
 from dokkan_eza_link_farmer.ai.llm_advisor import (
@@ -37,6 +39,7 @@ __all__ = [
     "AIModelFamily",
     "SupportedAIModel",
     "AIConfig",
+    "CANONICAL_POTENTIAL_PERCENTAGES",
     "calculate_damage_taken",
     "PassiveTags",
     "TeamConditionalBuff",
@@ -58,4 +61,5 @@ __all__ = [
     "TYPE_NAMES",
     "parse_dodge_percentage_from_text",
     "infer_boss_categories_from_name",
+    "snap_potential_percentage",
 ]

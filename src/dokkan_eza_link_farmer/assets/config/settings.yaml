@@ -2,17 +2,17 @@ ai:
   api_key: ollama
   base_url: http://localhost:11434/v1
   enabled: true
-  model_family: qwen
-  model_name: qwen3.5:4b
+  model_family: llama
+  model_name: llama3.2:3b
   provider: ollama
   temperature: 0.3
 ai_teambuilder:
   confidence_threshold: 0.72
   enabled: true
   max_attempts: 10
-  ollama_model: qwen3.5:4b
+  ollama_model: llama3.2:3b
   ollama_url: http://localhost:11434
-  timeout_seconds: 75
+  timeout_seconds: 120
 bot:
   auto_restart_app: true
   loop_delay: 1.5

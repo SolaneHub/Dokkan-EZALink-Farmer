@@ -107,7 +107,7 @@ class DokkanAIClient:
                 "messages": messages,
                 "stream": False,
                 "options": {
-                    "num_ctx": 8192,
+                    "num_ctx": 4096,
                     "temperature": temp,
                     "num_predict": max_tokens,
                 },
