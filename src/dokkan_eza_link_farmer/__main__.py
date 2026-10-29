@@ -150,6 +150,15 @@ def main() -> None:
         help=f"Directly start autonomous Character Box scanner to build {AppPaths.get_user_box_path()}",
     )
     parser.add_argument(
+        "--fresh",
+        "--clean",
+        "--reset",
+        "-f",
+        action="store_true",
+        dest="fresh_scan",
+        help="Discard existing box database and perform a fresh scan from scratch",
+    )
+    parser.add_argument(
         "--log-file",
         type=str,
         default=None,
@@ -349,6 +358,10 @@ def main() -> None:
                 print(f"[Warning] Device connection: {e}")
             cli = TerminalCLI(engine)
             scan_args = list(args.subcommand_args) if args.subcommand_args else ["--scan-box"]
+            if getattr(args, "fresh_scan", False) and not any(
+                f in scan_args for f in ("--fresh", "--clean", "--reset", "--from-scratch", "-f")
+            ):
+                scan_args.append("--fresh")
             cli.handle_box_scan_interactive(scan_args, log_file=args.log_file)
             if engine.is_task_running():
                 cli.monitor_task()

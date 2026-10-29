@@ -38,7 +38,7 @@ def render_help(console: Console | None = None) -> None:
     table.add_row("link", "[runs] [--ur] [--lr] [--boost]", t("cli.help.desc_link"))
     table.add_row("stage / farm", "[runs] [--boost]", t("cli.help.desc_stage"))
     table.add_row("challenge", "", t("cli.help.desc_challenge"))
-    table.add_row("scan-box", "[max_cards]", t("cli.help.desc_scan_box"))
+    table.add_row("scan-box", "[max_cards] [--fresh]", t("cli.help.desc_scan_box"))
     table.add_row("enrich-box", "[box_path] [--force]", t("cli.help.desc_enrich_box"))
     table.add_row("ai-run / endgame", "[stage_id]", t("cli.help.desc_ai_run"))
     table.add_row("ai / team", "[build|partner|status]", t("cli.help.desc_ai"))
@@ -185,8 +185,8 @@ def render_ai_status(conf: Any, is_up: bool, console: Console | None = None) -> 
     if model_family is not None and hasattr(model_family, "value"):
         family_str = str(model_family.value).upper()
     else:
-        family_str = str(model_family or "QWEN").upper()
-    model_name = getattr(conf, "model_name", "qwen3.5:4b")
+        family_str = str(model_family or "LLAMA").upper()
+    model_name = getattr(conf, "model_name", "llama3.2:3b")
     provider = getattr(conf, "provider", "ollama")
 
     status_str = (

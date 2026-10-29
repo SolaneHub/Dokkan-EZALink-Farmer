@@ -780,14 +780,9 @@ def handle_box_scan_interactive(
                 console.print(f"[bold red]{t('cli.scan_box.connect_error', error=e)}[/bold red]")
                 return
 
-        existing_ids = engine.dokkandb.get_user_box_card_ids()
-        if existing_ids:
-            console.print(
-                f"[green]{t('cli.scan_box.existing_cards', count=len(existing_ids))}[/green]\n"
-            )
-
         max_cards: int | None = None
         custom_log: str | None = log_file
+        fresh_scan: bool = False
         args_list = list(args) if args else []
         skip_next = False
         has_direct_flags = False
@@ -797,6 +792,9 @@ def handle_box_scan_interactive(
                 continue
             low = str(a).lower()
             if low in ("--scan-box", "--scan", "--box-scan", "scan-box", "box-scan", "scan"):
+                has_direct_flags = True
+            elif low in ("--fresh", "--clean", "--reset", "--from-scratch", "-f"):
+                fresh_scan = True
                 has_direct_flags = True
             elif low in ("--log-file", "--log", "-lf") and idx + 1 < len(args_list):
                 custom_log = str(args_list[idx + 1])
@@ -808,6 +806,15 @@ def handle_box_scan_interactive(
             elif str(a).isdigit():
                 max_cards = int(a)
                 has_direct_flags = True
+
+        existing_ids = engine.dokkandb.get_user_box_card_ids()
+        if existing_ids:
+            if fresh_scan:
+                console.print(f"[yellow]⚡ {t('cli.scan_box.fresh_scan_notice')}[/yellow]\n")
+            else:
+                console.print(
+                    f"[green]{t('cli.scan_box.existing_cards', count=len(existing_ids))}[/green]\n"
+                )
 
         if max_cards is None and not has_direct_flags and not args_list:
             choices = [
@@ -841,6 +848,7 @@ def handle_box_scan_interactive(
             output_file=AppPaths.get_user_box_path(),
             max_cards_to_scan=max_cards,
             log_file=target_log,
+            fresh_scan=fresh_scan,
         )
 
 
@@ -1176,20 +1184,49 @@ def ai_build_team(
 def ai_configure_model(
     engine: BotEngine,
     console: Console,
+    model_choice: str | None = None,
     on_status: Callable[[], Any] | None = None,
 ) -> None:
-    """Configures the single universal model qwen3.5:4b."""
+    """Configures the selected local AI model (e.g. llama3.2:3b, qwen2.5:3b, gemma2:2b, phi4-mini)."""
     from dokkan_eza_link_farmer.ai.client import DokkanAIClient
-    from dokkan_eza_link_farmer.ai.models import AIConfig, SupportedAIModel
+    from dokkan_eza_link_farmer.ai.models import AIConfig, AIModelFamily, SupportedAIModel
     from dokkan_eza_link_farmer.ai.team_builder import TeamBuilder
 
-    model_name = SupportedAIModel.QWEN_3_5_4B.value
+    if not model_choice:
+        choices = [
+            questionary.Choice(
+                title="🦙 Meta Llama 3.2 3B (llama3.2:3b) [Consigliato / Recommended]",
+                value="llama3.2:3b",
+            ),
+            questionary.Choice(
+                title="⚡ Alibaba Qwen 2.5 3B (qwen2.5:3b)",
+                value="qwen2.5:3b",
+            ),
+            questionary.Choice(
+                title="💎 Google Gemma 2 2B (gemma2:2b) [Ultra-leggero / 1.6GB]",
+                value="gemma2:2b",
+            ),
+            questionary.Choice(
+                title="🧠 Microsoft Phi-4 Mini 3.8B (phi4-mini) [Logica avanzata]",
+                value="phi4-mini",
+            ),
+        ]
+        selected = questionary.select(t("cli.ai.menu_title"), choices=choices).ask()
+        if not selected:
+            return
+        model_choice = selected
+
+    model_name = SupportedAIModel.normalize(model_choice or "")
+    family = AIModelFamily.from_model_name(model_name).value
     if "ai" not in engine.config:
         engine.config["ai"] = {}
 
     engine.config["ai"]["enabled"] = True
-    engine.config["ai"]["model_family"] = "qwen"
+    engine.config["ai"]["model_family"] = family
     engine.config["ai"]["model_name"] = model_name
+    if "ai_teambuilder" not in engine.config:
+        engine.config["ai_teambuilder"] = {}
+    engine.config["ai_teambuilder"]["ollama_model"] = model_name
     engine.save_config()
 
     engine.ai_config = AIConfig.from_dict(engine.config.get("ai"))

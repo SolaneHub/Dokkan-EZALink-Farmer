@@ -117,6 +117,7 @@ cli:
     connected: "✓ Connesso a {serial}!"
     connect_error: "Impossibile connettersi al dispositivo: {error}"
     existing_cards: "Trovato database del box esistente con {count} carte indicizzate."
+    fresh_scan_notice: "Modalità Fresh Scan attiva: il database del box esistente verrà azzerato e riscansito da 0."
     opt_full: "🚀 Scansione Completa Box (Tutti i personaggi UR/LR posseduti)"
     opt_quick: "⚡ Scansione Rapida (Prime 50 carte)"
     opt_custom: "🎯 Limite Carte Personalizzato"

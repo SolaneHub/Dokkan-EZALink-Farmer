@@ -117,6 +117,7 @@ cli:
     connected: "✓ Connected to {serial}!"
     connect_error: "Cannot connect to device: {error}"
     existing_cards: "Found existing box database with {count} cards indexed."
+    fresh_scan_notice: "Fresh scan mode: existing box database will be reset and rescanned from scratch."
     opt_full: "🚀 Full Box Scan (All owned UR/LR characters)"
     opt_quick: "⚡ Quick Scan (First 50 cards)"
     opt_custom: "🎯 Custom Card Limit"
