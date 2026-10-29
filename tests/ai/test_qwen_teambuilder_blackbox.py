@@ -1018,8 +1018,11 @@ class TestQwenTeamBuilderBlackBox:
             )
 
         models = ai_client.list_available_models()
-        if not any("qwen" in m.lower() for m in models):
-            pytest.skip("Model 'qwen3.5:4b' not installed on local Ollama server")
+        target_model = next((m for m in models if "qwen" in m.lower()), None)
+        if not target_model:
+            pytest.skip("No Qwen model installed on local Ollama server")
+
+        ai_client.config.model_name = target_model
 
         team_builder = TeamBuilder(dokkandb=fake_dokkandb, ai_client=ai_client)
         team_rec, shortlist = team_builder.select_best_team_for_boss(
